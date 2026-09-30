@@ -89,24 +89,76 @@ func TestAplicaElEsquemaDeHeimdall(t *testing.T) {
 	if got != strings.Join(want, ",") {
 		t.Fatalf("las tablas quedaron %s", got)
 	}
-	columns := []string{}
+	wanted := "project:text,env:text,name:text,value:bytea,updated_at:bigint"
+	if got := columnsOf(t, db, "secrets"); strings.Join(got, ",") != wanted {
+		t.Fatalf("heimdall.secrets quedó %v", got)
+	}
+	wantedTokens := "id:text,name:text,project:text,env:text,keys:jsonb,hash:text,role:text,created_at:bigint,expires_at:bigint,last_used:bigint"
+	if got := columnsOf(t, db, "tokens"); strings.Join(got, ",") != wantedTokens {
+		t.Fatalf("heimdall.tokens quedó %v", got)
+	}
+}
+
+func columnsOf(t *testing.T, db *sql.DB, table string) []string {
+	t.Helper()
 	rows, err := db.Query(
 		`SELECT column_name || ':' || data_type FROM information_schema.columns
-         WHERE table_schema = 'heimdall' AND table_name = 'secrets' ORDER BY ordinal_position`)
+         WHERE table_schema = 'heimdall' AND table_name = $1 ORDER BY ordinal_position`, table)
 	if err != nil {
-		t.Fatalf("no pude leer las columnas: %v", err)
+		t.Fatalf("no pude leer las columnas de %s: %v", table, err)
 	}
 	defer rows.Close()
+	columns := []string{}
 	for rows.Next() {
 		var column string
 		if err := rows.Scan(&column); err != nil {
-			t.Fatalf("no pude leer las columnas: %v", err)
+			t.Fatalf("no pude leer las columnas de %s: %v", table, err)
 		}
 		columns = append(columns, column)
 	}
-	wanted := "project:text,env:text,name:text,value:bytea,updated_at:bigint"
-	if strings.Join(columns, ",") != wanted {
-		t.Fatalf("heimdall.secrets quedó %v", columns)
+	return columns
+}
+
+func TestElRolEsUnEnum(t *testing.T) {
+	db := testDB(t)
+	if _, err := Apply(context.Background(), db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	insert := func(id, role string, keys any) error {
+		_, err := db.Exec(
+			`INSERT INTO heimdall.tokens (id, name, project, env, keys, hash, role, created_at)
+             VALUES ($1, $1, 'bifrost', 'dev', $2, 'hash', $3, 0)`, id, keys, role)
+		return err
+	}
+	if err := insert("t1", "admin", nil); err != nil {
+		t.Fatalf("no aceptó admin: %v", err)
+	}
+	if err := insert("t2", "root", nil); err == nil {
+		t.Fatal("aceptó un rol que no existe")
+	}
+	if err := insert("t3", "agent", "no es json"); err == nil {
+		t.Fatal("aceptó claves que no son json")
+	}
+	if err := insert("t4", "agent", `["A","B"]`); err != nil {
+		t.Fatalf("no aceptó claves json: %v", err)
+	}
+	var keys string
+	if err := db.QueryRow("SELECT keys::text FROM heimdall.tokens WHERE id = 't4'").Scan(&keys); err != nil {
+		t.Fatalf("no pude leer las claves: %v", err)
+	}
+	if keys != `["A", "B"]` {
+		t.Fatalf("las claves quedaron %q", keys)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO heimdall.tokens (id, name, project, env, hash, created_at) VALUES ('t5', 'sin rol', 'bifrost', 'dev', 'hash', 0)`); err != nil {
+		t.Fatalf("no aceptó el rol por defecto: %v", err)
+	}
+	var role string
+	if err := db.QueryRow("SELECT role FROM heimdall.tokens WHERE id = 't5'").Scan(&role); err != nil {
+		t.Fatalf("no pude leer el rol: %v", err)
+	}
+	if role != "agent" {
+		t.Fatalf("el rol por defecto quedó %q", role)
 	}
 }
 

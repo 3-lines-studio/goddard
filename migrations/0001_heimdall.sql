@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS heimdall.tokens (
     name TEXT NOT NULL,
     project TEXT NOT NULL,
     env TEXT NOT NULL,
-    keys TEXT,
+    keys JSONB,
     hash TEXT NOT NULL,
-    admin BOOLEAN NOT NULL DEFAULT false,
+    role TEXT NOT NULL DEFAULT 'agent' CHECK (role IN ('agent', 'admin')),
     created_at BIGINT NOT NULL,
     expires_at BIGINT,
     last_used BIGINT
