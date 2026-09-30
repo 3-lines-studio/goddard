@@ -1,20 +1,42 @@
 // Package prompt assembles a system prompt out of fragments: a spec names the
 // pieces in order, each piece is a markdown file with {{variables}}, and the
 // language picks which file answers. Port of jimmy's `src/prompt.rs`, with the
-// language in it.
+// languages in it.
 //
-// A fragment is looked up as `<dir>/<language>/<name>.md` and then as
-// `<dir>/<name>.md`: the file without a language is the default one, and it is
-// what answers for a translation that is not there. Dirs go in order, so the
-// first one with the fragment wins.
+// Inside every fs.FS a fragment is `<language>/<name>.md`, and the fs.FS values
+// go in order: the first one that has it wins, so a directory the embedder puts
+// first overrides the one that ships with the binary. A fragment a language
+// does not have falls back to DefaultLanguage's, and a fragment nobody has is
+// an error.
 package prompt
 
 import (
+	"embed"
 	"fmt"
-	"os"
-	"path/filepath"
+	"io/fs"
 	"strings"
 )
+
+// DefaultLanguage is what an empty language asks for, and the one that answers
+// for a fragment a translation does not have.
+const DefaultLanguage = "es-AR"
+
+// Default is the spec: the fragments of this assistant, in order.
+const Default = "identidad,estilo,codigo,jimmy,herramientas,skills,dev,workspace,memoria,agenda,git"
+
+//go:embed prompts
+var embedded embed.FS
+
+// Builtin is the fragments that ship with the binary.
+var Builtin fs.FS = mustSub(embedded, "prompts")
+
+func mustSub(fsys fs.FS, dir string) fs.FS {
+	sub, err := fs.Sub(fsys, dir)
+	if err != nil {
+		panic(fmt.Sprintf("prompt: %v", err))
+	}
+	return sub
+}
 
 // Var is one value a fragment can ask for with {{nombre}}.
 type Var struct {
@@ -36,18 +58,12 @@ func ParseVars(spec string) []Var {
 	return vars
 }
 
-// Dirs is where the fragments live: the root's go first, so a workspace copy of
-// a fragment wins over the one that ships with the binary.
-func Dirs(root, builtin string) []string {
-	return []string{filepath.Join(root, "prompts"), builtin}
-}
-
 // Assemble joins the fragments the spec names, in that order, two newlines
 // apart, with the variables filled in. An empty language asks for the default
-// fragments only. A fragment that is not there, a variable a fragment asks for
-// and nobody gave, and a placeholder left open are all errors: the prompt is
-// the one place where guessing is worse than failing.
-func Assemble(language, spec string, dirs []string, vars []Var) (string, error) {
+// one. A fragment that is not there, a variable a fragment asks for and nobody
+// gave, and a placeholder left open are all errors: the prompt is the one place
+// where guessing is worse than failing.
+func Assemble(language, spec string, dirs []fs.FS, vars []Var) (string, error) {
 	parts := []string{}
 	for _, name := range fragmentNames(spec) {
 		text, err := fragment(language, name, dirs)
@@ -73,23 +89,34 @@ func fragmentNames(spec string) []string {
 	return names
 }
 
-func fragment(language, name string, dirs []string) (string, error) {
-	for _, dir := range dirs {
-		paths := []string{filepath.Join(dir, name+".md")}
-		if language != "" {
-			paths = append([]string{filepath.Join(dir, language, name+".md")}, paths...)
-		}
-		for _, path := range paths {
-			if text, ok := readFragment(path); ok {
+func fragment(language, name string, dirs []fs.FS) (string, error) {
+	language = languageOrDefault(language)
+	for _, candidate := range languages(language) {
+		for _, dir := range dirs {
+			if text, ok := readFragment(dir, candidate, name); ok {
 				return text, nil
 			}
 		}
 	}
-	return "", fmt.Errorf("no encontré el fragmento `%s.md`", name)
+	return "", fmt.Errorf("no encontré el fragmento `%s/%s.md`", language, name)
 }
 
-func readFragment(path string) (string, bool) {
-	data, err := os.ReadFile(path)
+func languageOrDefault(language string) string {
+	if language == "" {
+		return DefaultLanguage
+	}
+	return language
+}
+
+func languages(language string) []string {
+	if language == DefaultLanguage {
+		return []string{language}
+	}
+	return []string{language, DefaultLanguage}
+}
+
+func readFragment(dir fs.FS, language, name string) (string, bool) {
+	data, err := fs.ReadFile(dir, language+"/"+name+".md")
 	if err != nil {
 		return "", false
 	}
