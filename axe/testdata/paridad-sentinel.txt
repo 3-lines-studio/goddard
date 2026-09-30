@@ -1,0 +1,36 @@
+known_value	key is [REDACTED] ok
+known_value_absent	key is zzz ok
+known_longest_first	x [REDACTED] y
+known_short_skipped	ab
+known_twice	a [REDACTED] b [REDACTED] c
+pem_block	a\n[REDACTED]\nb
+pem_truncated	a\n-----BEGIN PRIVATE KEY-----\nMIIB
+url_basic_auth	postgres://[REDACTED]@localhost:5432/db
+url_no_colon	see https://example.com/a:b@c
+url_plain	see https://example.com/a
+url_user_only	https://user@host/x
+token_sk	tok [REDACTED] end
+token_aws	aws [REDACTED] here
+token_github	gh [REDACTED] here
+token_short	sk-abcdef
+token_inside_word	xsk-abcdefghijklmnopqrstuvwx
+jwt	jwt [REDACTED]
+jwt_short	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0
+assign_password	PASSWORD=[REDACTED] horse
+assign_json	{"api_key": "[REDACTED]", "path": "/x"}
+assign_flag	run --token [REDACTED] --verbose
+assign_authorization	Authorization: [REDACTED]
+assign_basic	Authorization: [REDACTED]
+assign_prose	the password is required
+assign_space_separated	machine x login alice password [REDACTED]
+assign_empty	TRANSCRIBE_API_KEY=\nnext line
+assign_lowercase_key	api_key=[REDACTED] ok
+assign_camel	clientSecret: [REDACTED] ok
+assign_quoted	token = '[REDACTED]' ok
+assign_already	PASSWORD=[REDACTED] x
+ordinary	let content = compute();\npath=/tmp/file\nkeyboard=us
+empty	
+idempotent	PASSWORD=[REDACTED] x
+idempotent_once	PASSWORD=[REDACTED] x
+message_user	my key is [REDACTED]
+message_assistant	my key is hunter2abc
