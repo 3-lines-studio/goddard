@@ -96,7 +96,7 @@ func TestAplicaElEsquemaDeHeimdall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if len(applied) != 1 || applied[0] != "heimdall" {
+	if len(applied) != len(pending(t)) || applied[0] != "heimdall" {
 		t.Fatalf("aplicó %v", applied)
 	}
 	want := []string{"audit", "environments", "logins", "secrets", "sessions", "tokens"}
@@ -105,29 +105,60 @@ func TestAplicaElEsquemaDeHeimdall(t *testing.T) {
 		t.Fatalf("las tablas quedaron %s", got)
 	}
 	wanted := "project:text,env:text,name:text,value:bytea,updated_at:bigint"
-	if got := columnsOf(t, db, "secrets"); strings.Join(got, ",") != wanted {
+	if got := columnsOf(t, db, "heimdall", "secrets"); strings.Join(got, ",") != wanted {
 		t.Fatalf("heimdall.secrets quedó %v", got)
 	}
 	wantedTokens := "id:text,name:text,project:text,env:text,keys:jsonb,hash:text,role:text,created_at:bigint,expires_at:bigint,last_used:bigint"
-	if got := columnsOf(t, db, "tokens"); strings.Join(got, ",") != wantedTokens {
+	if got := columnsOf(t, db, "heimdall", "tokens"); strings.Join(got, ",") != wantedTokens {
 		t.Fatalf("heimdall.tokens quedó %v", got)
 	}
 }
 
-func columnsOf(t *testing.T, db *sql.DB, table string) []string {
+func TestAplicaElEsquemaDeAxe(t *testing.T) {
+	db := testDB(t)
+	if _, err := Apply(context.Background(), db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	want := []string{"entries", "resume", "sessions"}
+	got := strings.Join(tables(t, db, "axe"), ",")
+	if got != strings.Join(want, ",") {
+		t.Fatalf("las tablas quedaron %s", got)
+	}
+	wantedSessions := "id:text,scope:text,title:text,turns:integer,updated_at:bigint,archived_at:bigint,seq:bigint"
+	if got := columnsOf(t, db, "axe", "sessions"); strings.Join(got, ",") != wantedSessions {
+		t.Fatalf("axe.sessions quedó %v", got)
+	}
+	wantedEntries := "session_id:text,seq:bigint,entry:jsonb"
+	if got := columnsOf(t, db, "axe", "entries"); strings.Join(got, ",") != wantedEntries {
+		t.Fatalf("axe.entries quedó %v", got)
+	}
+}
+
+// pending es lo que el repositorio tiene para aplicar, que es lo que Apply
+// aplica cuando la base está limpia.
+func pending(t *testing.T) []Migration {
+	t.Helper()
+	list, err := List()
+	if err != nil {
+		t.Fatalf("no pude listar: %v", err)
+	}
+	return list
+}
+
+func columnsOf(t *testing.T, db *sql.DB, schema, table string) []string {
 	t.Helper()
 	rows, err := db.Query(
 		`SELECT column_name || ':' || data_type FROM information_schema.columns
-         WHERE table_schema = 'heimdall' AND table_name = $1 ORDER BY ordinal_position`, table)
+         WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position`, schema, table)
 	if err != nil {
-		t.Fatalf("no pude leer las columnas de %s: %v", table, err)
+		t.Fatalf("no pude leer las columnas de %s.%s: %v", schema, table, err)
 	}
 	defer rows.Close()
 	columns := []string{}
 	for rows.Next() {
 		var column string
 		if err := rows.Scan(&column); err != nil {
-			t.Fatalf("no pude leer las columnas de %s: %v", table, err)
+			t.Fatalf("no pude leer las columnas de %s.%s: %v", schema, table, err)
 		}
 		columns = append(columns, column)
 	}
@@ -189,7 +220,7 @@ func TestNoAplicaDosVeces(t *testing.T) {
 	if len(applied) != 0 {
 		t.Fatalf("volvió a aplicar %v", applied)
 	}
-	if got := appliedVersions(t, db); len(got) != 1 {
+	if got := appliedVersions(t, db); len(got) != len(pending(t)) {
 		t.Fatalf("quedaron %v", got)
 	}
 }
@@ -281,10 +312,10 @@ func TestDosACorrerAlMismoTiempoNoSePisan(t *testing.T) {
 			t.Fatalf("la corrida %d falló: %v", index, err)
 		}
 	}
-	if got := len(results[0]) + len(results[1]); got != 1 {
+	if got := len(results[0]) + len(results[1]); got != len(pending(t)) {
 		t.Fatalf("entre las dos aplicaron %d migraciones: %v %v", got, results[0], results[1])
 	}
-	if got := appliedVersions(t, db); len(got) != 1 {
+	if got := appliedVersions(t, db); len(got) != len(pending(t)) {
 		t.Fatalf("el libro quedó %v", got)
 	}
 }

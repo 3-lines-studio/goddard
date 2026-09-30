@@ -22,7 +22,6 @@ func sse(events ...string) string {
 
 func TestEndToEndRunAgainstAServer(t *testing.T) {
 	workdir := t.TempDir()
-	sessionDir := t.TempDir()
 	secret := "PASSWORD=hunter2xyz"
 
 	var requests []map[string]any
@@ -65,7 +64,6 @@ func TestEndToEndRunAgainstAServer(t *testing.T) {
 
 	seedSecret(t, workdir, secret)
 
-	store := NewFsStore(sessionDir)
 	provider := NewOpenAI(server.URL, "k1")
 	tools := BuildTools(workdir)
 	options := &RunOptions{
@@ -137,35 +135,6 @@ func TestEndToEndRunAgainstAServer(t *testing.T) {
 	}
 	if !strings.Contains(end.Messages[2].Content, "[REDACTED]") {
 		t.Fatalf("el transcript no redacto: %q", end.Messages[2].Content)
-	}
-
-	entries := make([]Entry, 0, len(end.Messages))
-	for _, message := range end.Messages {
-		entries = append(entries, MessageEntry(message))
-	}
-	if err := store.Save(entries); err != nil {
-		t.Fatal(err)
-	}
-	loaded := store.Live()
-	if len(loaded) != 4 {
-		t.Fatalf("entradas guardadas: %d", len(loaded))
-	}
-	reloaded := ContextMessages(loaded)
-	if len(reloaded) != 4 || reloaded[3].Content != "listo" {
-		t.Fatalf("round trip: %+v", reloaded)
-	}
-	if reloaded[1].Reasoning != "pienso " || reloaded[2].ToolCallID != "c1" {
-		t.Fatalf("round trip: %+v", reloaded)
-	}
-	id, ok := store.Archive()
-	if !ok {
-		t.Fatal("no archivo la sesion")
-	}
-	if sessions := store.List(); len(sessions) != 1 || sessions[0].ID != id {
-		t.Fatalf("listado: %+v", sessions)
-	}
-	if sessions := store.List(); sessions[0].Turns != 1 {
-		t.Fatalf("turnos: %+v", sessions[0])
 	}
 }
 

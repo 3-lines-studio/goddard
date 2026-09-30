@@ -1,11 +1,9 @@
 package axe
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -140,42 +138,25 @@ type SessionMeta struct {
 	Turns   int
 }
 
+const untitled = "Untitled session"
+
+// Store is where a conversation's history lives. It used to be a directory of
+// JSONL files; a cloud axe has no volume to mount, so the only implementation
+// is Postgres (PgStore) and the scope that used to be a path is a key the
+// embedder picks.
 type Store interface {
-	Live() []Entry
-	Save(entries []Entry) error
-	Append(entries []Entry) error
-	Archive() (string, bool)
-	ContinueArchived(id string, entries []Entry) (bool, error)
-	ContinueArchivedLive(id string) (bool, error)
-	Discard()
-	List() []SessionMeta
-	Load(id string) ([]Entry, bool)
-	ResumeID() (string, bool)
-	SetResumeID(id string)
-	ClearResumeID()
-}
-
-func storeDir(dir string) string {
-	return filepath.Join(dir, "sessions")
-}
-
-func ScopeDir(dir, cwd string) string {
-	if absolute, err := filepath.Abs(cwd); err == nil {
-		cwd = absolute
-	}
-	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
-		cwd = resolved
-	}
-	hash := uint64(0xcbf29ce484222325)
-	for _, b := range []byte(cwd) {
-		hash ^= uint64(b)
-		hash *= 0x100000001b3
-	}
-	return filepath.Join(dir, "projects", fmt.Sprintf("%016x", hash))
-}
-
-func livePath(dir string) string {
-	return filepath.Join(dir, "session.jsonl")
+	Live(ctx context.Context) ([]Entry, error)
+	Save(ctx context.Context, entries []Entry) error
+	Append(ctx context.Context, entries []Entry) error
+	Archive(ctx context.Context) (string, bool, error)
+	ContinueArchived(ctx context.Context, id string, entries []Entry) (bool, error)
+	ContinueArchivedLive(ctx context.Context, id string) (bool, error)
+	Discard(ctx context.Context) error
+	List(ctx context.Context) ([]SessionMeta, error)
+	Load(ctx context.Context, id string) ([]Entry, bool, error)
+	ResumeID(ctx context.Context) (string, bool, error)
+	SetResumeID(ctx context.Context, id string) error
+	ClearResumeID(ctx context.Context) error
 }
 
 func NowMs() int64 {
@@ -365,306 +346,8 @@ func dedupe(values []string) []string {
 	return out
 }
 
-func parseEntryLine(line string) (Entry, bool) {
-	var entry Entry
-	if err := json.Unmarshal([]byte(line), &entry); err != nil {
-		return Entry{}, false
-	}
-	return entry, true
-}
-
-func readEntries(path string) []Entry {
-	file, err := os.Open(path)
-	if err != nil {
-		return []Entry{}
-	}
-	defer file.Close()
-	entries := []Entry{}
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 32*1024*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		entry, ok := parseEntryLine(line)
-		if !ok {
-			continue
-		}
-		entries = append(entries, entry)
-	}
-	return entries
-}
-
 func validID(id string) bool {
 	return id != "" && id != "." && id != ".." && !strings.Contains(id, "/") && !strings.Contains(id, `\`)
-}
-
-func writeEntries(path string, entries []Entry) error {
-	return atomicWriteWith(path, func(file *os.File) error {
-		for _, entry := range entries {
-			data, err := encodeJSON(entry)
-			if err != nil {
-				return err
-			}
-			if _, err := file.Write(append(data, '\n')); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func saveLive(dir string, entries []Entry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	path := livePath(dir)
-	if err := writeEntries(path, entries); err != nil {
-		return err
-	}
-	writeLiveSidecar(dir, path, entries)
-	return nil
-}
-
-func appendLive(dir string, entries []Entry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	path := livePath(dir)
-	if _, err := os.Stat(path); err != nil {
-		if err := writeEntries(path, entries); err != nil {
-			return err
-		}
-		writeLiveSidecar(dir, path, entries)
-		return nil
-	}
-	file, err := os.OpenFile(path, os.O_RDWR, 0o666)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	size := info.Size()
-	if size > 0 {
-		last := make([]byte, 1)
-		if _, err := file.ReadAt(last, size-1); err != nil {
-			return err
-		}
-		if last[0] != '\n' {
-			complete := int64(0)
-			buffer := make([]byte, 8192)
-			end := size
-			for {
-				start := end - int64(len(buffer))
-				if start < 0 {
-					start = 0
-				}
-				count := int(end - start)
-				if _, err := file.ReadAt(buffer[:count], start); err != nil {
-					return err
-				}
-				found := int64(-1)
-				for index := count - 1; index >= 0; index-- {
-					if buffer[index] == '\n' {
-						found = start + int64(index) + 1
-						break
-					}
-				}
-				if found >= 0 {
-					complete = found
-					break
-				}
-				if start == 0 {
-					complete = 0
-					break
-				}
-				end = start
-			}
-			if err := file.Truncate(complete); err != nil {
-				return err
-			}
-		}
-	}
-	oldBytes := uint64(size)
-	sidecar, hasSidecar := readLiveSidecar(dir, oldBytes)
-	if _, err := file.Seek(0, 2); err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		data, err := encodeJSON(entry)
-		if err != nil {
-			return err
-		}
-		if _, err := file.Write(append(data, '\n')); err != nil {
-			return err
-		}
-	}
-	if err := file.Sync(); err != nil {
-		return err
-	}
-	if hasSidecar {
-		updateSidecar(&sidecar, entries)
-		newInfo, err := file.Stat()
-		if err == nil {
-			sidecar.Bytes = uint64(newInfo.Size())
-			writeLiveSidecarValue(dir, sidecar)
-		}
-	}
-	return nil
-}
-
-func resumeIDPath(dir string) string {
-	return filepath.Join(dir, "session.resume_id")
-}
-
-func setResumeID(dir, id string) {
-	if !validID(id) {
-		return
-	}
-	AtomicWrite(resumeIDPath(dir), []byte(id))
-}
-
-func clearResumeID(dir string) {
-	os.Remove(resumeIDPath(dir))
-}
-
-func discardLive(dir string) {
-	os.Remove(livePath(dir))
-	os.Remove(liveSidecarPath(dir))
-	os.Remove(filepath.Join(dir, "session.title"))
-	clearResumeID(dir)
-}
-
-func loadResumeID(dir string) (string, bool) {
-	data, err := os.ReadFile(resumeIDPath(dir))
-	if err != nil {
-		return "", false
-	}
-	id := strings.TrimSpace(string(data))
-	if !validID(id) {
-		return "", false
-	}
-	return id, true
-}
-
-func continueArchived(dir, id string, entries []Entry) (bool, error) {
-	if !validID(id) || len(entries) == 0 {
-		return false, nil
-	}
-	path := filepath.Join(storeDir(dir), id+".jsonl")
-	if err := writeEntries(path, entries); err != nil {
-		return false, err
-	}
-	liveTitle := filepath.Join(dir, "session.title")
-	title := ""
-	if data, err := os.ReadFile(liveTitle); err == nil && strings.TrimSpace(string(data)) != "" {
-		title = strings.TrimSpace(string(data))
-	} else if data, err := os.ReadFile(titlePath(dir, id)); err == nil && strings.TrimSpace(string(data)) != "" {
-		title = strings.TrimSpace(string(data))
-	} else {
-		title = titleFromEntries(entries)
-	}
-	writeSessionSidecar(dir, id, path, title, entries)
-	os.Remove(liveTitle)
-	os.Remove(livePath(dir))
-	os.Remove(liveSidecarPath(dir))
-	clearResumeID(dir)
-	return true, nil
-}
-
-func continueArchivedLive(dir, id string) (bool, error) {
-	if !validID(id) {
-		return false, nil
-	}
-	live := livePath(dir)
-	info, err := os.Stat(live)
-	if err != nil {
-		return false, nil
-	}
-	sidecar, ok := readLiveSidecar(dir, uint64(info.Size()))
-	if !ok {
-		return false, nil
-	}
-	path := filepath.Join(storeDir(dir), id+".jsonl")
-	if err := os.Rename(live, path); err != nil {
-		return false, nil
-	}
-	liveTitle := filepath.Join(dir, "session.title")
-	if data, err := os.ReadFile(liveTitle); err == nil && strings.TrimSpace(string(data)) != "" {
-		sidecar.Title = strings.TrimSpace(string(data))
-	}
-	writeSessionSidecarValue(dir, id, sidecar)
-	os.Remove(liveTitle)
-	os.Remove(liveSidecarPath(dir))
-	clearResumeID(dir)
-	return true, nil
-}
-
-func loadLive(dir string) []Entry {
-	return readEntries(livePath(dir))
-}
-
-func listSessions(dir string) []SessionMeta {
-	items, err := os.ReadDir(storeDir(dir))
-	if err != nil {
-		return []SessionMeta{}
-	}
-	out := []SessionMeta{}
-	for _, item := range items {
-		if filepath.Ext(item.Name()) != ".jsonl" {
-			continue
-		}
-		id := strings.TrimSuffix(item.Name(), ".jsonl")
-		path := filepath.Join(storeDir(dir), item.Name())
-		info, infoErr := item.Info()
-		var updated int64
-		var sidecar SessionSidecar
-		hasSidecar := false
-		if infoErr == nil {
-			updated = info.ModTime().UnixMilli()
-			sidecar, hasSidecar = readSessionSidecar(dir, id, uint64(info.Size()))
-		}
-		derivedTitle := ""
-		derivedTurns := 0
-		if hasSidecar {
-			derivedTurns = sidecar.Turns
-		} else {
-			derivedTitle, derivedTurns = sessionSummary(path)
-		}
-		title := derivedTitle
-		if hasSidecar {
-			title = sidecar.Title
-		}
-		if data, err := os.ReadFile(titlePath(dir, id)); err == nil && strings.TrimSpace(string(data)) != "" {
-			title = strings.TrimSpace(string(data))
-		}
-		out = append(out, SessionMeta{ID: id, Title: title, Updated: updated, Turns: derivedTurns})
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Updated > out[j].Updated })
-	return out
-}
-
-func sessionSummary(path string) (string, int) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "Untitled session", 0
-	}
-	defer file.Close()
-	sidecar := SessionSidecar{Title: "Untitled session"}
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 32*1024*1024)
-	for scanner.Scan() {
-		entry, ok := parseEntryLine(scanner.Text())
-		if !ok {
-			continue
-		}
-		updateSidecar(&sidecar, []Entry{entry})
-	}
-	return sidecar.Title, sidecar.Turns
 }
 
 func titleFromEntries(entries []Entry) string {
@@ -673,7 +356,7 @@ func titleFromEntries(entries []Entry) string {
 			return firstWords(message.Content, 8)
 		}
 	}
-	return "Untitled session"
+	return untitled
 }
 
 func firstWords(s string, n int) string {
@@ -682,173 +365,9 @@ func firstWords(s string, n int) string {
 		words = words[:n]
 	}
 	if len(words) == 0 {
-		return "Untitled session"
+		return untitled
 	}
 	return strings.Join(words, " ")
-}
-
-func archiveLive(dir string) (string, bool) {
-	path := livePath(dir)
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", false
-	}
-	bytes := uint64(info.Size())
-	liveSidecar, hasLiveSidecar := readLiveSidecar(dir, bytes)
-	if id, ok := loadResumeID(dir); ok {
-		if continued, err := continueArchivedLive(dir, id); err == nil && continued {
-			return id, true
-		} else if err != nil {
-			return "", false
-		}
-		entries := readEntries(path)
-		if continued, err := continueArchived(dir, id, entries); err == nil && continued {
-			return id, true
-		} else if err != nil {
-			return "", false
-		}
-	}
-	var entries []Entry
-	if !hasLiveSidecar {
-		entries = readEntries(path)
-		if len(entries) == 0 {
-			return "", false
-		}
-	}
-	store := storeDir(dir)
-	os.MkdirAll(store, 0o777)
-	base := fmt.Sprintf("%d", NowMs())
-	id := base
-	dest := filepath.Join(store, id+".jsonl")
-	for n := 1; ; n++ {
-		if _, err := os.Stat(dest); err != nil {
-			break
-		}
-		id = fmt.Sprintf("%s-%d", base, n)
-		dest = filepath.Join(store, id+".jsonl")
-	}
-	if err := os.Rename(path, dest); err != nil {
-		return "", false
-	}
-	liveTitlePath := filepath.Join(dir, "session.title")
-	var legacyTitle string
-	if data, err := os.ReadFile(liveTitlePath); err == nil && strings.TrimSpace(string(data)) != "" {
-		legacyTitle = strings.TrimSpace(string(data))
-	}
-	sidecar := SessionSidecar{Title: "Untitled session"}
-	if hasLiveSidecar {
-		sidecar = liveSidecar
-	} else {
-		sidecar = metadataFromEntries(entries, bytes)
-	}
-	if legacyTitle != "" {
-		sidecar.Title = legacyTitle
-	}
-	writeSessionSidecarValue(dir, id, sidecar)
-	os.Remove(liveTitlePath)
-	os.Remove(liveSidecarPath(dir))
-	clearResumeID(dir)
-	return id, true
-}
-
-func loadByID(dir, id string) ([]Entry, bool) {
-	if !validID(id) {
-		return nil, false
-	}
-	path := filepath.Join(storeDir(dir), id+".jsonl")
-	if _, err := os.Stat(path); err != nil {
-		return nil, false
-	}
-	return readEntries(path), true
-}
-
-type FsStore struct {
-	dir string
-}
-
-func NewFsStore(dir string) *FsStore {
-	return &FsStore{dir: dir}
-}
-
-func (s *FsStore) Live() []Entry                { return loadLive(s.dir) }
-func (s *FsStore) Save(entries []Entry) error   { return saveLive(s.dir, entries) }
-func (s *FsStore) Append(entries []Entry) error { return appendLive(s.dir, entries) }
-func (s *FsStore) Archive() (string, bool)      { return archiveLive(s.dir) }
-func (s *FsStore) Discard()                     { discardLive(s.dir) }
-func (s *FsStore) List() []SessionMeta          { return listSessions(s.dir) }
-func (s *FsStore) ResumeID() (string, bool)     { return loadResumeID(s.dir) }
-func (s *FsStore) SetResumeID(id string)        { setResumeID(s.dir, id) }
-func (s *FsStore) ClearResumeID()               { clearResumeID(s.dir) }
-
-func (s *FsStore) ContinueArchived(id string, entries []Entry) (bool, error) {
-	return continueArchived(s.dir, id, entries)
-}
-
-func (s *FsStore) ContinueArchivedLive(id string) (bool, error) {
-	return continueArchivedLive(s.dir, id)
-}
-
-func (s *FsStore) Load(id string) ([]Entry, bool) {
-	return loadByID(s.dir, id)
-}
-
-func titlePath(dir, id string) string {
-	return filepath.Join(storeDir(dir), id+".title")
-}
-
-type SessionSidecar struct {
-	Title string `json:"title"`
-	Turns int    `json:"turns"`
-	Bytes uint64 `json:"bytes"`
-}
-
-func sidecarPath(dir, id string) string {
-	return filepath.Join(storeDir(dir), id+".meta")
-}
-
-func liveSidecarPath(dir string) string {
-	return filepath.Join(dir, "session.meta")
-}
-
-func metadataFromEntries(entries []Entry, bytes uint64) SessionSidecar {
-	sidecar := SessionSidecar{Title: "Untitled session", Bytes: bytes}
-	updateSidecar(&sidecar, entries)
-	return sidecar
-}
-
-func updateSidecar(sidecar *SessionSidecar, entries []Entry) {
-	for _, entry := range entries {
-		sidecar.Turns = nextTurns(sidecar.Turns, entry)
-		switch entry.Type {
-		case EntryMessage:
-			if entry.Message.Role == "user" && sidecar.Title == "Untitled session" && entry.Message.Content != "" {
-				sidecar.Title = firstWords(entry.Message.Content, 8)
-			}
-		case EntryCompaction:
-			sidecar.Title = firstWords(CompactionPrefix+entry.Summary+CompactionSuffix, 8)
-		}
-	}
-}
-
-func writeLiveSidecar(dir, path string, entries []Entry) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return
-	}
-	sidecar := metadataFromEntries(entries, uint64(info.Size()))
-	writeLiveSidecarValue(dir, sidecar)
-}
-
-func writeLiveSidecarValue(dir string, sidecar SessionSidecar) {
-	data, err := encodeJSON(sidecar)
-	if err != nil {
-		return
-	}
-	AtomicWrite(liveSidecarPath(dir), data)
-}
-
-func readLiveSidecar(dir string, bytes uint64) (SessionSidecar, bool) {
-	return readSidecar(liveSidecarPath(dir), bytes)
 }
 
 func nextTurns(turns int, entry Entry) int {
@@ -875,42 +394,6 @@ func entryTurns(entries []Entry) int {
 		turns = nextTurns(turns, entry)
 	}
 	return turns
-}
-
-func writeSessionSidecar(dir, id, path, title string, entries []Entry) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return
-	}
-	sidecar := SessionSidecar{Title: title, Turns: entryTurns(entries), Bytes: uint64(info.Size())}
-	writeSessionSidecarValue(dir, id, sidecar)
-}
-
-func writeSessionSidecarValue(dir, id string, sidecar SessionSidecar) {
-	data, err := encodeJSON(sidecar)
-	if err != nil {
-		return
-	}
-	AtomicWrite(sidecarPath(dir, id), data)
-}
-
-func readSessionSidecar(dir, id string, bytes uint64) (SessionSidecar, bool) {
-	return readSidecar(sidecarPath(dir, id), bytes)
-}
-
-func readSidecar(path string, bytes uint64) (SessionSidecar, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return SessionSidecar{}, false
-	}
-	var sidecar SessionSidecar
-	if err := json.Unmarshal(data, &sidecar); err != nil {
-		return SessionSidecar{}, false
-	}
-	if bytes != sidecar.Bytes {
-		return SessionSidecar{}, false
-	}
-	return sidecar, true
 }
 
 func DropIncompleteToolCalls(msgs []Message) []Message {
