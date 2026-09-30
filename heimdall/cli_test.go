@@ -249,3 +249,19 @@ func TestTheAPIErrorIsWhatTheCallerSees(t *testing.T) {
 		t.Fatalf("dijo %q", err)
 	}
 }
+
+func TestElListadoDeTokensEntiendeLosDosFormatos(t *testing.T) {
+	casos := []struct {
+		entry map[string]any
+		want  string
+	}{
+		{map[string]any{"name": "jimmy", "role": RoleAdmin}, "admin"},
+		{map[string]any{"name": "jimmy", "admin": true}, "admin"},
+		{map[string]any{"name": "agente", "role": RoleAgent, "project": "picsel", "env": "dev"}, "picsel/dev"},
+	}
+	for _, caso := range casos {
+		if got := describe(caso.entry); !strings.Contains(got, caso.want) {
+			t.Errorf("describe(%v) dio %q", caso.entry, got)
+		}
+	}
+}
