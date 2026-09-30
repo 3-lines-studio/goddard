@@ -144,14 +144,11 @@ func toolParams(t *testing.T) map[string]string {
 func TestParidadConRust(t *testing.T) {
 	expected := readTestdata(t, "testdata/paridad-rust.txt")
 	cases := paridadCases()
-	pendientes := map[string]bool{
-		"system_prompt":      true,
-		"tool_params_search": true,
-		"tool_params_fetch":  true,
-	}
+	pendientes := map[string]bool{}
 	for name, want := range toolParams(t) {
 		cases[name] = func() string { return want }
 	}
+	cases["system_prompt"] = func() string { return escapeEdit(SystemPrompt(BuildTools("/tmp"))) }
 	cubiertosEnOtroTest := map[string]bool{
 		"tool_run_empty":     true,
 		"tool_run_blank":     true,

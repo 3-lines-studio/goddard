@@ -40,6 +40,8 @@ func BuildToolsOn(machine Machine) []Tool {
 		WriteTool(machine),
 		EditTool(machine),
 		BashTool(machine),
+		SearchTool(),
+		FetchTool(),
 	}
 }
 
