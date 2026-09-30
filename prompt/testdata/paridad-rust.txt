@@ -1,0 +1,11 @@
+join_order	primero\n\nsegundo
+earlier_dir_wins	mía
+empty_spec	
+empty_file_is_skipped	de fábrica
+fill	Sos Jimmy, el asistente de Ana.
+single_braces	`[{"action":"goto"}]`
+three_fragments	primero\n\nsegundo\n\ntercero
+missing_fragment	error
+missing_var	error
+unclosed_placeholder	error
+parse_vars	[("usuario", "Ana"), ("asistente", "Jimmy")]

@@ -11,6 +11,15 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
   tests replay byte for byte. The history lives in Postgres, in the `axe`
   schema of the same database as the rest of goddard, so an axe in the cloud
   resumes a conversation from any instance and needs no volume.
+- `prompt` — the system prompt as fragments: a spec names them in order,
+  each one is a markdown file with `{{variables}}`, and the language picks
+  which file answers, so a language is assembled on demand and nothing is
+  translated until it is asked for. Port of jimmy's assembler with the language
+  in it: a fragment is read as `<dir>/<lang>/<name>.md` and falls back to
+  `<dir>/<name>.md`, which is the default text and what answers for a
+  translation that is not there. The Rust harness that compiles jimmy's
+  `prompt.rs` on its own left `prompt/testdata/paridad-rust.txt`, and the tests
+  replay it byte for byte.
 - `heimdall` — the secrets store: projects, environments and tokens scoped to
   one environment and, if you want, to a list of key names, so an agent gets
   test credentials with no path to production. Port of
@@ -28,7 +37,8 @@ article extraction is the one layer of `axe` that is not byte-for-byte with the
 Rust, which runs Readability and htmd), `golang.org/x/crypto` and
 `github.com/zeebo/blake3` for the sealed boxes and the key derived per
 environment, `github.com/jackc/pgx/v5` for the store, and `modernc.org/sqlite`,
-pure Go, to read the old store once and bring it across.
+pure Go, to read the old store once and bring it across. `prompt` does not add
+one: fragments and variables are the standard library and nothing else.
 
 ## Embed
 
