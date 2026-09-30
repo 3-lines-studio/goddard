@@ -1,0 +1,70 @@
+message_default	{"Role":"","Content":""}
+message_user	{"Role":"user","Content":"hola"}
+message_assistant_tools	{"Role":"assistant","Content":"voy","ToolCalls":[{"ID":"c1","Name":"bash","Arguments":"{\"command\":\"ls\"}"}],"Reasoning":"penso"}
+message_tool_image	{"Role":"tool","Content":"ok","ToolCallID":"c1","Images":[{"Path":"/a.png","URL":""}]}
+image_empty	{"URL":""}
+image_full	{"Path":"/a.png","URL":"https://x/y.png"}
+tool_call	{"ID":"c1","Name":"read","Arguments":"{}"}
+deser_old_message	{"Role":"user","Content":"hi"}
+deser_tool_call	{"ID":"c1","Name":"read","Arguments":"{}"}
+coerce_bash_timeout_string	{"command":"ls","timeout":30}
+coerce_bash_timeout_float	{"command":"ls","timeout":30}
+coerce_bash_command_int	{"command":"123","timeout":5}
+coerce_bash_command_bool	{"command":"true"}
+coerce_bash_missing	null
+coerce_bash_empty_raw	null
+coerce_bash_timeout_null	{"command":"ls"}
+coerce_bash_command_null	{"command":""}
+coerce_bash_extra_key	{"command":"ls","zzz":1}
+coerce_edit_ok	{"edits":[{"newText":"y","oldText":"x"}],"path":"/a"}
+coerce_edit_extra_key	{"edits":[],"extra":"z","path":"/a"}
+coerce_edit_array_scalar	{"edits":["x"],"path":"/a"}
+coerce_array_of_arrays	[[1,2]]
+probe_s_from_int	{"req":"x","s":"42"}
+probe_s_from_bool	{"req":"x","s":"true"}
+probe_s_null	{"req":"x"}
+probe_s_from_array	{"req":"x","s":["a"]}
+probe_req_from_int	{"req":"123"}
+probe_req_from_float	{"req":"1.5"}
+probe_req_null	{"req":""}
+probe_i_from_float_string	{"i":3,"req":"x"}
+probe_i_from_sci_string	{"i":1000,"req":"x"}
+probe_i_from_bool	{"i":1,"req":"x"}
+probe_i_from_float	{"i":1,"req":"x"}
+probe_i_null	{"req":"x"}
+probe_n_from_string	{"n":3.5,"req":"x"}
+probe_n_from_int	{"n":7,"req":"x"}
+probe_n_from_bool	{"n":1,"req":"x"}
+probe_n_null	{"req":"x"}
+probe_b_from_string	{"b":true,"req":"x"}
+probe_b_from_one	{"b":true,"req":"x"}
+probe_b_from_zero	{"b":false,"req":"x"}
+probe_b_from_other_string	{"b":"yes","req":"x"}
+probe_b_from_float	{"b":2.0,"req":"x"}
+probe_b_null	{"req":"x"}
+probe_arr_strings	{"arr":[1,2],"req":"x"}
+probe_arr_floats	{"arr":[1,2],"req":"x"}
+probe_arr_not_array	{"arr":"nope","req":"x"}
+probe_obj_nested	{"o":{"x":5},"req":"x"}
+probe_obj_extra	{"o":{"x":5,"z":2},"req":"x"}
+probe_union_null	{"req":"x","u":null}
+probe_only_required	{"req":"x"}
+probe_extra_root_key	{"req":"x","zzz":1}
+tool_run_empty	error: invalid arguments for probe: missing field `n` at line 1 column 2
+Received: {}
+tool_run_blank	error: invalid arguments for probe: missing field `n` at line 1 column 2
+Received: {}
+tool_run_ok	n=7
+tool_run_missing	error: invalid arguments for probe: missing field `n` at line 1 column 2
+Received: {}
+tool_run_bad_json	error: invalid arguments for probe: invalid type: null, expected struct ProbeArgs at line 1 column 4
+Received: { nope
+tool_run_null_root	error: invalid arguments for probe: invalid type: null, expected struct ProbeArgs at line 1 column 4
+Received: null
+system_prompt	Available tools:\n- read: Read file contents (truncated, use offset to continue); images are attached so you can see them\n- write: Write content to a file\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- bash: Execute bash commands (ls, grep, find, etc.)\n- search: Search the web (DuckDuckGo)\n- fetch: Fetch a URL as Markdown, rendering JavaScript pages when a browser is installed\n
+tool_params_read	{"properties":{"limit":{"description":"Maximum number of lines to read","type":"integer"},"offset":{"description":"Line number to start reading from (1-indexed)","type":"integer"},"path":{"description":"Path to the file to read (relative or absolute)","type":"string"}},"required":["path"],"type":"object"}
+tool_params_write	{"properties":{"content":{"description":"Content to write to the file","type":"string"},"path":{"description":"Path to the file to write (relative or absolute)","type":"string"}},"required":["path","content"],"type":"object"}
+tool_params_edit	{"properties":{"edits":{"description":"One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead.","items":{"properties":{"newText":{"description":"Replacement text for this targeted edit.","type":"string"},"oldText":{"description":"Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call.","type":"string"}},"required":["oldText","newText"],"type":"object"},"type":"array"},"path":{"description":"Path to the file to edit (relative or absolute)","type":"string"}},"required":["path","edits"],"type":"object"}
+tool_params_bash	{"properties":{"command":{"description":"bash command to run","type":"string"},"timeout":{"description":"Timeout in seconds (default: 120)","type":"integer"}},"required":["command"],"type":"object"}
+tool_params_search	{"properties":{"count":{"description":"How many results to return (default 8)","type":"integer"},"query":{"description":"Search query","type":"string"}},"required":["query"],"type":"object"}
+tool_params_fetch	{"properties":{"url":{"description":"HTTP or HTTPS URL","type":"string"}},"required":["url"],"type":"object"}
