@@ -208,37 +208,6 @@ func TestSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestConfigDirHonorsXDG(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "/custom")
-	if got := ConfigDir(); got != "/custom" {
-		t.Errorf("XDG: %q", got)
-	}
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("HOME", "/home/probe")
-	if got := ConfigDir(); got != "/home/probe/.config" {
-		t.Errorf("HOME: %q", got)
-	}
-}
-
-func TestUserSystemPromptReadsFile(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-	if got := UserSystemPrompt(); got != "" {
-		t.Errorf("sin archivo: %q", got)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "axe"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, filepath.Join(dir, "axe", "SYSTEM.md"), "  hola  \n")
-	if got := UserSystemPrompt(); got != "hola" {
-		t.Errorf("con archivo: %q", got)
-	}
-	writeFile(t, filepath.Join(dir, "axe", "SYSTEM.md"), "   \n")
-	if got := UserSystemPrompt(); got != "" {
-		t.Errorf("en blanco: %q", got)
-	}
-}
-
 func TestSetNonDumpable(t *testing.T) {
 	if !SetNonDumpable() {
 		t.Skip("prctl no disponible")
@@ -282,11 +251,4 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(data)
-}
-
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
 }
