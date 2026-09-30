@@ -102,7 +102,7 @@ func (o *OpenAI) buildRequest(req *Request, stream bool) (string, map[string]str
 		})
 	}
 
-	body, err := json.Marshal(oaRequest{
+	body, err := encodeJSON(oaRequest{
 		Model:    req.Model,
 		Messages: messages,
 		Tools:    tools,
