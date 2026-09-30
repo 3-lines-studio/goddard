@@ -349,3 +349,64 @@ func contains(values []string, wanted string) bool {
 	}
 	return false
 }
+
+func TestStatusDiceQueFaltaTodoEnUnaBaseCruda(t *testing.T) {
+	db := testDB(t)
+	known, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, err := Status(context.Background(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != len(known) {
+		t.Fatalf("el estado trajo %d y el repositorio tiene %d", len(states), len(known))
+	}
+	for index, state := range states {
+		if state.Version != known[index].Version || state.Name != known[index].Name {
+			t.Fatalf("el estado %d no es la migración %d", index, known[index].Version)
+		}
+		if state.Applied {
+			t.Fatalf("%04d_%s dice aplicada en una base cruda", state.Version, state.Name)
+		}
+	}
+}
+
+func TestStatusDiceQueCorrioYCuando(t *testing.T) {
+	db := testDB(t)
+	if _, err := Apply(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	first, err := Status(context.Background(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, state := range first {
+		if !state.Applied {
+			t.Fatalf("%04d_%s quedó pendiente después de aplicarla", state.Version, state.Name)
+		}
+		if state.AppliedAt.IsZero() {
+			t.Fatalf("%04d_%s no dice cuándo corrió", state.Version, state.Name)
+		}
+	}
+	applied, err := Apply(context.Background(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied) != 0 {
+		t.Fatalf("la segunda corrida aplicó %v", applied)
+	}
+	second, err := Status(context.Background(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != len(first) {
+		t.Fatalf("el estado cambió: %d contra %d", len(second), len(first))
+	}
+	for index := range first {
+		if !second[index].AppliedAt.Equal(first[index].AppliedAt) {
+			t.Fatalf("%04d_%s cambió de fecha", first[index].Version, first[index].Name)
+		}
+	}
+}
