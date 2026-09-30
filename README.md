@@ -40,7 +40,9 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
   viewer sees the system's skills, its organization's and its own, and the
   closest owner wins when the name repeats: that is jimmy's
   local-shadows-builtin, through ownership instead of directory order. The
-  system's are read only and nobody installs them through this package.
+  system's are read only and nobody installs them through this package. It is
+  the tool the harness gives the agent, with the store and the viewer already
+  in: `list` renders what that viewer can see and `load` reads one.
 
 Five dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
 article extraction is the one layer of `axe` that is not byte-for-byte with the
