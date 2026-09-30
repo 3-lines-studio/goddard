@@ -1,17 +1,12 @@
 package axe
 
 import (
-	"bufio"
 	"encoding/json"
-	"os"
 	"strconv"
-	"strings"
 	"testing"
 )
 
 const (
-	bashSchema  = `{"type":"object","properties":{"command":{"type":"string","description":"bash command to run"},"timeout":{"type":"integer","description":"Timeout in seconds (default: 120)"}},"required":["command"]}`
-	editSchema  = `{"type":"object","properties":{"path":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"}},"required":["oldText","newText"]}}},"required":["path","edits"]}`
 	probeSchema = `{"type":"object","properties":{"req":{"type":"string"},"s":{"type":"string"},"i":{"type":"integer"},"n":{"type":"number"},"b":{"type":"boolean"},"arr":{"type":"array","items":{"type":"integer"}},"o":{"type":"object","properties":{"x":{"type":"integer"}}},"u":{"type":["string","null"]}},"required":["req"]}`
 	probeTool   = `{"type":"object","properties":{"n":{"type":"integer"}},"required":["n"]}`
 )
@@ -24,25 +19,6 @@ func newProbe() Tool {
 	return NewTool("probe", "d", probeTool, func(args probeArgs) string {
 		return "n=" + strconv.FormatInt(args.N, 10)
 	})
-}
-
-func readParidad(t *testing.T) map[string]string {
-	t.Helper()
-	file, err := os.Open("testdata/paridad-rust.txt")
-	if err != nil {
-		t.Fatalf("testdata: %v", err)
-	}
-	defer file.Close()
-	expected := map[string]string{}
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		name, value, found := strings.Cut(scanner.Text(), "\t")
-		if !found {
-			continue
-		}
-		expected[name] = value
-	}
-	return expected
 }
 
 func marshal(value any) string {
@@ -156,17 +132,25 @@ func paridadCases() map[string]func() string {
 	}
 }
 
+func toolParams(t *testing.T) map[string]string {
+	t.Helper()
+	params := map[string]string{}
+	for _, tool := range BuildTools("/tmp") {
+		params["tool_params_"+tool.Name] = marshal(tool.Parameters)
+	}
+	return params
+}
+
 func TestParidadConRust(t *testing.T) {
-	expected := readParidad(t)
+	expected := readTestdata(t, "testdata/paridad-rust.txt")
 	cases := paridadCases()
 	pendientes := map[string]bool{
 		"system_prompt":      true,
-		"tool_params_read":   true,
-		"tool_params_write":  true,
-		"tool_params_edit":   true,
-		"tool_params_bash":   true,
 		"tool_params_search": true,
 		"tool_params_fetch":  true,
+	}
+	for name, want := range toolParams(t) {
+		cases[name] = func() string { return want }
 	}
 	cubiertosEnOtroTest := map[string]bool{
 		"tool_run_empty":     true,

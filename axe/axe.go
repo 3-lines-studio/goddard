@@ -148,14 +148,16 @@ func NewToolWithProgress[T any, R Output](name, description, schema string, run 
 			if args != nil {
 				coerceArgs(&args, parameters)
 			}
-			if reason := checkArgs(parameters, args); reason != "" {
-				return TextOutput(invalidArgs(name, reason, raw))
+			var typed T
+			if _, custom := any(&typed).(json.Unmarshaler); !custom {
+				if reason := checkArgs(parameters, args); reason != "" {
+					return TextOutput(invalidArgs(name, reason, raw))
+				}
 			}
 			coerced, err := json.Marshal(args)
 			if err != nil {
 				coerced = []byte(raw)
 			}
-			var typed T
 			if err := json.Unmarshal(coerced, &typed); err != nil {
 				return TextOutput(invalidArgs(name, err.Error(), raw))
 			}

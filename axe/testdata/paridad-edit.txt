@@ -1,0 +1,45 @@
+mixed_crlf	A\r\nb\nc\r\n
+mixed_crlf.patch	--- f.txt\n+++ f.txt\n@@ -1,3 +1,3 @@\n-a\n+A\n b\n c\n
+mixed_lf	a\r\nB\nB2\nc\r\n
+mixed_lf.patch	--- f.txt\n+++ f.txt\n@@ -1,3 +1,4 @@\n a\n-b\n+B\n+B2\n c\n
+crlf_roundtrip	one\r\nTWO\r\nTWO2\r\nthree\r\n
+crlf_roundtrip.patch	--- f.txt\n+++ f.txt\n@@ -1,3 +1,4 @@\n one\n-two\n+TWO\n+TWO2\n three\n
+crlf_all	one\r\nTWO\r\n
+crlf_all.patch	--- f.txt\n+++ f.txt\n@@ -1,2 +1,2 @@\n one\n-two\n+TWO\n
+multibyte	héllo planet 🙈\nsecond\n
+multibyte.patch	--- f.txt\n+++ f.txt\n@@ -1,2 +1,2 @@\n-héllo wörld 🙈\n+héllo planet 🙈\n second\n
+bom	﻿new
+bom.patch	--- f.txt\n+++ f.txt\n@@ -1,1 +1,1 @@\n-old\n+new\n
+duplicate	ERROR	error: Found 2 occurrences of the text in f.txt. The text must be unique. Please provide more context to make it unique.
+overlap	ERROR	error: edits[0] and edits[1] overlap in f.txt. Merge them into one edit or target disjoint regions.
+empty_old	ERROR	error: oldText must not be empty in f.txt.
+no_change	ERROR	error: No changes made to f.txt. The replacement produced identical content.
+not_found	ERROR	error: Could not find the exact text in f.txt. The old text must match exactly including all whitespace and newlines.
+not_found_multi	ERROR	error: Could not find edits[1] in f.txt. The oldText must match exactly including all whitespace and newlines.
+fuzzy_quotes	let s = "bye";\n
+fuzzy_quotes.patch	--- f.txt\n+++ f.txt\n@@ -1,1 +1,1 @@\n-let s = “hi”;\n+let s = "bye";\n
+fuzzy_trailing	X\n
+fuzzy_trailing.patch	--- f.txt\n+++ f.txt\n@@ -1,2 +1,1 @@\n-a b   \n-c\n+X\n
+fullwidth	let x = (2);\n
+fullwidth.patch	--- f.txt\n+++ f.txt\n@@ -1,1 +1,1 @@\n-let x = （1）;\n+let x = (2);\n
+fuzzy_dash	c\n
+fuzzy_dash.patch	--- f.txt\n+++ f.txt\n@@ -1,1 +1,1 @@\n-a — b\n+c\n
+no_final_newline	a\nB
+no_final_newline.patch	--- f.txt\n+++ f.txt\n@@ -1,2 +1,2 @@\n a\n-b\n+B\n
+append_line	a\nb\n
+append_line.patch	--- f.txt\n+++ f.txt\n@@ -1,1 +1,2 @@\n-a\n+a\n+b\n
+delete_text	a\nc\n
+delete_text.patch	--- f.txt\n+++ f.txt\n@@ -1,3 +1,2 @@\n a\n-b\n c\n
+two_edits	a\nB\nc\nD\n
+two_edits.patch	--- f.txt\n+++ f.txt\n@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n@@ -3,2 +3,2 @@\n c\n-d\n+D\n
+two_edits_one_group	A\nb\nC\n
+two_edits_one_group.patch	--- f.txt\n+++ f.txt\n@@ -1,2 +1,2 @@\n-a\n+A\n b\n@@ -2,2 +2,2 @@\n b\n-c\n+C\n
+edit_inside_line	x = 11; y = 2;\n
+edit_inside_line.patch	--- f.txt\n+++ f.txt\n@@ -1,1 +1,1 @@\n-x = 1; y = 2;\n+x = 11; y = 2;\n
+fuzzy_crlf	a\r\nB\r\n
+fuzzy_crlf.patch	--- f.txt\n+++ f.txt\n@@ -1,2 +1,2 @@\n a\n-b\n+B\n
+empty_file	ERROR	error: Could not find the exact text in f.txt. The old text must match exactly including all whitespace and newlines.
+only_newline	x\n
+only_newline.patch	--- f.txt\n+++ f.txt\n@@ -1,1 +1,1 @@\n-\n+x\n
+repeat_context	same\nOTHER\nsame\n
+repeat_context.patch	--- f.txt\n+++ f.txt\n@@ -1,3 +1,3 @@\n same\n-other\n+OTHER\n same\n
