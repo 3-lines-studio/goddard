@@ -381,29 +381,6 @@ func SystemPrompt(tools []Tool) string {
 	return builder.String()
 }
 
-func UserSystemPrompt() string {
-	dir := ConfigDir()
-	if dir == "" {
-		return ""
-	}
-	data, err := os.ReadFile(filepath.Join(dir, "axe", "SYSTEM.md"))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
-func ConfigDir() string {
-	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
-		return dir
-	}
-	home := os.Getenv("HOME")
-	if home == "" {
-		return ""
-	}
-	return filepath.Join(home, ".config")
-}
-
 func encodeJSON(value any) ([]byte, error) {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
