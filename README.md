@@ -94,6 +94,17 @@ project, a user — and two services over the same database and scope see the
 same history. There is no store on files: the port of the Rust `FsStore` is
 gone, because a cloud axe has no volume to mount.
 
+## Migrate
+
+The schema is not applied by the binary the agent travels in: it is
+`cmd/migrate`, for whoever operates the service. The external one does not
+carry it, so asking for a skill cannot change the database.
+
+```
+migrate            aplica lo que falte
+migrate status     qué corrió y qué no
+```
+
 ## Check
 
 ```

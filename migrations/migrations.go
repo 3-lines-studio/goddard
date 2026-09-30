@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //go:embed *.sql
@@ -46,6 +47,64 @@ func List() ([]Migration, error) {
 // error instead of a quiet surprise.
 func Apply(ctx context.Context, db *sql.DB) ([]string, error) {
 	return apply(ctx, db, files)
+}
+
+// State is one migration as the database has it.
+type State struct {
+	Version   int
+	Name      string
+	Applied   bool
+	AppliedAt time.Time
+}
+
+// Status says, for every migration the repository holds, oldest first, whether
+// it ran and when. A database that never saw this package has them all
+// pending, which is how an operator tells a fresh one from a half migrated
+// one without running anything.
+func Status(ctx context.Context, db *sql.DB) ([]State, error) {
+	known, err := List()
+	if err != nil {
+		return nil, err
+	}
+	applied, err := appliedRows(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	states := make([]State, 0, len(known))
+	for _, migration := range known {
+		state := State{Version: migration.Version, Name: migration.Name}
+		if at, ok := applied[migration.Version]; ok {
+			state.Applied = true
+			state.AppliedAt = at
+		}
+		states = append(states, state)
+	}
+	return states, nil
+}
+
+func appliedRows(ctx context.Context, db *sql.DB) (map[int]time.Time, error) {
+	var there bool
+	if err := db.QueryRowContext(ctx, "SELECT to_regclass('public.schema_migrations') IS NOT NULL").Scan(&there); err != nil {
+		return nil, fmt.Errorf("no pude mirar public.schema_migrations: %w", err)
+	}
+	if !there {
+		return map[int]time.Time{}, nil
+	}
+	rows, err := db.QueryContext(ctx, "SELECT version, applied_at FROM public.schema_migrations")
+	if err != nil {
+		return nil, fmt.Errorf("no pude leer lo que ya corrió: %w", err)
+	}
+	defer rows.Close()
+	applied := map[int]time.Time{}
+	for rows.Next() {
+		var version int
+		var at time.Time
+		if err := rows.Scan(&version, &at); err != nil {
+			return nil, err
+		}
+		applied[version] = at
+	}
+	return applied, rows.Err()
 }
 
 func apply(ctx context.Context, db *sql.DB, fsys fs.FS) ([]string, error) {
