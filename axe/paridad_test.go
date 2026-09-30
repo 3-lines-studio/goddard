@@ -22,7 +22,7 @@ func newProbe() Tool {
 }
 
 func marshal(value any) string {
-	data, err := json.Marshal(value)
+	data, err := encodeJSON(value)
 	if err != nil {
 		return "marshal error: " + err.Error()
 	}

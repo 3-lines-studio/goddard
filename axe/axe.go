@@ -1,6 +1,7 @@
 package axe
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -401,6 +402,16 @@ func ConfigDir() string {
 		return ""
 	}
 	return filepath.Join(home, ".config")
+}
+
+func encodeJSON(value any) ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buffer.Bytes(), []byte("\n")), nil
 }
 
 func AtomicWrite(path string, data []byte) error {

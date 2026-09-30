@@ -1,0 +1,27 @@
+json_message	{"type":"message","message":{"Role":"user","Content":"hola\\nmundo"}}
+json_compaction	{"type":"compaction","summary":"resumen","tokens_before":10,"timestamp":5,"retained":[{"Role":"user","Content":"reciente"}]}
+json_usage	{"type":"usage","input":1,"output":2,"cached_input":3,"context_input":4,"context_output":5}
+json_usage_partial	{"type":"usage","input":1,"output":2,"cached_input":3,"context_input":4,"context_output":0}
+json_compaction_empty_retained	{"type":"compaction","summary":"","tokens_before":0,"timestamp":0,"retained":[]}
+json_bare_message_rejected	true
+context_default	[{"Role":"user","Content":"The conversation history before this point was compacted into the following summary:\\n\\n<summary>\\nresumen\\n\\n## Authoritative Original Task\\ntarea original\\n\\n## Authoritative Workspace State\\nFiles read: none\\nFiles modified: none\\nRecent commands and results:\\nnone\\n</summary>"},{"Role":"user","Content":"reciente"}]
+context_minimal	[{"Role":"user","Content":"The conversation history before this point was compacted into the following summary:\\n\\n<summary>\\nresumen\\n</summary>"},{"Role":"user","Content":"reciente"}]
+context_no_compaction	[{"Role":"user","Content":"solo"}]
+original_task	tarea original
+title	The conversation history before this point was compacted
+turns	2
+latest_tokens	Some(230)
+latest_tokens_after_compaction	Some(230)
+workspace_state	Files read: /a.txt\nFiles modified: /b.txt\nRecent commands and results:\nls -la => salida del comando\nfalse => error: fallo\necho hola => success with no output
+serialize_conversation	[Tool call 1]: read({"path":"/a.txt"})\n\n[Tool result 1; full result remains in session]: a\nb\n\n[Tool call 2]: bash({"command":"ls -la"})\n\n[Tool result 2; full result remains in session]: salida del comando\n\n[Tool call 3]: bash({"command":"false"})\n\n[Tool result 3; full result remains in session]: error: fallo\n\n[Tool call 4]: write({"path":"/b.txt","content":"x"})\n\n[Tool result 4; full result remains in session]: wrote /b.txt (1 bytes)\n\n[Tool call 5]: edit({"path":"/a.txt","edits":[]})\n\n[Tool result 5; full result remains in session]: error: boom\n\n[Tool call 6]: bash({"command":"echo hola"})\n\n[Tool result 6; full result remains in session]: 
+compact_observation	hol\n… [16 bytes masked] …\nós
+compact_observation_short	corto
+first_words	uno dos tres
+first_words_empty	Untitled session
+dropped_incomplete	[{"Role":"user","Content":"hi"},{"Role":"assistant","Content":"","ToolCalls":[{"ID":"1","Name":"read","Arguments":"{}"}]},{"Role":"tool","Content":"ok","ToolCallID":"1"},{"Role":"assistant","Content":"fin"}]
+dropped_out_of_order	[{"Role":"assistant","Content":"","ToolCalls":[{"ID":"1","Name":"a","Arguments":"{}"}]},{"Role":"tool","Content":"A","ToolCallID":"1"},{"Role":"assistant","Content":"","ToolCalls":[{"ID":"2","Name":"b","Arguments":"{}"}]},{"Role":"tool","Content":"B","ToolCallID":"2"}]
+dropped_orphan	[{"Role":"user","Content":"hi"},{"Role":"assistant","Content":"ok"}]
+overflow_true	true
+overflow_rate_limit	false
+overflow_false	false
+valid_summary_short	false
