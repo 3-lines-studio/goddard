@@ -5,10 +5,12 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
 ## Packages
 
 - `axe` — the agent harness: the loop, an OpenAI-compatible provider, the tools,
-  the search and the page fetcher, project-scoped sessions, compaction, and the
-  outbound secret sentinel. Port of [axe](https://github.com/3-lines-studio/axe),
+  the search and the page fetcher, sessions, compaction, and the outbound
+  secret sentinel. Port of [axe](https://github.com/3-lines-studio/axe),
   verified against it: `axe/testdata/` holds dumps of real Rust output that the
-  tests replay byte for byte.
+  tests replay byte for byte. The history lives in Postgres, in the `axe`
+  schema of the same database as the rest of goddard, so an axe in the cloud
+  resumes a conversation from any instance and needs no volume.
 - `heimdall` — the secrets store: projects, environments and tokens scoped to
   one environment and, if you want, to a list of key names, so an agent gets
   test credentials with no path to production. Port of
@@ -46,6 +48,28 @@ end := axe.RunStream(ctx, provider, options, history, sink)
 `end.Messages` is the grown transcript and `end.Outcome` says why the run
 stopped (`OutcomeDone`, `OutcomeMaxTurns`, `OutcomeCancelled`,
 `OutcomeCompact`, `OutcomeFailed`).
+
+The transcript is saved through a `Store`. The one that ships is
+`axe.NewPgStore(db, scope)` — the pool the service already has for heimdall,
+with the migrations applied first and the driver registered by whoever opens
+it (`_ "github.com/jackc/pgx/v5/stdlib"`):
+
+```go
+db, _ := sql.Open("pgx", os.Getenv("DATABASE_URL"))
+migrations.Apply(ctx, db)
+store := axe.NewPgStore(db, "chat-1")
+
+entries := make([]axe.Entry, 0, len(end.Messages))
+for _, message := range end.Messages {
+    entries = append(entries, axe.MessageEntry(message))
+}
+store.Append(ctx, entries)
+```
+
+The scope is whatever the embedder says a conversation set is — a chat, a
+project, a user — and two services over the same database and scope see the
+same history. There is no store on files: the port of the Rust `FsStore` is
+gone, because a cloud axe has no volume to mount.
 
 ## Check
 
