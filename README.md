@@ -32,14 +32,24 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
   command line keeps the `doppler` dialect,
   `heimdall run --preserve-env -- npm test`. Outside: the HTTP server, the web
   page and the magic link, which bifrost brings.
+- `skill` — the skills: named instructions the agent loads into its context
+  when the task calls for them, in the `skill` schema of the same Postgres.
+  Port of jimmy's `src/skill.rs`, with the tree of directories replaced by
+  rows. A skill belongs to one owner — the system, an organization or a user —
+  and names the role of that owner it is for, empty meaning all of them. A
+  viewer sees the system's skills, its organization's and its own, and the
+  closest owner wins when the name repeats: that is jimmy's
+  local-shadows-builtin, through ownership instead of directory order. The
+  system's are read only and nobody installs them through this package.
 
 Five dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
 article extraction is the one layer of `axe` that is not byte-for-byte with the
 Rust, which runs Readability and htmd), `golang.org/x/crypto` and
 `github.com/zeebo/blake3` for the sealed boxes and the key derived per
 environment, `github.com/jackc/pgx/v5` for the store, and `modernc.org/sqlite`,
-pure Go, to read the old store once and bring it across. `prompt` does not add
-one: fragments and variables are the standard library and nothing else.
+pure Go, to read the old store once and bring it across. `prompt` and `skill`
+do not add one: fragments, variables and skills are the standard library and
+nothing else.
 
 ## Embed
 
