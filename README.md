@@ -9,10 +9,21 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
   outbound secret sentinel. Port of [axe](https://github.com/3-lines-studio/axe),
   verified against it: `axe/testdata/` holds dumps of real Rust output that the
   tests replay byte for byte.
+- `heimdall` — the secrets store: projects, environments and tokens scoped to
+  one environment and, if you want, to a list of key names, so an agent gets
+  test credentials with no path to production. Port of
+  [heimdall](https://github.com/3-lines-studio/heimdall), verified the same way
+  and in both directions: this store opens a database the Rust wrote, and the
+  Rust server serves one this wrote. The command line keeps the `doppler`
+  dialect, `heimdall run --preserve-env -- npm test`. Outside: the HTTP server,
+  the web page and the magic link, which bifrost brings.
 
-One dependency: `golang.org/x/net`, for the HTML parser behind `fetch`. The
-article extraction is the one layer that is not byte-for-byte with the Rust,
-which runs Readability and htmd.
+Four dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
+article extraction is the one layer of `axe` that is not byte-for-byte with the
+Rust, which runs Readability and htmd), `golang.org/x/crypto` and
+`github.com/zeebo/blake3` for the sealed boxes and the key derived per
+environment, and `modernc.org/sqlite`, pure Go, to read the database that is
+already out there.
 
 ## Embed
 
