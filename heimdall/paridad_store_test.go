@@ -1,6 +1,7 @@
 package heimdall
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -8,22 +9,92 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	_ "modernc.org/sqlite"
 )
 
-// fixture arma la base que escribió el Rust: cada INSERT trae los bytes tal
-// cual salieron de allá, sobres y hashes incluidos.
+const siglo = 100 * 365 * 24 * 60 * 60
+
+// legacySchema is the schema the Rust crate left behind, verbatim.
+const legacySchema = `
+CREATE TABLE IF NOT EXISTS secrets (
+    project TEXT NOT NULL,
+    env TEXT NOT NULL,
+    name TEXT NOT NULL,
+    value BLOB NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (project, env, name)
+);
+CREATE TABLE IF NOT EXISTS tokens (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    project TEXT NOT NULL,
+    env TEXT NOT NULL,
+    keys TEXT,
+    hash TEXT NOT NULL,
+    admin INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER,
+    last_used INTEGER
+);
+CREATE TABLE IF NOT EXISTS audit (
+    at INTEGER NOT NULL,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    project TEXT NOT NULL,
+    env TEXT NOT NULL,
+    name TEXT
+);
+CREATE TABLE IF NOT EXISTS environments (
+    project TEXT NOT NULL,
+    env TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (project, env)
+);
+CREATE TABLE IF NOT EXISTS logins (
+    hash TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    hash TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+`
+
+// fixture goes the long way around on purpose: it builds the store the Rust
+// wrote, in SQLite, and imports it. What the tests see afterwards is what a
+// real migration would leave in Postgres.
 func fixture(t *testing.T) *Store {
 	t.Helper()
-	store := storeAt(t, filepath.Join(t.TempDir(), "heimdall.db"))
-	loadFixture(t, store, "testdata/rust-store.sql")
+	store := testStore(t)
+	imported, err := ImportSQLite(t.Context(), buildLegacy(t), store)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	want := Imported{Secrets: 6, Environments: 1, Tokens: 6, Audit: 17}
+	if imported != want {
+		t.Fatalf("importó %+v", imported)
+	}
 	return store
 }
 
-func loadFixture(t *testing.T, store *Store, path string) {
+func buildLegacy(t *testing.T) string {
 	t.Helper()
-	raw, err := os.ReadFile(path)
+	path := filepath.Join(t.TempDir(), "heimdall.db")
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		t.Fatalf("testdata %s: %v", path, err)
+		t.Fatalf("no pude abrir el SQLite: %v", err)
+	}
+	if _, err := db.Exec(legacySchema); err != nil {
+		t.Fatalf("no pude armar el esquema viejo: %v", err)
+	}
+	raw, err := os.ReadFile("testdata/rust-store.sql")
+	if err != nil {
+		t.Fatalf("testdata: %v", err)
 	}
 	inserts := 0
 	for _, line := range strings.Split(string(raw), "\n") {
@@ -32,16 +103,20 @@ func loadFixture(t *testing.T, store *Store, path string) {
 			continue
 		}
 		if !strings.HasPrefix(line, "INSERT INTO ") {
-			t.Fatalf("testdata %s: línea que no es un INSERT: %q", path, line)
+			t.Fatalf("testdata: línea que no es un INSERT: %q", line)
 		}
-		if _, err := store.db.Exec(line); err != nil {
-			t.Fatalf("testdata %s: %v", path, err)
+		if _, err := db.Exec(line); err != nil {
+			t.Fatalf("testdata: %v", err)
 		}
 		inserts++
 	}
 	if inserts == 0 {
-		t.Fatalf("testdata %s: no trae ningún INSERT", path)
+		t.Fatal("testdata: no trae ningún INSERT")
 	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("no pude cerrar el SQLite: %v", err)
+	}
+	return path
 }
 
 func TestParidadDelStoreConRust(t *testing.T) {
@@ -67,7 +142,7 @@ func TestParidadDelStoreConRust(t *testing.T) {
 			{"borrado", "dev", map[string]string{}},
 		}
 		for _, caso := range casos {
-			got, err := store.Secrets(caso.project, caso.env)
+			got, err := store.Secrets(t.Context(), caso.project, caso.env)
 			if err != nil {
 				t.Fatalf("%s/%s: %v", caso.project, caso.env, err)
 			}
@@ -78,14 +153,14 @@ func TestParidadDelStoreConRust(t *testing.T) {
 	})
 
 	t.Run("un entorno renombrado se vuelve a sellar", func(t *testing.T) {
-		got, err := store.Secrets("viejo", "dev")
+		got, err := store.Secrets(t.Context(), "viejo", "dev")
 		if err != nil {
 			t.Fatalf("secrets: %v", err)
 		}
 		if got["CLAVE"] != "se-mueve" {
 			t.Fatalf("el valor renombrado quedó en %q", got["CLAVE"])
 		}
-		old, err := store.Secrets("viejo", "qa")
+		old, err := store.Secrets(t.Context(), "viejo", "qa")
 		if err != nil {
 			t.Fatalf("secrets: %v", err)
 		}
@@ -97,37 +172,36 @@ func TestParidadDelStoreConRust(t *testing.T) {
 	t.Run("los tokens", func(t *testing.T) {
 		dump := readTestdata(t, "testdata/paridad-store.txt")
 		casos := []struct {
-			name, project, env string
-			keys               []string
-			admin              bool
+			name, project, env, role string
+			keys                     []string
 		}{
-			{"agente", "bifrost", "dev", []string{"STRIPE_KEY"}, false},
-			{"runner", "*", "dev", nil, false},
-			{"viejo", "bifrost", "prod", nil, false},
-			{"con_ttl", "axe", "dev", nil, false},
-			{"jimmy", "", "", nil, true},
+			{"agente", "bifrost", "dev", RoleAgent, []string{"STRIPE_KEY"}},
+			{"runner", "*", "dev", RoleAgent, nil},
+			{"viejo", "bifrost", "prod", RoleAgent, nil},
+			{"con_ttl", "axe", "dev", RoleAgent, nil},
+			{"jimmy", "", "", RoleAdmin, nil},
 		}
 		for _, caso := range casos {
-			token, err := store.Find(dump["token_"+caso.name])
+			token, err := store.Find(t.Context(), dump["token_"+caso.name])
 			if err != nil {
 				t.Fatalf("%s: %v", caso.name, err)
 			}
 			if token == nil {
 				t.Fatalf("%s: no lo encontró", caso.name)
 			}
-			if token.Name != caso.name || token.Project != caso.project || token.Env != caso.env || token.Admin != caso.admin {
-				t.Errorf("%s: quedó %s %s/%s admin=%v", caso.name, token.Name, token.Project, token.Env, token.Admin)
+			if token.Name != caso.name || token.Project != caso.project || token.Env != caso.env || token.Role != caso.role {
+				t.Errorf("%s: quedó %s %s/%s rol=%s", caso.name, token.Name, token.Project, token.Env, token.Role)
 			}
 			if !reflect.DeepEqual(token.Keys, caso.keys) {
 				t.Errorf("%s: claves %v", caso.name, token.Keys)
 			}
 		}
-		if _, err := store.Find(dump["token_vencido"]); err == nil {
+		if _, err := store.Find(t.Context(), dump["token_vencido"]); err == nil {
 			t.Fatal("el token vencido entró")
 		} else if kind(err) != ErrBad {
 			t.Fatalf("el token vencido dio %v", err)
 		}
-		tokens, err := store.Tokens()
+		tokens, err := store.Tokens(t.Context())
 		if err != nil {
 			t.Fatalf("tokens: %v", err)
 		}
@@ -138,14 +212,14 @@ func TestParidadDelStoreConRust(t *testing.T) {
 			if token.Name != "con_ttl" {
 				continue
 			}
-			if token.ExpiresAt == nil || *token.ExpiresAt-token.CreatedAt != 3600 {
+			if token.ExpiresAt == nil || *token.ExpiresAt-token.CreatedAt != siglo {
 				t.Fatalf("el ttl quedó en %v", token.ExpiresAt)
 			}
 		}
 	})
 
 	t.Run("el audit", func(t *testing.T) {
-		log, err := store.AuditLog(500)
+		log, err := store.AuditLog(t.Context(), 500)
 		if err != nil {
 			t.Fatalf("audit: %v", err)
 		}
@@ -181,43 +255,34 @@ func TestParidadDelStoreConRust(t *testing.T) {
 		}
 	})
 
-	t.Run("los links y las sesiones", func(t *testing.T) {
-		dump := readTestdata(t, "testdata/paridad-store.txt")
-		email, err := store.ConsumeLogin(dump["login_vivo"])
-		if err != nil {
-			t.Fatalf("login vivo: %v", err)
-		}
-		if email != "berti@ejemplo.com" {
-			t.Fatalf("el link dio %q", email)
-		}
-		if _, err := store.ConsumeLogin(dump["login_vencido"]); err == nil {
-			t.Fatal("el link vencido sirvió")
-		}
-		got, ok, err := store.Session(dump["session_viva"])
-		if err != nil {
-			t.Fatalf("sesión viva: %v", err)
-		}
-		if !ok || got != "berti@ejemplo.com" {
-			t.Fatalf("la sesión dio %q %v", got, ok)
-		}
-		if _, ok, err := store.Session(dump["session_vencida"]); err != nil || ok {
-			t.Fatalf("la sesión vencida entró: %v %v", ok, err)
-		}
-		asked, err := store.AskedRecently("berti@ejemplo.com", 100*365*24*60*60)
-		if err != nil {
-			t.Fatalf("asked: %v", err)
-		}
-		if !asked {
-			t.Fatal("no vio los links que ya estaban")
-		}
-		asked, err = store.AskedRecently("otro@ejemplo.com", 100*365*24*60*60)
-		if err != nil {
-			t.Fatalf("asked: %v", err)
-		}
-		if asked {
-			t.Fatal("le pegó el cooldown de otra dirección")
-		}
-	})
+}
+
+func TestElImportadorNoSeLlevaLosLinks(t *testing.T) {
+	store := testStore(t)
+	dump := readTestdata(t, "testdata/paridad-store.txt")
+	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	stored := storedText(t, store, "SELECT hash FROM heimdall.logins UNION ALL SELECT hash FROM heimdall.sessions")
+	if stored != "" {
+		t.Fatalf("se llevó %q", stored)
+	}
+	if _, err := store.ConsumeLogin(t.Context(), dump["login_vivo"]); err == nil {
+		t.Fatal("el link del Rust sirvió igual")
+	}
+	if _, ok, err := store.Session(t.Context(), dump["session_viva"]); err != nil || ok {
+		t.Fatalf("la sesión del Rust sirvió igual: %v %v", ok, err)
+	}
+}
+
+func TestElImportadorNoSePisaDosVeces(t *testing.T) {
+	store := testStore(t)
+	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store); err == nil {
+		t.Fatal("importó dos veces lo mismo sin quejarse")
+	}
 }
 
 func kind(err error) ErrorKind {

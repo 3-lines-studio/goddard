@@ -7,7 +7,7 @@ import (
 
 func mint(t *testing.T, store *Store, new NewToken) (Token, string) {
 	t.Helper()
-	token, plain, err := store.CreateToken(new, "berti")
+	token, plain, err := store.CreateToken(t.Context(), new, "berti")
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -16,7 +16,7 @@ func mint(t *testing.T, store *Store, new NewToken) (Token, string) {
 
 func refusalOf(t *testing.T, plain string, store *Store) Actor {
 	t.Helper()
-	actor, refusal := Authenticate(store, "", plain, "hd_admin")
+	actor, refusal := Authenticate(t.Context(), store, "", plain, "hd_admin")
 	if refusal != nil {
 		t.Fatalf("no autenticó: %d %s", refusal.Status, refusal.Message)
 	}
@@ -24,7 +24,7 @@ func refusalOf(t *testing.T, plain string, store *Store) Actor {
 }
 
 func TestARequestWithoutATokenIsRejected(t *testing.T) {
-	_, refusal := Authenticate(testStore(t), "", "", "hd_admin")
+	_, refusal := Authenticate(t.Context(), testStore(t), "", "", "hd_admin")
 	if refusal == nil {
 		t.Fatal("entró sin token")
 	}
@@ -35,7 +35,7 @@ func TestARequestWithoutATokenIsRejected(t *testing.T) {
 
 func TestTheAdminWritesAndATokenReads(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set("bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev"})
@@ -46,7 +46,7 @@ func TestTheAdminWritesAndATokenReads(t *testing.T) {
 	if refusal := actor.ScopedRequest("bifrost", "dev"); refusal != nil {
 		t.Fatalf("no llegó: %d %s", refusal.Status, refusal.Message)
 	}
-	secrets, err := store.Secrets("bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestTheAdminWritesAndATokenReads(t *testing.T) {
 		t.Fatalf("vio %v", visible)
 	}
 
-	admin, refusal := Authenticate(store, "", "hd_admin", "hd_admin")
+	admin, refusal := Authenticate(t.Context(), store, "", "hd_admin", "hd_admin")
 	if refusal != nil {
 		t.Fatalf("no entró el admin: %d %s", refusal.Status, refusal.Message)
 	}
@@ -82,15 +82,15 @@ func TestATokenDoesNotReachAnotherEnvironment(t *testing.T) {
 
 func TestATokenWithKeysOnlySeesThose(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set("bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.Set("bifrost", "dev", "B", "2", "berti"); err != nil {
+	if err := store.Set(t.Context(), "bifrost", "dev", "B", "2", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev", Keys: []string{"A"}})
 	actor := refusalOf(t, plain, store)
-	secrets, err := store.Secrets("bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -115,12 +115,12 @@ func TestATokenWithKeysOnlySeesThose(t *testing.T) {
 
 func TestATokenWithoutKeysSeesTheWholeEnvironment(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set("bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev"})
 	actor := refusalOf(t, plain, store)
-	secrets, err := store.Secrets("bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestATokenCannotWriteOrAdministrate(t *testing.T) {
 
 func TestAnAdminTokenAdministrates(t *testing.T) {
 	store := testStore(t)
-	_, plain := mint(t, store, NewToken{Name: "jimmy", Admin: true})
+	_, plain := mint(t, store, NewToken{Name: "jimmy", Role: RoleAdmin})
 	actor := refusalOf(t, plain, store)
 	if !actor.Admin || actor.Name != "jimmy" || actor.Token != nil {
 		t.Fatalf("quedó %v", actor)
@@ -164,7 +164,7 @@ func TestAnExpiredTokenIsA401(t *testing.T) {
 	store := testStore(t)
 	expired := int64(-1)
 	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev", TTL: &expired})
-	_, refusal := Authenticate(store, "", plain, "hd_admin")
+	_, refusal := Authenticate(t.Context(), store, "", plain, "hd_admin")
 	if refusal == nil {
 		t.Fatal("el token vencido entró")
 	}
@@ -174,7 +174,7 @@ func TestAnExpiredTokenIsA401(t *testing.T) {
 }
 
 func TestABadTokenIsA401(t *testing.T) {
-	_, refusal := Authenticate(testStore(t), "", "hd_nada", "hd_admin")
+	_, refusal := Authenticate(t.Context(), testStore(t), "", "hd_nada", "hd_admin")
 	if refusal == nil {
 		t.Fatal("entró con un token inventado")
 	}
@@ -185,26 +185,26 @@ func TestABadTokenIsA401(t *testing.T) {
 
 func TestTheSessionCookieEnters(t *testing.T) {
 	store := testStore(t)
-	cookie, err := store.CreateSession("berti@ejemplo.com", 900)
+	cookie, err := store.CreateSession(t.Context(), "berti@ejemplo.com", 900)
 	if err != nil {
 		t.Fatalf("session: %v", err)
 	}
-	actor, refusal := Authenticate(store, cookie, "", "hd_admin")
+	actor, refusal := Authenticate(t.Context(), store, cookie, "", "hd_admin")
 	if refusal != nil {
 		t.Fatalf("no entró: %d %s", refusal.Status, refusal.Message)
 	}
 	if !actor.Admin || actor.Name != "berti@ejemplo.com" {
 		t.Fatalf("quedó %v", actor)
 	}
-	admin, refusal := Authenticate(store, "cookie-que-no-existe", "hd_admin", "hd_admin")
+	admin, refusal := Authenticate(t.Context(), store, "cookie-que-no-existe", "hd_admin", "hd_admin")
 	if refusal != nil || !admin.Admin {
 		t.Fatalf("una cookie que no existe no dejó pasar al token: %v", refusal)
 	}
-	expired, err := store.CreateSession("berti@ejemplo.com", -1)
+	expired, err := store.CreateSession(t.Context(), "berti@ejemplo.com", -1)
 	if err != nil {
 		t.Fatalf("session: %v", err)
 	}
-	if _, refusal := Authenticate(store, expired, "", "hd_admin"); refusal == nil {
+	if _, refusal := Authenticate(t.Context(), store, expired, "", "hd_admin"); refusal == nil {
 		t.Fatal("una sesión vencida entró")
 	}
 }
@@ -213,7 +213,7 @@ func TestAUsedTokenIsMarkedAsUsed(t *testing.T) {
 	store := testStore(t)
 	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev"})
 	refusalOf(t, plain, store)
-	tokens, err := store.Tokens()
+	tokens, err := store.Tokens(t.Context())
 	if err != nil {
 		t.Fatalf("tokens: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestAWildcardInTheEnvironmentStaysInsideItsProject(t *testing.T) {
 }
 
 func TestScopedRequestRejectsAnEmptyScope(t *testing.T) {
-	actor, refusal := Authenticate(testStore(t), "", "hd_admin", "hd_admin")
+	actor, refusal := Authenticate(t.Context(), testStore(t), "", "hd_admin", "hd_admin")
 	if refusal != nil {
 		t.Fatalf("no entró el admin: %s", refusal.Message)
 	}

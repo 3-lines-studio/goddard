@@ -12,6 +12,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+const testLock = 0x676f6464544553
+
+// testDB deja la base limpia. El candado es para que los paquetes que corren en
+// paralelo no se pisen el schema.
 func testDB(t *testing.T) *sql.DB {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
@@ -26,6 +30,17 @@ func testDB(t *testing.T) *sql.DB {
 		t.Fatalf("no pude hablar con %s: %v", url, err)
 	}
 	t.Cleanup(func() { db.Close() })
+	lock, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("no pude reservar una conexión: %v", err)
+	}
+	t.Cleanup(func() {
+		lock.ExecContext(context.WithoutCancel(context.Background()), "SELECT pg_advisory_unlock($1)", testLock)
+		lock.Close()
+	})
+	if _, err := lock.ExecContext(context.Background(), "SELECT pg_advisory_lock($1)", testLock); err != nil {
+		t.Fatalf("no pude tomar el candado: %v", err)
+	}
 	reset(t, db)
 	return db
 }

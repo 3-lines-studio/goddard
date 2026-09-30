@@ -472,11 +472,9 @@ func tokenList() error {
 
 func describe(entry map[string]any) string {
 	name := text(entry["name"])
-	scope := ""
-	if entry["admin"] == true {
+	scope := text(entry["project"]) + "/" + text(entry["env"])
+	if text(entry["role"]) == RoleAdmin || entry["admin"] == true {
 		scope = "admin"
-	} else {
-		scope = text(entry["project"]) + "/" + text(entry["env"])
 	}
 	keys := []string{}
 	for _, key := range array(entry["keys"]) {

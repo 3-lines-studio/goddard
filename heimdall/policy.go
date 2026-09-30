@@ -1,6 +1,7 @@
 package heimdall
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -43,9 +44,9 @@ func Internal(cause error) *StatusError {
 // Authenticate takes the session cookie, the bearer token and the service's own
 // admin token. The cookie and the bearer are already split out by whoever
 // parsed the request: this does not know about HTTP.
-func Authenticate(store *Store, cookie, bearer, adminToken string) (Actor, *StatusError) {
+func Authenticate(ctx context.Context, store *Store, cookie, bearer, adminToken string) (Actor, *StatusError) {
 	if cookie != "" {
-		email, found, err := store.Session(cookie)
+		email, found, err := store.Session(ctx, cookie)
 		if err != nil {
 			return Actor{}, Internal(err)
 		}
@@ -59,7 +60,7 @@ func Authenticate(store *Store, cookie, bearer, adminToken string) (Actor, *Stat
 	if Equal(bearer, adminToken) {
 		return Actor{Admin: true, Name: "admin"}, nil
 	}
-	token, err := store.Find(bearer)
+	token, err := store.Find(ctx, bearer)
 	if err != nil {
 		var typed *Error
 		if errors.As(err, &typed) && typed.Kind == ErrBad {
@@ -70,8 +71,8 @@ func Authenticate(store *Store, cookie, bearer, adminToken string) (Actor, *Stat
 	if token == nil {
 		return Actor{}, unauthorized("ese token no sirve")
 	}
-	store.Touch(token.ID)
-	if token.Admin {
+	store.Touch(ctx, token.ID)
+	if token.Role == RoleAdmin {
 		return Actor{Admin: true, Name: token.Name}, nil
 	}
 	return Actor{Name: token.Name, Token: token}, nil
