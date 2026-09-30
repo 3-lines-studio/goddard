@@ -40,7 +40,9 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
   viewer sees the system's skills, its organization's and its own, and the
   closest owner wins when the name repeats: that is jimmy's
   local-shadows-builtin, through ownership instead of directory order. The
-  system's are read only and nobody installs them through this package.
+  system's are read only and nobody installs them through this package. It is
+  the tool the harness gives the agent, with the store and the viewer already
+  in: `list` renders what that viewer can see and `load` reads one.
 
 Five dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
 article extraction is the one layer of `axe` that is not byte-for-byte with the
@@ -91,6 +93,17 @@ The scope is whatever the embedder says a conversation set is — a chat, a
 project, a user — and two services over the same database and scope see the
 same history. There is no store on files: the port of the Rust `FsStore` is
 gone, because a cloud axe has no volume to mount.
+
+## Migrate
+
+The schema is not applied by the binary the agent travels in: it is
+`cmd/migrate`, for whoever operates the service. The external one does not
+carry it, so asking for a skill cannot change the database.
+
+```
+migrate            aplica lo que falte
+migrate status     qué corrió y qué no
+```
 
 ## Check
 
