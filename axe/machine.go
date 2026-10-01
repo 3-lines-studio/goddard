@@ -2,6 +2,7 @@ package axe
 
 import (
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -15,6 +16,7 @@ type MachineEntry struct {
 type Machine interface {
 	Read(path string) ([]byte, error)
 	Write(path string, bytes []byte) error
+	Stat(path string) (MachineEntry, error)
 	List(path string) ([]MachineEntry, error)
 	Remove(path string) error
 	Run(command string, timeout uint64, progress Progress) string
@@ -41,6 +43,18 @@ func (l *Local) Read(path string) ([]byte, error) {
 
 func (l *Local) Write(path string, bytes []byte) error {
 	return AtomicWrite(Resolve(l.dir, path), bytes)
+}
+
+func (l *Local) Stat(path string) (MachineEntry, error) {
+	info, err := os.Stat(Resolve(l.dir, path))
+	if err != nil {
+		return MachineEntry{}, err
+	}
+	return MachineEntry{
+		Name:  filepath.Base(path),
+		IsDir: info.IsDir(),
+		Size:  uint64(info.Size()),
+	}, nil
 }
 
 func (l *Local) List(path string) ([]MachineEntry, error) {

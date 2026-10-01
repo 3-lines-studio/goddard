@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/3-lines-studio/goddard/axe"
@@ -51,22 +49,21 @@ func (s *Service) send(ctx context.Context, conversationID string, in sendArgs) 
 	if strings.TrimSpace(in.Path) == "" {
 		return "", errors.New("decime qué archivo mandar")
 	}
-	path := axe.Resolve(s.Workspace, in.Path)
-	info, err := os.Stat(path)
+	info, err := s.Machine.Stat(in.Path)
 	if err != nil {
 		return "", err
 	}
-	if info.IsDir() {
+	if info.IsDir {
 		return "", fmt.Errorf("%s es una carpeta y no un archivo", in.Path)
 	}
-	if info.Size() > MaxSend {
-		return "", fmt.Errorf("%s pesa %d bytes y el tope es %d", in.Path, info.Size(), MaxSend)
+	if info.Size > MaxSend {
+		return "", fmt.Errorf("%s pesa %d bytes y el tope es %d", in.Path, info.Size, MaxSend)
 	}
-	bytes, err := os.ReadFile(path)
+	bytes, err := s.Machine.Read(in.Path)
 	if err != nil {
 		return "", err
 	}
-	name := filepath.Base(path)
+	name := info.Name
 	mime := http.DetectContentType(bytes)
 	upload, err := s.Chat.PutUpload(ctx, conversationID, name, mime, bytes)
 	if err != nil {

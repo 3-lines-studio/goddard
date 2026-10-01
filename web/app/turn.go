@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"log"
 	"math"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -104,11 +103,7 @@ func (s *Service) attach(ctx context.Context, conversation chat.Conversation, up
 		}
 		name := filepath.Base(upload.Name)
 		path := filepath.Join("files", conversation.ID, name)
-		absolute := filepath.Join(s.Workspace, path)
-		if err := os.MkdirAll(filepath.Dir(absolute), 0o755); err != nil {
-			return nil, err
-		}
-		if err := os.WriteFile(absolute, upload.Bytes, 0o644); err != nil {
+		if err := s.Machine.Write(path, upload.Bytes); err != nil {
 			return nil, err
 		}
 		if _, err := s.write(ctx, conversation.ID, map[string]any{
@@ -219,7 +214,7 @@ func (s *Service) write(ctx context.Context, conversationID string, event map[st
 // skills and the agenda of the project this conversation belongs to, and the
 // way to show a file in this thread.
 func (s *Service) tools(project, conversationID string) []axe.Tool {
-	tools := axe.BuildToolsOn(axe.NewLocal(s.Workspace))
+	tools := axe.BuildToolsOn(s.Machine)
 	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer), schedule.Tool(s.Schedule, s.Viewer.User, project), s.sendTool(conversationID))
 	return tools
 }

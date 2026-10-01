@@ -35,6 +35,7 @@ type Service struct {
 	Allowed   []string
 	Model     string
 	Workspace string
+	Machine   axe.Machine
 	Viewer    skill.Viewer
 	User      string
 	Assistant string
