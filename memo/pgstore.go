@@ -135,6 +135,15 @@ func (s *PgStore) List(ctx context.Context) (string, error) {
 	return List(facts), nil
 }
 
+// Facts is the memory of a project as data: the general facts and the ones of
+// that project, in order and with their date. It is what the prompt renders
+// and what a page can show.
+func (s *PgStore) Facts(ctx context.Context, project string) ([]Fact, error) {
+	return s.query(ctx,
+		`SELECT `+factColumns+` FROM memo.facts WHERE project = '' OR project = $1 ORDER BY project, key`,
+		project)
+}
+
 // Render is the memory the prompt gets for that project: the general facts and
 // the newest of the project.
 func (s *PgStore) Render(ctx context.Context, project string) (string, error) {
