@@ -38,7 +38,7 @@ func testDB(t *testing.T) *sql.DB {
 	if _, err := lock.ExecContext(t.Context(), "SELECT pg_advisory_lock($1)", testLock); err != nil {
 		t.Fatalf("no pude tomar el candado: %v", err)
 	}
-	if _, err := db.ExecContext(t.Context(), "DROP SCHEMA IF EXISTS goddard, auth, chat, heimdall, axe, skill, memo, schedule CASCADE; DROP TABLE IF EXISTS public.schema_migrations"); err != nil {
+	if _, err := db.ExecContext(t.Context(), "DROP SCHEMA IF EXISTS goddard, auth, chat, heimdall, axe, skill, memo, schedule, org CASCADE; DROP TABLE IF EXISTS public.schema_migrations"); err != nil {
 		t.Fatalf("no pude limpiar: %v", err)
 	}
 	if _, err := migrations.Apply(t.Context(), db); err != nil {
@@ -59,22 +59,6 @@ func project(t *testing.T, store *Store, name string) Project {
 		t.Fatalf("project: %v", err)
 	}
 	return found
-}
-
-func TestASlugIsWhatTheDirectoryAndTheOtherTablesHold(t *testing.T) {
-	cases := map[string]string{
-		"Goddard":              "goddard",
-		"La web de Jimmy":      "la-web-de-jimmy",
-		"Ñandú y café":         "nandu-y-cafe",
-		"don't":                "dont",
-		"  muchas   vueltas  ": "muchas-vueltas",
-		"picsel-lab/2026":      "picsel-lab-2026",
-	}
-	for name, want := range cases {
-		if got := Slug(name); got != want {
-			t.Fatalf("%q dio %q, esperaba %q", name, got, want)
-		}
-	}
 }
 
 func TestAProjectKeepsItsNameAndTakesASlug(t *testing.T) {

@@ -49,7 +49,7 @@ func testDB(t *testing.T) *sql.DB {
 
 func reset(t *testing.T, db *sql.DB) {
 	t.Helper()
-	_, err := db.Exec("DROP SCHEMA IF EXISTS goddard, auth, chat, heimdall, axe, skill, memo, schedule CASCADE; DROP TABLE IF EXISTS public.schema_migrations")
+	_, err := db.Exec("DROP SCHEMA IF EXISTS goddard, auth, chat, heimdall, axe, skill, memo, schedule, org CASCADE; DROP TABLE IF EXISTS public.schema_migrations")
 	if err != nil {
 		t.Fatalf("no pude limpiar: %v", err)
 	}

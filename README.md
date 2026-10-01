@@ -28,6 +28,18 @@ below.
   not heimdall's: the vault keeps the tokens of the machines that ask it for
   secrets, and this keeps the people. A link and a session are stored as their
   hash and nothing else, and an expired one is dropped, not marked.
+- `org` — the organizations: who is in one and what they can do, in the `org`
+  schema of the same Postgres. An organization owns projects, has a workspace
+  of its own and shares its memory with its members, so being in one is how
+  several people work on the same thing. Every organization has at least one
+  owner, and the roles are three: an owner does everything and decides who else
+  gets in, an admin brings people in and takes them out, and a member works
+  inside. Somebody comes in by the email they already signed in with, so there
+  is no invitation to accept yet.
+- `naming` — the slug: a name turned into what a directory and the tables can
+  hold, lowercase, without accents and with single dashes. The projects and the
+  organizations share it, because both of them name a directory of the
+  workspace.
 - `chat` — the projects and the conversations, in the `chat` schema of the
   same Postgres. A project is a place where work lives and its slug is the
   string the rest of goddard already keeps in its own tables: memo, schedule

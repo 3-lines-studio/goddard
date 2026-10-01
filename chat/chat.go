@@ -5,8 +5,6 @@ package chat
 
 import (
 	"errors"
-	"strings"
-	"unicode"
 )
 
 // ErrTaken is a project whose slug is already somebody else's.
@@ -47,45 +45,3 @@ const (
 // NewTitle is what a conversation that just started is called until the first
 // message names it, the same words jimmy used.
 const NewTitle = "nueva conversación"
-
-// Slug turns a name into what a directory and the other tables can hold:
-// lowercase, no accents, no punctuation, words joined by single dashes.
-func Slug(name string) string {
-	var builder strings.Builder
-	dashed := false
-	for _, r := range name {
-		switch {
-		case r == '\'' || r == '’':
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			if dashed && builder.Len() > 0 {
-				builder.WriteByte('-')
-			}
-			dashed = false
-			builder.WriteRune(plain(r))
-		default:
-			dashed = true
-		}
-	}
-	return builder.String()
-}
-
-func plain(r rune) rune {
-	r = unicode.ToLower(r)
-	switch r {
-	case 'á', 'à', 'ä', 'â', 'ã', 'å':
-		return 'a'
-	case 'é', 'è', 'ë', 'ê':
-		return 'e'
-	case 'í', 'ì', 'ï', 'î':
-		return 'i'
-	case 'ó', 'ò', 'ö', 'ô', 'õ':
-		return 'o'
-	case 'ú', 'ù', 'ü', 'û':
-		return 'u'
-	case 'ñ':
-		return 'n'
-	case 'ç':
-		return 'c'
-	}
-	return r
-}

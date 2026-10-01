@@ -6,6 +6,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/3-lines-studio/goddard/naming"
 )
 
 // Store is the projects and the conversations, in the chat schema of the same
@@ -58,7 +60,7 @@ func (s *Store) Project(ctx context.Context, id string) (Project, bool, error) {
 // directory of the workspace and the other tables use, so it is taken once and
 // renaming the project later does not move it.
 func (s *Store) CreateProject(ctx context.Context, name, createdBy string) (Project, error) {
-	slug := Slug(name)
+	slug := naming.From(name)
 	if slug == "" {
 		return Project{}, errors.New("ese proyecto no tiene nombre")
 	}
