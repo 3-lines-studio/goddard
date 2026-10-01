@@ -257,24 +257,6 @@ func TestParidadDelStoreConRust(t *testing.T) {
 
 }
 
-func TestElImportadorNoSeLlevaLosLinks(t *testing.T) {
-	store := testStore(t)
-	dump := readTestdata(t, "testdata/paridad-store.txt")
-	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store); err != nil {
-		t.Fatalf("import: %v", err)
-	}
-	stored := storedText(t, store, "SELECT hash FROM heimdall.logins UNION ALL SELECT hash FROM heimdall.sessions")
-	if stored != "" {
-		t.Fatalf("se llevó %q", stored)
-	}
-	if _, err := store.ConsumeLogin(t.Context(), dump["login_vivo"]); err == nil {
-		t.Fatal("el link del Rust sirvió igual")
-	}
-	if _, ok, err := store.Session(t.Context(), dump["session_viva"]); err != nil || ok {
-		t.Fatalf("la sesión del Rust sirvió igual: %v %v", ok, err)
-	}
-}
-
 func TestElImportadorNoSePisaDosVeces(t *testing.T) {
 	store := testStore(t)
 	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store); err != nil {

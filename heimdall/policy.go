@@ -41,18 +41,13 @@ func Internal(cause error) *StatusError {
 	return &StatusError{Status: 500, Message: "algo se rompió acá adentro", Cause: cause}
 }
 
-// Authenticate takes the session cookie, the bearer token and heimdall's own
-// admin token. The cookie and the bearer are already split out by whoever
-// parsed the request: this does not know about HTTP.
-func Authenticate(ctx context.Context, store *Store, cookie, bearer, adminToken string) (Actor, *StatusError) {
-	if cookie != "" {
-		email, found, err := store.Session(ctx, cookie)
-		if err != nil {
-			return Actor{}, Internal(err)
-		}
-		if found {
-			return Actor{Admin: true, Name: email}, nil
-		}
+// Authenticate takes who the user says they are — already resolved from the
+// session cookie by whoever reads it — the bearer token and heimdall's own
+// admin token. The cookie is not heimdall's business anymore, and neither is
+// HTTP: the caller splits its request and passes the name.
+func Authenticate(ctx context.Context, store *Store, user, bearer, adminToken string) (Actor, *StatusError) {
+	if user != "" {
+		return Actor{Admin: true, Name: user}, nil
 	}
 	if bearer == "" {
 		return Actor{}, unauthorized("falta el token")

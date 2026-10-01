@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -505,91 +504,6 @@ func (s *Store) AuditLog(ctx context.Context, limit int) ([]AuditRow, error) {
 		log = append(log, row)
 	}
 	return log, rows.Err()
-}
-
-func (s *Store) CreateLogin(ctx context.Context, email string, ttl int64) (string, error) {
-	plain, err := RandomHex(24)
-	if err != nil {
-		return "", internal(err.Error())
-	}
-	if _, err := s.db.ExecContext(ctx,
-		"INSERT INTO heimdall.logins (hash, email, created_at, expires_at) VALUES ($1, $2, $3, $4)",
-		Hash(plain), email, now(), now()+ttl,
-	); err != nil {
-		return "", internal(err.Error())
-	}
-	return plain, nil
-}
-
-func (s *Store) ConsumeLogin(ctx context.Context, plain string) (string, error) {
-	hash := Hash(plain)
-	var email string
-	err := s.db.QueryRowContext(ctx,
-		"SELECT email FROM heimdall.logins WHERE hash = $1 AND expires_at > $2", hash, now()).Scan(&email)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", bad("ese link ya no sirve")
-	}
-	if err != nil {
-		return "", internal(err.Error())
-	}
-	if _, err := s.db.ExecContext(ctx, "DELETE FROM heimdall.logins WHERE hash = $1", hash); err != nil {
-		return "", internal(err.Error())
-	}
-	return email, nil
-}
-
-func (s *Store) AskedRecently(ctx context.Context, email string, within int64) (bool, error) {
-	var last *int64
-	if err := s.db.QueryRowContext(ctx,
-		"SELECT MAX(created_at) FROM heimdall.logins WHERE email = $1", email).Scan(&last); err != nil {
-		return false, internal(err.Error())
-	}
-	return last != nil && now()-*last < within, nil
-}
-
-func (s *Store) CreateSession(ctx context.Context, email string, ttl int64) (string, error) {
-	plain, err := RandomHex(24)
-	if err != nil {
-		return "", internal(err.Error())
-	}
-	if _, err := s.db.ExecContext(ctx,
-		"INSERT INTO heimdall.sessions (hash, email, created_at, expires_at) VALUES ($1, $2, $3, $4)",
-		Hash(plain), email, now(), now()+ttl,
-	); err != nil {
-		return "", internal(err.Error())
-	}
-	return plain, nil
-}
-
-func (s *Store) Session(ctx context.Context, plain string) (string, bool, error) {
-	var email string
-	err := s.db.QueryRowContext(ctx,
-		"SELECT email FROM heimdall.sessions WHERE hash = $1 AND expires_at > $2", Hash(plain), now()).Scan(&email)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, internal(err.Error())
-	}
-	return email, true, nil
-}
-
-func (s *Store) DropSession(ctx context.Context, plain string) error {
-	if _, err := s.db.ExecContext(ctx, "DELETE FROM heimdall.sessions WHERE hash = $1", Hash(plain)); err != nil {
-		return internal(err.Error())
-	}
-	return nil
-}
-
-func (s *Store) Sweep(ctx context.Context) error {
-	at := now()
-	if _, err := s.db.ExecContext(ctx, "DELETE FROM heimdall.logins WHERE expires_at <= $1", at); err != nil {
-		return internal(err.Error())
-	}
-	if _, err := s.db.ExecContext(ctx, "DELETE FROM heimdall.sessions WHERE expires_at <= $1", at); err != nil {
-		return internal(err.Error())
-	}
-	return nil
 }
 
 func (s *Store) namesOf(ctx context.Context, db querier) ([]string, error) {
