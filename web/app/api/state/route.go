@@ -20,7 +20,17 @@ type projectView struct {
 	ID            string             `json:"id"`
 	Slug          string             `json:"slug"`
 	Name          string             `json:"name"`
+	Owner         chat.Owner         `json:"owner"`
 	Conversations []conversationView `json:"conversations"`
+}
+
+// orgView is an organization of the rail, with what the person asking can do
+// in it: it is what decides whether they see the members and the roster.
+type orgView struct {
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+	Role string `json:"role"`
 }
 
 func Get(w http.ResponseWriter, r *http.Request) {
@@ -33,12 +43,23 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	orgs, err := service.OrgsOf(r.Context(), user.ID)
+	orgs, err := service.Orgs.Orgs(r.Context(), user.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	projects, err := service.Chat.Projects(r.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, orgs)
+	ids := make([]string, 0, len(orgs))
+	orgViews := make([]orgView, 0, len(orgs))
+	for _, one := range orgs {
+		role, _, err := service.Orgs.Role(r.Context(), one.ID, user.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		ids = append(ids, one.ID)
+		orgViews = append(orgViews, orgView{ID: one.ID, Slug: one.Slug, Name: one.Name, Role: role})
+	}
+	projects, err := service.Chat.Projects(r.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, ids)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -50,7 +71,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		view := projectView{ID: project.ID, Slug: project.Slug, Name: project.Name, Conversations: []conversationView{}}
+		view := projectView{ID: project.ID, Slug: project.Slug, Name: project.Name, Owner: project.Owner, Conversations: []conversationView{}}
 		for _, conversation := range conversations {
 			if conversation.Source == chat.SourceSchedule {
 				continue
@@ -67,6 +88,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"projects":  views,
+		"orgs":      orgViews,
 		"user":      user.Email,
 		"workspace": service.Workspace,
 		"machine":   machine.Usage(service.Workspace),

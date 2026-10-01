@@ -295,6 +295,35 @@ func TestSomebodyComesBackAndKeepsNeitherTheSeatNorTheRole(t *testing.T) {
 	}
 }
 
+func TestOnlyAnOwnerTakesTheOrgOutAndItLeaves(t *testing.T) {
+	store := testStore(t)
+	berti := somebody(t, store, "berti@ejemplo.com")
+	ana := somebody(t, store, "ana@ejemplo.com")
+	created := anOrg(t, store, "La casa", berti)
+	if err := store.Add(t.Context(), created.ID, "ana@ejemplo.com", RoleAdmin, berti); err != nil {
+		t.Fatalf("no pude meter a ana: %v", err)
+	}
+
+	if err := store.Delete(t.Context(), created.ID, ana); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("un admin la borró: %v", err)
+	}
+	if err := store.Delete(t.Context(), created.ID, berti); err != nil {
+		t.Fatalf("el dueño no pudo borrarla: %v", err)
+	}
+	if _, ok, err := store.Org(t.Context(), created.ID); err != nil || ok {
+		t.Fatalf("la organización siguió ahí (%v, %v)", ok, err)
+	}
+	if orgs, err := store.Orgs(t.Context(), berti); err != nil || len(orgs) != 0 {
+		t.Fatalf("le quedaron %+v (%v)", orgs, err)
+	}
+	if _, ok, err := store.Role(t.Context(), created.ID, ana); err != nil || ok {
+		t.Fatalf("quedó la membresía de ana (%v, %v)", ok, err)
+	}
+	if err := store.Delete(t.Context(), created.ID, berti); !errors.Is(err, ErrNoOrg) {
+		t.Fatalf("borrarla dos veces contestó %v", err)
+	}
+}
+
 func TestNobodyOfAnOrgThatIsNotThereDoesAnything(t *testing.T) {
 	store := testStore(t)
 	berti := somebody(t, store, "berti@ejemplo.com")
