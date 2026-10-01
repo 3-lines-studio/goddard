@@ -26,6 +26,11 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		since = 0
 	}
+	if last := r.Header.Get("Last-Event-ID"); last != "" {
+		if value, err := strconv.ParseInt(last, 10, 64); err == nil && value > since {
+			since = value
+		}
+	}
 	if _, ok, err := service.Chat.Conversation(r.Context(), conversation); err != nil || !ok {
 		http.Error(w, "esa conversación no existe", http.StatusNotFound)
 		return
@@ -46,7 +51,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, event := range events {
-			if _, err := fmt.Fprintf(w, "data: %s\n\n", event.Body); err != nil {
+			if _, err := fmt.Fprintf(w, "id: %d\ndata: %s\n\n", event.Seq, event.Body); err != nil {
 				return
 			}
 			since = event.Seq
