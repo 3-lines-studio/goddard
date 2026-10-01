@@ -27,6 +27,7 @@ type Service struct {
 	Skill     *skill.PgStore
 	Schedule  *schedule.PgStore
 	Provider  axe.Provider
+	Offset    int64
 	Hub       *hub
 	Mail      *mailer
 	Allowed   []string

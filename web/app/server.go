@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +42,8 @@ func Serve(ctx context.Context, handler http.Handler) error {
 		return err
 	}
 	running(built)
+	agenda := schedule.NewService(built.Schedule, built.runTask, built.Offset)
+	go agenda.Serve(ctx, func(err error) { log.Printf("goddard: agenda: %v", err) })
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/health", health(db))
 	mux.Handle("/", handler)
@@ -65,6 +69,16 @@ func Serve(ctx context.Context, handler http.Handler) error {
 		return nil
 	}
 	return err
+}
+
+// offset is how far the local hour of the app is from UTC, in hours: the
+// agenda needs it to know when a task is due.
+func offset() int64 {
+	value, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("GODDARD_TZ_OFFSET")), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return value
 }
 
 func addr() string {
@@ -93,6 +107,7 @@ func build(db *sql.DB) (*Service, error) {
 		Skill:     skill.NewPgStore(db),
 		Schedule:  schedule.NewPgStore(db),
 		Provider:  axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key),
+		Offset:    offset(),
 		Hub:       newHub(),
 		Mail:      newMailer(),
 		Allowed:   emails(os.Getenv("GODDARD_ALLOWED_EMAILS")),
