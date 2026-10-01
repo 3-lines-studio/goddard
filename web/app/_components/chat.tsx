@@ -33,6 +33,7 @@ type Event = {
   event: string;
   text?: string;
   name?: string;
+  mime?: string;
   args?: string;
   id?: string;
   ms?: number;
@@ -56,6 +57,8 @@ export function Chat() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [removingTask, setRemovingTask] = useState("");
   const [running, setRunning] = useState("");
+  const [attachments, setAttachments] = useState<{ id: string; name: string; mime: string }[]>([]);
+  const files = useRef<HTMLInputElement>(null);
   const [needLogin, setNeedLogin] = useState(false);
   const [sent, setSent] = useState("");
   const [link, setLink] = useState("");
@@ -93,6 +96,7 @@ export function Chat() {
     if (!open) return;
     setLines([]);
     setPartial("");
+    setAttachments([]);
     const stream = new EventSource(`/api/stream?conversation=${encodeURIComponent(open)}`);
     stream.onmessage = (message) => {
       const line: Event = JSON.parse(message.data);
@@ -119,7 +123,7 @@ export function Chat() {
     const response = await fetch("/api/turns", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ conversation: open, text }),
+      body: JSON.stringify({ conversation: open, text, uploads: attachments.map((one) => one.id) }),
     });
     setBusy(false);
     if (!response.ok) {
@@ -127,6 +131,24 @@ export function Chat() {
       return;
     }
     setText("");
+    setAttachments([]);
+  }
+
+  async function attach(chosen: FileList | null) {
+    if (!chosen || !open) return;
+    for (const file of Array.from(chosen)) {
+      const body = new FormData();
+      body.append("conversation", open);
+      body.append("file", file);
+      const response = await fetch("/api/uploads", { method: "POST", body });
+      if (!response.ok) {
+        setError(await response.text());
+        return;
+      }
+      const upload = await response.json();
+      setAttachments((current) => [...current, upload]);
+    }
+    if (files.current) files.current.value = "";
   }
 
   async function login(event: React.FormEvent<HTMLFormElement>) {
@@ -494,7 +516,35 @@ export function Chat() {
 
         {agenda ? null : (
         <form onSubmit={send} className="border-t border-neutral-800 p-3">
-          <div className="mx-auto flex max-w-3xl gap-2">
+          <div className="mx-auto flex max-w-3xl flex-col gap-2">
+            {attachments.length > 0 ? (
+              <div className="flex flex-wrap gap-2 text-xs">
+                {attachments.map((one) => (
+                  <span key={one.id} className="flex items-center gap-1 rounded border border-neutral-800 px-2 py-1">
+                    {one.name}
+                    <button
+                      type="button"
+                      data-detach={one.id}
+                      onClick={() => setAttachments((current) => current.filter((other) => other.id !== one.id))}
+                      className="opacity-60 hover:opacity-100"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex gap-2">
+            <input ref={files} type="file" multiple data-files="" className="sr-only" onChange={(event) => void attach(event.target.files)} />
+            <button
+              type="button"
+              data-attach=""
+              onClick={() => files.current?.click()}
+              disabled={!open}
+              className="self-end rounded border border-neutral-700 px-3 py-2 text-sm disabled:opacity-40"
+            >
+              adjuntar
+            </button>
             <textarea
               data-composer=""
               value={text}
@@ -513,11 +563,12 @@ export function Chat() {
             <button
               type="submit"
               data-send=""
-              disabled={!open || busy || !text.trim()}
+              disabled={!open || busy || (!text.trim() && attachments.length === 0)}
               className="self-end rounded border border-neutral-700 px-3 py-2 text-sm disabled:opacity-40"
             >
               Enviar
             </button>
+            </div>
           </div>
         </form>
         )}
@@ -528,6 +579,8 @@ export function Chat() {
 
 function Line({ line, workspace }: { line: Event; workspace: string }) {
   switch (line.event) {
+    case "file":
+      return <File line={line} />;
     case "user":
       return (
         <div className="self-end rounded-lg bg-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap">{line.text}</div>
@@ -545,6 +598,27 @@ function Line({ line, workspace }: { line: Event; workspace: string }) {
     default:
       return null;
   }
+}
+
+function File({ line }: { line: Event }) {
+  const href = `/api/uploads?id=${line.id}`;
+  if ((line.mime ?? "").startsWith("image/")) {
+    return (
+      <a href={href} target="_blank" className="self-start">
+        <img src={href} alt={line.name ?? ""} className="max-h-72 rounded border border-neutral-800" />
+      </a>
+    );
+  }
+  return (
+    <a
+      href={href}
+      target="_blank"
+      data-file={line.id}
+      className="self-start rounded border border-neutral-800 px-3 py-2 text-sm underline"
+    >
+      {line.name}
+    </a>
+  );
 }
 
 function Task({

@@ -9,8 +9,9 @@ import (
 )
 
 type request struct {
-	Conversation string `json:"conversation"`
-	Text         string `json:"text"`
+	Conversation string   `json:"conversation"`
+	Text         string   `json:"text"`
+	Uploads      []string `json:"uploads"`
 }
 
 func Post(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +28,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer el mensaje", http.StatusBadRequest)
 		return
 	}
-	err := service.Say(r.Context(), body.Conversation, body.Text)
+	err := service.Say(r.Context(), body.Conversation, body.Text, body.Uploads)
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusAccepted)

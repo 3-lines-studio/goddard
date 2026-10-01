@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -175,7 +176,7 @@ func TestATurnLeavesTheLogWritten(t *testing.T) {
 		`{"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
 	}))
 	conversation := aThread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "cuánto es 6*7"); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, "cuánto es 6*7", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	until(t, service, conversation.ID)
@@ -215,7 +216,7 @@ func TestAToolGoesIntoTheLog(t *testing.T) {
 		},
 	))
 	conversation := aThread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "saludá"); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, "saludá", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	until(t, service, conversation.ID)
@@ -248,7 +249,7 @@ func TestTheSecondTurnWaitsForTheFirst(t *testing.T) {
 	if taken, err := service.Chat.Claim(t.Context(), conversation.ID, TurnLease); err != nil || !taken {
 		t.Fatalf("no pude tomar la conversación: %v %v", taken, err)
 	}
-	if err := service.Say(t.Context(), conversation.ID, "otra vez"); err != ErrBusy {
+	if err := service.Say(t.Context(), conversation.ID, "otra vez", nil); err != ErrBusy {
 		t.Fatalf("dio %v", err)
 	}
 }
@@ -267,7 +268,7 @@ func TestAConversationFromATransportIsReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("conversations: %v", err)
 	}
-	if err := service.Say(t.Context(), conversations[0].ID, "hola"); err != ErrReadOnly {
+	if err := service.Say(t.Context(), conversations[0].ID, "hola", nil); err != ErrReadOnly {
 		t.Fatalf("dio %v", err)
 	}
 }
@@ -367,5 +368,61 @@ func TestATaskOfAMissingProjectDoesNotRun(t *testing.T) {
 	task := schedule.Task{Project: "no-existe", Name: "suelta", At: "09:00", Prompt: "hola"}
 	if _, err := service.runTask(t.Context(), task); err == nil {
 		t.Fatal("corrió una tarea sin proyecto")
+	}
+}
+
+func TestTheMessageCarriesTheFiles(t *testing.T) {
+	got := messageOf("miralo", []attached{{Path: "files/c1/nota.txt", Mime: "text/plain"}})
+	want := "miralo\n\nArchivos adjuntos:\n- files/c1/nota.txt (text/plain)\n"
+	if got != want {
+		t.Fatalf("el mensaje quedó %q", got)
+	}
+	if got := messageOf("solo texto", nil); got != "solo texto" {
+		t.Fatalf("sin archivos quedó %q", got)
+	}
+	if got := messageOf("", []attached{{Path: "files/c1/foto.png", Mime: "image/png"}}); got != "Archivos adjuntos:\n- files/c1/foto.png (image/png)\n" {
+		t.Fatalf("sin texto quedó %q", got)
+	}
+}
+
+func TestAnAttachmentGoesToTheLogAndToTheWorkspace(t *testing.T) {
+	service := testService(t, provider(t, []string{
+		`{"choices":[{"delta":{"content":"la leí"}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+	}))
+	conversation := aThread(t, service)
+	upload, err := service.Chat.PutUpload(t.Context(), conversation.ID, "nota.txt", "text/plain", []byte("hola"))
+	if err != nil {
+		t.Fatalf("putUpload: %v", err)
+	}
+	if err := service.Say(t.Context(), conversation.ID, "miralo", []string{upload.ID}); err != nil {
+		t.Fatalf("say: %v", err)
+	}
+	until(t, service, conversation.ID)
+	got := bodies(t, service, conversation.ID)
+	if len(got) != 4 {
+		t.Fatalf("el log quedó %v", got)
+	}
+	file := eventOf(t, got[1])
+	if file["event"] != "file" || file["name"] != "nota.txt" || file["mime"] != "text/plain" {
+		t.Fatalf("segunda línea: %s", got[1])
+	}
+	if file["id"] != upload.ID {
+		t.Fatalf("el archivo del log no es el que subí: %s", got[1])
+	}
+	written, err := os.ReadFile(filepath.Join(service.Workspace, "files", conversation.ID, "nota.txt"))
+	if err != nil {
+		t.Fatalf("no encontré el archivo en el workspace: %v", err)
+	}
+	if string(written) != "hola" {
+		t.Fatalf("el archivo quedó %q", written)
+	}
+}
+
+func TestAMessageWithNoWordsAndNoFilesIsEmpty(t *testing.T) {
+	service := testService(t, provider(t))
+	conversation := aThread(t, service)
+	if err := service.Say(t.Context(), conversation.ID, "  ", nil); err != ErrEmpty {
+		t.Fatalf("un mensaje vacío dio %v", err)
 	}
 }
