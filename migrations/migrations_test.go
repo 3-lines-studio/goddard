@@ -101,7 +101,7 @@ func TestAplicaElEsquemaDeHeimdall(t *testing.T) {
 	if len(applied) != len(pending(t)) || applied[0] != "heimdall" {
 		t.Fatalf("aplicó %v", applied)
 	}
-	want := []string{"audit", "environments", "logins", "secrets", "sessions", "tokens"}
+	want := []string{"audit", "environments", "secrets", "tokens"}
 	got := strings.Join(tables(t, db, "heimdall"), ",")
 	if got != strings.Join(want, ",") {
 		t.Fatalf("las tablas quedaron %s", got)

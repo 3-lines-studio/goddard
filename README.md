@@ -22,6 +22,11 @@ below.
   reaches them, and travel embedded in the binary as the default language. The
   Rust harness that compiles jimmy's `prompt.rs` on its own left
   `prompt/testdata/paridad-rust.txt`, and the tests replay it byte for byte.
+- `auth` — who can come in: the users, the one-shot links that let them in
+  and the sessions that keep them in, in the `auth` schema. It is the app's and
+  not heimdall's: the vault keeps the tokens of the machines that ask it for
+  secrets, and this keeps the people. A link and a session are stored as their
+  hash and nothing else, and an expired one is dropped, not marked.
 - `heimdall` — the secrets store: projects, environments and tokens scoped to
   one environment and, if you want, to a list of key names, so an agent gets
   test credentials with no path to production. Port of
@@ -32,7 +37,7 @@ below.
   sealed values intact, and the Rust server serves a store this one wrote. The
   command line keeps the `doppler` dialect,
   `heimdall run --preserve-env -- npm test`. Outside: the HTTP server, the web
-  page and the magic link, which bifrost brings.
+  page and the magic link, which bifrost and `auth` bring.
 - `skill` — the skills: named instructions the agent loads into its context
   when the task calls for them, in the `skill` schema of the same Postgres.
   Port of jimmy's `src/skill.rs`, with the tree of directories replaced by

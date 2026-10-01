@@ -183,29 +183,18 @@ func TestABadTokenIsA401(t *testing.T) {
 	}
 }
 
-func TestTheSessionCookieEnters(t *testing.T) {
+func TestTheUserTheAppResolvedEnters(t *testing.T) {
 	store := testStore(t)
-	cookie, err := store.CreateSession(t.Context(), "berti@ejemplo.com", 900)
-	if err != nil {
-		t.Fatalf("session: %v", err)
-	}
-	actor, refusal := Authenticate(t.Context(), store, cookie, "", "hd_admin")
+	actor, refusal := Authenticate(t.Context(), store, "berti", "", "hd_admin")
 	if refusal != nil {
 		t.Fatalf("no entró: %d %s", refusal.Status, refusal.Message)
 	}
-	if !actor.Admin || actor.Name != "berti@ejemplo.com" {
+	if !actor.Admin || actor.Name != "berti" {
 		t.Fatalf("quedó %v", actor)
 	}
-	admin, refusal := Authenticate(t.Context(), store, "cookie-que-no-existe", "hd_admin", "hd_admin")
+	admin, refusal := Authenticate(t.Context(), store, "cualquiera", "hd_admin", "hd_admin")
 	if refusal != nil || !admin.Admin {
-		t.Fatalf("una cookie que no existe no dejó pasar al token: %v", refusal)
-	}
-	expired, err := store.CreateSession(t.Context(), "berti@ejemplo.com", -1)
-	if err != nil {
-		t.Fatalf("session: %v", err)
-	}
-	if _, refusal := Authenticate(t.Context(), store, expired, "", "hd_admin"); refusal == nil {
-		t.Fatal("una sesión vencida entró")
+		t.Fatalf("un usuario cualquiera no dejó pasar al token: %v", refusal)
 	}
 }
 
