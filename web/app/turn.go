@@ -181,6 +181,17 @@ func (l *logSink) write(event map[string]any) {
 	}
 }
 
+// AssistantDelta is the message being written. It is not stored: the log
+// would be one line per token. It goes to whoever is watching the
+// conversation right now, which is where a half-written sentence belongs.
+func (l *logSink) AssistantDelta(text string) {
+	body, err := json.Marshal(map[string]any{"event": "delta", "text": text})
+	if err != nil {
+		return
+	}
+	l.service.Hub.tell(l.conversationID, body)
+}
+
 func (l *logSink) ToolStart(call axe.ToolCall) {
 	l.write(map[string]any{"event": "tool_start", "id": call.ID, "name": call.Name, "args": call.Arguments})
 }
