@@ -168,6 +168,10 @@ DELETE /api/conversations?id=           takes the thread out of the list
 POST /api/turns                         {conversation, text}: 202, and the turn runs
 GET  /api/events?conversation=&since=   the log of the thread
 GET  /api/stream?conversation=&since=   the same log, live: text/event-stream
+GET    /api/agenda?project=             the tasks of that project, with their last run
+PATCH  /api/agenda                      {project, name, paused}: pauses it or lets it go
+DELETE /api/agenda?project=&name=       takes it out of the agenda
+POST   /api/agenda/run                  {project, name}: runs it now, and answers what it said
 POST /api/login                         {email}: mails a one-shot link, or hands it back
 GET  /auth?token=                       burns the link, sets the cookie and goes home
 POST /api/logout                        signs the session out
@@ -179,7 +183,9 @@ owns inside its project — made the first time the task fires and named after
 it. The run is written down either way, in `schedule.runs`, and its thread is
 where the answer is read: a task that runs alone leaves the same trail as one
 asked for by hand. The local hour is UTC plus `GODDARD_TZ_OFFSET` hours, zero
-by default.
+by default. The `agenda` button in the header of a project is that list: what
+each task is, when it runs, what it answered last, and the three buttons that
+run it now, pause it and take it out.
 
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a

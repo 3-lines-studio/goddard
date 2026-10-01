@@ -17,6 +17,18 @@ type Project = {
   conversations: Line[];
 };
 
+type Task = {
+  name: string;
+  when: string;
+  at: string;
+  every: string;
+  prompt: string;
+  paused: boolean;
+  silent: boolean;
+  target: string;
+  last: { ts: number; ms: number; ok: boolean; text: string } | null;
+};
+
 type Event = {
   event: string;
   text?: string;
@@ -40,6 +52,10 @@ export function Chat() {
   const [workspace, setWorkspace] = useState("");
   const [editing, setEditing] = useState("");
   const [removing, setRemoving] = useState("");
+  const [agenda, setAgenda] = useState<Project | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [removingTask, setRemovingTask] = useState("");
+  const [running, setRunning] = useState("");
   const [needLogin, setNeedLogin] = useState(false);
   const [sent, setSent] = useState("");
   const [link, setLink] = useState("");
@@ -66,6 +82,7 @@ export function Chat() {
         ? current
         : "",
     );
+    setAgenda((current) => (projects.some((project) => project.id === current?.id) ? current : null));
   }, []);
 
   useEffect(() => {
@@ -191,6 +208,72 @@ export function Chat() {
     load();
   }
 
+  async function loadAgenda(slug: string) {
+    const response = await fetch(`/api/agenda?project=${encodeURIComponent(slug)}`);
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    const data = await response.json();
+    setTasks(data.tasks ?? []);
+  }
+
+  async function openAgenda(project: Project) {
+    setAgenda(project);
+    setMenu(false);
+    await loadAgenda(project.slug);
+  }
+
+  async function runTask(task: Task) {
+    if (!agenda) return;
+    setRunning(task.name);
+    const response = await fetch("/api/agenda/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ project: agenda.slug, name: task.name }),
+    });
+    setRunning("");
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadAgenda(agenda.slug);
+  }
+
+  async function pauseTask(task: Task) {
+    if (!agenda) return;
+    const response = await fetch("/api/agenda", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ project: agenda.slug, name: task.name, paused: !task.paused }),
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadAgenda(agenda.slug);
+  }
+
+  function askTask(task: Task) {
+    if (removingTask !== task.name) {
+      setRemovingTask(task.name);
+      return;
+    }
+    void removeTask(task);
+  }
+
+  async function removeTask(task: Task) {
+    if (!agenda) return;
+    setRemovingTask("");
+    const query = `project=${encodeURIComponent(agenda.slug)}&name=${encodeURIComponent(task.name)}`;
+    const response = await fetch(`/api/agenda?${query}`, { method: "DELETE" });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadAgenda(agenda.slug);
+  }
+
   async function newConversation(project: string) {
     const response = await fetch("/api/conversations", {
       method: "POST",
@@ -203,6 +286,7 @@ export function Chat() {
     }
     const line: Line = await response.json();
     await load();
+    setAgenda(null);
     setOpen(line.id);
     setMenu(false);
   }
@@ -299,6 +383,17 @@ export function Chat() {
                   >
                     nueva
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => openAgenda(project)}
+                    data-agenda={project.id}
+                    aria-label={`Agenda de ${project.name}`}
+                    className={`rounded border px-1 text-xs ${
+                      agenda?.id === project.id ? "border-neutral-500" : "border-neutral-800 opacity-60"
+                    }`}
+                  >
+                    agenda
+                  </button>
                 </span>
               </div>
               <ul className="mt-1">
@@ -314,6 +409,7 @@ export function Chat() {
                       <button
                         type="button"
                         onClick={() => {
+                          setAgenda(null);
                           setOpen(line.id);
                           setMenu(false);
                         }}
@@ -367,9 +463,21 @@ export function Chat() {
           <button type="button" onClick={() => setMenu(!menu)} className="rounded border border-neutral-700 px-2 text-sm">
             proyectos
           </button>
-          <span className="truncate text-sm">{titleOf(projects, open)}</span>
+          <span className="truncate text-sm">{agenda ? `Agenda de ${agenda.name}` : titleOf(projects, open)}</span>
         </header>
 
+        {agenda ? (
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="mx-auto flex max-w-3xl flex-col gap-3">
+              <h2 className="text-sm font-semibold">Agenda de {agenda.name}</h2>
+              {tasks.length === 0 ? <p className="text-sm opacity-60">No hay tareas en este proyecto.</p> : null}
+              {tasks.map((task) => (
+                <Task key={task.name} task={task} running={running} removing={removingTask}
+                  run={() => runTask(task)} pause={() => pauseTask(task)} ask={() => askTask(task)} />
+              ))}
+            </div>
+          </div>
+        ) : (
         <div className="flex-1 overflow-y-auto p-4">
           {!open ? <p className="opacity-60">Elegí una conversación o creá una nueva.</p> : null}
           <div className="mx-auto flex max-w-3xl flex-col gap-3">
@@ -380,9 +488,11 @@ export function Chat() {
           </div>
           <div ref={bottom} />
         </div>
+        )}
 
         {error ? <p className="border-t border-red-900 px-4 py-2 text-sm text-red-400">{error}</p> : null}
 
+        {agenda ? null : (
         <form onSubmit={send} className="border-t border-neutral-800 p-3">
           <div className="mx-auto flex max-w-3xl gap-2">
             <textarea
@@ -410,6 +520,7 @@ export function Chat() {
             </button>
           </div>
         </form>
+        )}
       </main>
     </div>
   );
@@ -434,6 +545,83 @@ function Line({ line, workspace }: { line: Event; workspace: string }) {
     default:
       return null;
   }
+}
+
+function Task({
+  task,
+  running,
+  removing,
+  run,
+  pause,
+  ask,
+}: {
+  task: Task;
+  running: string;
+  removing: string;
+  run: () => void;
+  pause: () => void;
+  ask: () => void;
+}) {
+  return (
+    <div className="rounded border border-neutral-800 p-3 text-sm" data-task={task.name}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">{task.name}</span>
+        <span className="flex shrink-0 items-center gap-1 text-xs">
+          <button
+            type="button"
+            onClick={run}
+            disabled={running === task.name}
+            data-run-task={task.name}
+            className="rounded border border-neutral-700 px-2 py-0.5 disabled:opacity-40"
+          >
+            {running === task.name ? "corriendo…" : "correr"}
+          </button>
+          <button type="button" onClick={pause} data-pause-task={task.name} className="rounded border border-neutral-700 px-2 py-0.5">
+            {task.paused ? "seguir" : "pausar"}
+          </button>
+          <button
+            type="button"
+            onClick={ask}
+            data-remove-task={task.name}
+            className={`rounded px-2 py-0.5 ${removing === task.name ? "bg-red-900 text-red-100" : "border border-neutral-700 opacity-60"}`}
+          >
+            {removing === task.name ? "borrar" : "✕"}
+          </button>
+        </span>
+      </div>
+      <p className="mt-1 text-xs opacity-60">
+        {whenOf(task)}
+        {task.paused ? " · pausada" : ""}
+        {task.silent ? " · callada" : ""}
+      </p>
+      <p className="mt-2 whitespace-pre-wrap opacity-80">{task.prompt}</p>
+      {task.last ? (
+        <details className="mt-2 text-xs">
+          <summary className="cursor-pointer opacity-60">
+            última corrida {task.last.ok ? "ok" : "con error"} · {task.last.ms} ms · hace {ago(task.last.ts)}
+          </summary>
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap opacity-80">{task.last.text}</pre>
+        </details>
+      ) : (
+        <p className="mt-2 text-xs opacity-60">todavía no corrió</p>
+      )}
+    </div>
+  );
+}
+
+function whenOf(task: Task) {
+  if (task.every) return `cada ${task.every}`;
+  if (task.at) return `todos los días a las ${task.at}`;
+  if (task.when) return `una vez el ${task.when.replace("T", " a las ")}`;
+  return "sin horario";
+}
+
+function ago(ts: number) {
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+  if (seconds < 60) return `${seconds} s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h`;
+  return `${Math.floor(seconds / 86400)} d`;
 }
 
 function Name({ value, save, cancel }: { value: string; save: (text: string) => void; cancel: () => void }) {

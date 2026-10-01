@@ -42,8 +42,7 @@ func Serve(ctx context.Context, handler http.Handler) error {
 		return err
 	}
 	running(built)
-	agenda := schedule.NewService(built.Schedule, built.runTask, built.Offset)
-	go agenda.Serve(ctx, func(err error) { log.Printf("goddard: agenda: %v", err) })
+	go built.Agenda.Serve(ctx, func(err error) { log.Printf("goddard: agenda: %v", err) })
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/health", health(db))
 	mux.Handle("/", handler)
@@ -99,7 +98,7 @@ func build(db *sql.DB) (*Service, error) {
 	if absolute, err := filepath.Abs(workspace); err == nil {
 		workspace = absolute
 	}
-	return &Service{
+	built := &Service{
 		DB:        db,
 		Chat:      chat.NewStore(db),
 		Auth:      auth.NewStore(db),
@@ -118,7 +117,9 @@ func build(db *sql.DB) (*Service, error) {
 		Assistant: env("GODDARD_ASSISTANT", "Jimmy"),
 		Language:  env("GODDARD_LANGUAGE", prompt.DefaultLanguage),
 		Spec:      env("GODDARD_PROMPT", prompt.Default),
-	}, nil
+	}
+	built.Agenda = schedule.NewService(built.Schedule, built.runTask, built.Offset)
+	return built, nil
 }
 
 // emails is the comma separated list of who may ask for a link. Empty means
