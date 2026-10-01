@@ -2,6 +2,7 @@ package app
 
 import (
 	"database/sql"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -26,6 +27,8 @@ type Service struct {
 	Skill     *skill.PgStore
 	Schedule  *schedule.PgStore
 	Provider  axe.Provider
+	Mail      *mailer
+	Allowed   []string
 	Model     string
 	Workspace string
 	Viewer    skill.Viewer
@@ -65,4 +68,14 @@ func env(key, fallback string) string {
 // the same.
 func (s *Service) Running(conversation chat.Conversation) bool {
 	return conversation.ClaimedUntil > time.Now().Unix()
+}
+
+// Session is the user behind the request, and it answers 401 when there is
+// none. Every route that touches a conversation goes through here.
+func Session(service *Service, w http.ResponseWriter, r *http.Request) (auth.User, bool) {
+	user, ok := service.Who(r.Context(), r)
+	if !ok {
+		http.Error(w, "no hay sesión", http.StatusUnauthorized)
+	}
+	return user, ok
 }

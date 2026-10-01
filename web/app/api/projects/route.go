@@ -19,12 +19,16 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
+	user, ok := app.Session(service, w, r)
+	if !ok {
+		return
+	}
 	var body request
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "no pude leer el proyecto", http.StatusBadRequest)
 		return
 	}
-	project, err := service.Chat.CreateProject(r.Context(), body.Name, service.Viewer.User)
+	project, err := service.Chat.CreateProject(r.Context(), body.Name, user.Email)
 	if errors.Is(err, chat.ErrTaken) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return

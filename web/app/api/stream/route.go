@@ -17,6 +17,9 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
+	if _, ok := app.Session(service, w, r); !ok {
+		return
+	}
 	conversation := r.URL.Query().Get("conversation")
 	if conversation == "" {
 		http.Error(w, "falta conversation", http.StatusBadRequest)

@@ -27,6 +27,10 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
+	user, ok := app.Session(service, w, r)
+	if !ok {
+		return
+	}
 	projects, err := service.Chat.Projects(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -53,6 +57,6 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"projects": views,
-		"user":     service.Viewer.User,
+		"user":     user.Email,
 	})
 }
