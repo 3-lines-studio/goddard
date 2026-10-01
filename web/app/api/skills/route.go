@@ -25,7 +25,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	metas, err := service.Skill.List(r.Context(), service.Viewer(user))
+	metas, err := service.Skill.List(r.Context(), service.Viewer(r.Context(), user))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

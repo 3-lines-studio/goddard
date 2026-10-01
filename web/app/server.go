@@ -19,6 +19,7 @@ import (
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/memo"
 	"github.com/3-lines-studio/goddard/migrations"
+	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
@@ -103,7 +104,6 @@ func build(db *sql.DB) (*Service, error) {
 	built.Mail = newMailer()
 	built.Allowed = emails(os.Getenv("GODDARD_ALLOWED_EMAILS"))
 	built.Model = env("GODDARD_MODEL", "deepseek-flash")
-	built.Org = env("GODDARD_ORG", "3-lines-studio")
 	built.Assistant = env("GODDARD_ASSISTANT", "Jimmy")
 	built.Language = env("GODDARD_LANGUAGE", prompt.DefaultLanguage)
 	built.Spec = env("GODDARD_PROMPT", prompt.Default)
@@ -122,6 +122,7 @@ func New(db *sql.DB, provider axe.Provider, workspace string) *Service {
 		Memo:      memo.NewPgStore(db),
 		Skill:     skill.NewPgStore(db),
 		Schedule:  schedule.NewPgStore(db),
+		Orgs:      org.NewPgStore(db),
 		Provider:  provider,
 		Hub:       newHub(),
 		Stops:     newStops(),

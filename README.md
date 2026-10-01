@@ -190,6 +190,12 @@ GET    /api/agenda?project=             the tasks of that project, with their la
 PATCH  /api/agenda                      {project, name, paused}: pauses it or lets it go
 DELETE /api/agenda?project=&name=       takes it out of the agenda
 POST   /api/agenda/run                  {project, name}: runs it now, and answers what it said
+POST /api/orgs                          {name}: opens one, and whoever asks is its owner
+GET  /api/orgs                          the organizations of whoever is asking, with their role
+GET    /api/orgs/members?org=           who is in one, with the role of each
+POST   /api/orgs/members                {org, email, role}: brings somebody in by their mail
+PATCH  /api/orgs/members                {org, user, role}: changes what they can do
+DELETE /api/orgs/members?org=&user=      takes somebody out
 POST /api/login                         {email}: mails a one-shot link, or hands it back
 GET  /auth?token=                       burns the link, sets the cookie and goes home
 POST /api/logout                        signs the session out
@@ -232,8 +238,8 @@ the database minted is what the skills, the agenda and the memory keep, and the
 email is only how somebody comes in and can change.
 
 To run it: `DATABASE_URL` and `OPENAI_API_KEY`, plus `GODDARD_BASE`,
-`GODDARD_MODEL`, `GODDARD_WORKSPACE`, `GODDARD_ORG` and
-`GODDARD_ALLOWED_EMAILS` when the defaults do not fit. The link goes out
+`GODDARD_MODEL`, `GODDARD_WORKSPACE` and `GODDARD_ALLOWED_EMAILS` when the
+defaults do not fit. The link goes out
 through Resend with `RESEND_API_KEY` and `GODDARD_WEB_FROM`; without a key the
 link comes back in the response instead of in an email, which is how it is used
 in development.

@@ -23,6 +23,7 @@ import (
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/migrations"
+	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/web/app"
 )
@@ -107,7 +108,6 @@ func Service(t *testing.T, server *httptest.Server) *app.Service {
 	t.Helper()
 	built := app.New(Database(t), axe.NewOpenAI(server.URL, "k1"), t.TempDir())
 	built.Model = "m1"
-	built.Org = "o1"
 	built.Assistant = "Jimmy"
 	built.Language = prompt.DefaultLanguage
 	built.Spec = prompt.Default
@@ -128,6 +128,17 @@ func Route(t *testing.T, server *httptest.Server) *app.Service {
 // a turn a test writes by hand are the same person, so the id a route keeps is
 // the id the turn runs with.
 const TestEmail = "berti@ejemplo.com"
+
+// AnOrg is an organization the test user is the owner of, made the way the
+// route makes one.
+func AnOrg(t *testing.T, service *app.Service, name string) org.Org {
+	t.Helper()
+	created, err := service.Orgs.Create(t.Context(), name, User(t, service).ID)
+	if err != nil {
+		t.Fatalf("no pude crear la organización: %v", err)
+	}
+	return created
+}
 
 // User is somebody who already came in. It goes through the store and not
 // through `Login`, which has a cooldown: a test may ask twice in the same run.
