@@ -1,4 +1,4 @@
-package web
+package app
 
 import (
 	"context"
@@ -6,11 +6,19 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/3-lines-studio/goddard/auth"
+	"github.com/3-lines-studio/goddard/axe"
+	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/memo"
 	"github.com/3-lines-studio/goddard/migrations"
+	"github.com/3-lines-studio/goddard/prompt"
+	"github.com/3-lines-studio/goddard/schedule"
+	"github.com/3-lines-studio/goddard/skill"
 )
 
 func Serve(ctx context.Context, handler http.Handler) error {
@@ -26,6 +34,11 @@ func Serve(ctx context.Context, handler http.Handler) error {
 	if _, err := migrations.Apply(ctx, db); err != nil {
 		return err
 	}
+	built, err := build(db)
+	if err != nil {
+		return err
+	}
+	running(built)
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/health", health(db))
 	mux.Handle("/", handler)
@@ -58,6 +71,35 @@ func addr() string {
 		return addr
 	}
 	return ":8080"
+}
+
+// build opens every part of goddard over the same database and the same model
+// of it: the stores, the agent, and who the app is being for.
+func build(db *sql.DB) (*Service, error) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		return nil, errors.New("goddard: OPENAI_API_KEY is not set")
+	}
+	workspace := env("GODDARD_WORKSPACE", ".")
+	if absolute, err := filepath.Abs(workspace); err == nil {
+		workspace = absolute
+	}
+	return &Service{
+		DB:        db,
+		Chat:      chat.NewStore(db),
+		Auth:      auth.NewStore(db),
+		Memo:      memo.NewPgStore(db),
+		Skill:     skill.NewPgStore(db),
+		Schedule:  schedule.NewPgStore(db),
+		Provider:  axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key),
+		Model:     env("GODDARD_MODEL", "deepseek-flash"),
+		Workspace: workspace,
+		Viewer:    skill.Viewer{Org: env("GODDARD_ORG", "3-lines-studio"), User: env("GODDARD_USER", "berti")},
+		User:      env("GODDARD_USER_NAME", "Don Berti"),
+		Assistant: env("GODDARD_ASSISTANT", "Jimmy"),
+		Language:  env("GODDARD_LANGUAGE", prompt.DefaultLanguage),
+		Spec:      env("GODDARD_PROMPT", prompt.Default),
+	}, nil
 }
 
 func health(db *sql.DB) http.Handler {

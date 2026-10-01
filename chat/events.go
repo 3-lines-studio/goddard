@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 )
 
 // Event is one line of a conversation's log. The body is the event as the
@@ -74,4 +75,30 @@ func (s *Store) write(ctx context.Context, work func(tx *sql.Tx) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// Claim takes the conversation for one turn. It says no when somebody else is
+// already running one there: with several instances serving, the lease is the
+// only way to know, and it expires so a dead instance does not hold the thread
+// forever.
+func (s *Store) Claim(ctx context.Context, id string, lease int64) (bool, error) {
+	var claimed string
+	err := s.db.QueryRowContext(ctx,
+		"UPDATE chat.conversations SET claimed_until = goddard.now() + $2, updated_at = goddard.now() "+
+			"WHERE id = $1 AND deleted_at IS NULL AND (claimed_until IS NULL OR claimed_until <= goddard.now()) "+
+			"RETURNING id", id, lease).Scan(&claimed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Release gives the conversation back when the turn is over, whether it
+// answered or not.
+func (s *Store) Release(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE chat.conversations SET claimed_until = NULL WHERE id = $1", id)
+	return err
 }

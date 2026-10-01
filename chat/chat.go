@@ -16,22 +16,23 @@ var ErrTaken = errors.New("ese proyecto ya existe")
 // workspace, and it is the string the rest of goddard already knows — memo,
 // schedule and heimdall keep it in their own tables.
 type Project struct {
-	ID        string
-	Slug      string
-	Name      string
-	CreatedBy string
+	ID        string `json:"id"`
+	Slug      string `json:"slug"`
+	Name      string `json:"name"`
+	CreatedBy string `json:"created_by"`
 }
 
 // Conversation is one thread inside a project. Its id is the scope an axe
 // session uses, so the history of the conversation is the history of that
 // session and nobody has to keep the two in step.
 type Conversation struct {
-	ID        string
-	ProjectID string
-	Title     string
-	Source    string
-	CreatedBy string
-	UpdatedAt int64
+	ID           string `json:"id"`
+	ProjectID    string `json:"project_id"`
+	Title        string `json:"title"`
+	Source       string `json:"source"`
+	CreatedBy    string `json:"created_by"`
+	ClaimedUntil int64  `json:"claimed_until"`
+	UpdatedAt    int64  `json:"updated_at"`
 }
 
 // Sources are where a conversation comes from. A conversation that came from a

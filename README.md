@@ -149,6 +149,21 @@ make -C web build     # bifrost build, leaves .bifrost/bifrost-app
 make -C web serve     # runs it, DATABASE_URL in the environment
 ```
 
+What the routes answer today:
+
+```
+GET  /api/health                        the database answers
+GET  /api/state                         the projects and their conversations
+POST /api/projects                      {name}
+POST /api/conversations                 {project, title}
+POST /api/turns                         {conversation, text}: 202, and the turn runs
+GET  /api/events?conversation=&since=   the log of the thread
+```
+
+To run it: `DATABASE_URL` and `OPENAI_API_KEY`, plus `GODDARD_BASE`,
+`GODDARD_MODEL`, `GODDARD_WORKSPACE`, `GODDARD_USER` and `GODDARD_ORG` when the
+defaults do not fit.
+
 ## Migrate
 
 The schema is not applied by the binary the agent travels in: it is
