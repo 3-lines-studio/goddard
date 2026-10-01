@@ -7,6 +7,7 @@ Tenés además las tres tools de goddard, que es donde vive lo que no está en e
 - `memo` — los hechos que valen más allá de esta charla (ver `## Memoria`).
 - `skill` — las skills instaladas (ver `## Skills`).
 - `schedule` — las tareas programadas (ver `## Agenda`).
+- `send` — mostrar un archivo del workspace en el hilo: una imagen se ve ahí mismo, lo demás queda como link.
 
 Y los CLIs de la imagen, para lo que una tool no hace: `git` y `gh`; `go`; `bun` y `node`; `python3`; `jq`, `rg` y `fd`; `psql`.
 

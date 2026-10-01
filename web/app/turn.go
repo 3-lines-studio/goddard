@@ -161,7 +161,7 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, te
 	messages := axe.DropIncompleteToolCalls(axe.ContextMessages(entries))
 	messages = append(messages, axe.Message{Role: "user", Content: text})
 	project := s.projectSlug(ctx, conversation)
-	tools := s.tools(project)
+	tools := s.tools(project, conversation.ID)
 	sink := &logSink{service: s, conversationID: conversation.ID}
 	options := &axe.RunOptions{
 		Model:    s.Model,
@@ -205,10 +205,11 @@ func (s *Service) write(ctx context.Context, conversationID string, event map[st
 }
 
 // tools is what the agent can do: the harness' own, plus the memory, the
-// skills and the agenda of the project this conversation belongs to.
-func (s *Service) tools(project string) []axe.Tool {
+// skills and the agenda of the project this conversation belongs to, and the
+// way to show a file in this thread.
+func (s *Service) tools(project, conversationID string) []axe.Tool {
 	tools := axe.BuildToolsOn(axe.NewLocal(s.Workspace))
-	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer), schedule.Tool(s.Schedule, s.Viewer.User, project))
+	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer), schedule.Tool(s.Schedule, s.Viewer.User, project), s.sendTool(conversationID))
 	return tools
 }
 

@@ -426,3 +426,64 @@ func TestAMessageWithNoWordsAndNoFilesIsEmpty(t *testing.T) {
 		t.Fatalf("un mensaje vacío dio %v", err)
 	}
 }
+
+func TestTheAgentShowsAFileInTheThread(t *testing.T) {
+	service := testService(t, provider(t,
+		[]string{
+			`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"send","arguments":"{\"path\":\"grafico.png\",\"caption\":\"el avance\"}"}}]}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+		},
+		[]string{
+			`{"choices":[{"delta":{"content":"ahí va"}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		}))
+	conversation := aThread(t, service)
+	image := append([]byte("\x89PNG\r\n\x1a\n"), []byte("lo que sea el resto")...)
+	if err := os.WriteFile(filepath.Join(service.Workspace, "grafico.png"), image, 0o644); err != nil {
+		t.Fatalf("no pude escribir el archivo: %v", err)
+	}
+	if err := service.Say(t.Context(), conversation.ID, "mostrame el gráfico", nil); err != nil {
+		t.Fatalf("say: %v", err)
+	}
+	until(t, service, conversation.ID)
+	got := bodies(t, service, conversation.ID)
+	if len(got) != 6 {
+		t.Fatalf("el log quedó %v", got)
+	}
+	file := eventOf(t, got[2])
+	if file["event"] != "file" || file["name"] != "grafico.png" || file["mime"] != "image/png" {
+		t.Fatalf("el evento quedó %s", got[2])
+	}
+	if file["caption"] != "el avance" {
+		t.Fatalf("la caption quedó %s", got[2])
+	}
+	upload, ok, err := service.Chat.Upload(t.Context(), file["id"].(string))
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	if !ok || string(upload.Bytes) != string(image) {
+		t.Fatalf("los bytes no son los del archivo")
+	}
+}
+
+func TestTheAgentCannotShowWhatIsNotThere(t *testing.T) {
+	service := testService(t, provider(t,
+		[]string{
+			`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"send","arguments":"{\"path\":\"no-existe.png\"}"}}]}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+		},
+		[]string{
+			`{"choices":[{"delta":{"content":"no está"}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		}))
+	conversation := aThread(t, service)
+	if err := service.Say(t.Context(), conversation.ID, "mostrame lo que no hay", nil); err != nil {
+		t.Fatalf("say: %v", err)
+	}
+	until(t, service, conversation.ID)
+	for _, body := range bodies(t, service, conversation.ID) {
+		if event := eventOf(t, body); event["event"] == "file" {
+			t.Fatalf("igual mandó %s", body)
+		}
+	}
+}
