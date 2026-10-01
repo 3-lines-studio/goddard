@@ -18,10 +18,14 @@ type Imported struct {
 }
 
 // ImportSQLite copies the store the Rust crate left in its SQLite file into
-// this one, once. It does not decrypt anything: the sealed boxes, the token
-// hashes and the audit rows travel as they are, so the same master key keeps
-// opening them. Everything goes in one transaction.
-func ImportSQLite(ctx context.Context, path string, into *Store) (Imported, error) {
+// this one, once. It opens every sealed box with the derivation that store
+// used and seals it again with this one, which carries the owner: the master
+// key is the same, the row is not. The token hashes and the audit rows travel
+// as they are. Everything goes in one transaction.
+func ImportSQLite(ctx context.Context, path string, into *Store, owner Owner) (Imported, error) {
+	if err := owner.check(); err != nil {
+		return Imported{}, err
+	}
 	source, err := sql.Open("sqlite", path)
 	if err != nil {
 		return Imported{}, fmt.Errorf("no pude abrir %q: %v", path, err)
@@ -32,16 +36,16 @@ func ImportSQLite(ctx context.Context, path string, into *Store) (Imported, erro
 	}
 	imported := Imported{}
 	err = into.write(ctx, func(tx *sql.Tx) error {
-		if imported.Environments, err = copyEnvironments(ctx, source, tx); err != nil {
+		if imported.Environments, err = copyEnvironments(ctx, source, tx, owner); err != nil {
 			return err
 		}
-		if imported.Secrets, err = copySecrets(ctx, source, tx); err != nil {
+		if imported.Secrets, err = copySecrets(ctx, source, tx, into.key, owner); err != nil {
 			return err
 		}
-		if imported.Tokens, err = copyTokens(ctx, source, tx); err != nil {
+		if imported.Tokens, err = copyTokens(ctx, source, tx, owner); err != nil {
 			return err
 		}
-		if imported.Audit, err = copyAudit(ctx, source, tx); err != nil {
+		if imported.Audit, err = copyAudit(ctx, source, tx, owner); err != nil {
 			return err
 		}
 		return nil
@@ -52,7 +56,7 @@ func ImportSQLite(ctx context.Context, path string, into *Store) (Imported, erro
 	return imported, nil
 }
 
-func copyEnvironments(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
+func copyEnvironments(ctx context.Context, source *sql.DB, tx *sql.Tx, owner Owner) (int, error) {
 	rows, err := source.QueryContext(ctx, "SELECT project, env, created_at FROM environments")
 	if err != nil {
 		return 0, internal(err.Error())
@@ -66,8 +70,8 @@ func copyEnvironments(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, err
 			return 0, internal(err.Error())
 		}
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO heimdall.environments (project, env, created_at) VALUES ($1, $2, $3)",
-			project, env, createdAt,
+			"INSERT INTO heimdall.environments (owner_kind, owner_id, project, env, created_at) VALUES ($1, $2, $3, $4, $5)",
+			owner.Kind, owner.ID, project, env, createdAt,
 		); err != nil {
 			return 0, internal(err.Error())
 		}
@@ -76,7 +80,7 @@ func copyEnvironments(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, err
 	return copied, rows.Err()
 }
 
-func copySecrets(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
+func copySecrets(ctx context.Context, source *sql.DB, tx *sql.Tx, key Key, owner Owner) (int, error) {
 	rows, err := source.QueryContext(ctx, "SELECT project, env, name, value, updated_at FROM secrets")
 	if err != nil {
 		return 0, internal(err.Error())
@@ -90,9 +94,17 @@ func copySecrets(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
 		if err := rows.Scan(&project, &env, &name, &value, &updatedAt); err != nil {
 			return 0, internal(err.Error())
 		}
+		plain, err := key.Derive(legacySecretContext(project, env)).Open(value, []byte(legacyAAD(project, env, name)))
+		if err != nil {
+			return 0, internal(err.Error())
+		}
+		sealed, err := key.Derive(secretContext(owner, project, env)).Seal(plain, []byte(aad(owner, project, env, name)))
+		if err != nil {
+			return 0, internal(err.Error())
+		}
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO heimdall.secrets (project, env, name, value, updated_at) VALUES ($1, $2, $3, $4, $5)",
-			project, env, name, value, updatedAt,
+			"INSERT INTO heimdall.secrets (owner_kind, owner_id, project, env, name, value, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+			owner.Kind, owner.ID, project, env, name, sealed, updatedAt,
 		); err != nil {
 			return 0, internal(err.Error())
 		}
@@ -101,7 +113,15 @@ func copySecrets(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
 	return copied, rows.Err()
 }
 
-func copyTokens(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
+func legacySecretContext(project, env string) string {
+	return fmt.Sprintf("secrets/%s/%s", project, env)
+}
+
+func legacyAAD(project, env, name string) string {
+	return fmt.Sprintf("secrets/%s/%s/%s", project, env, name)
+}
+
+func copyTokens(ctx context.Context, source *sql.DB, tx *sql.Tx, owner Owner) (int, error) {
 	rows, err := source.QueryContext(ctx,
 		"SELECT id, name, project, env, keys, hash, admin, created_at, expires_at, last_used FROM tokens")
 	if err != nil {
@@ -127,9 +147,9 @@ func copyTokens(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
 			keyList = []byte(*keys)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO heimdall.tokens (id, name, project, env, keys, hash, role, created_at, expires_at, last_used)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			id, name, project, env, keyList, hash, role, createdAt, expiresAt, lastUsed,
+			`INSERT INTO heimdall.tokens (id, name, owner_kind, owner_id, project, env, keys, hash, role, created_at, expires_at, last_used)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			id, name, owner.Kind, owner.ID, project, env, keyList, hash, role, createdAt, expiresAt, lastUsed,
 		); err != nil {
 			return 0, internal(err.Error())
 		}
@@ -138,7 +158,7 @@ func copyTokens(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
 	return copied, rows.Err()
 }
 
-func copyAudit(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
+func copyAudit(ctx context.Context, source *sql.DB, tx *sql.Tx, owner Owner) (int, error) {
 	rows, err := source.QueryContext(ctx,
 		"SELECT at, actor, action, project, env, name FROM audit ORDER BY rowid")
 	if err != nil {
@@ -154,8 +174,8 @@ func copyAudit(ctx context.Context, source *sql.DB, tx *sql.Tx) (int, error) {
 			return 0, internal(err.Error())
 		}
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO heimdall.audit (at, actor, action, project, env, name) VALUES ($1, $2, $3, $4, $5, $6)",
-			at, actor, action, project, env, name,
+			"INSERT INTO heimdall.audit (at, actor, owner_kind, owner_id, action, project, env, name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+			at, actor, owner.Kind, owner.ID, action, project, env, name,
 		); err != nil {
 			return 0, internal(err.Error())
 		}

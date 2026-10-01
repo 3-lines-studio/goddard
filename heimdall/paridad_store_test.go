@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 func fixture(t *testing.T) *Store {
 	t.Helper()
 	store := testStore(t)
-	imported, err := ImportSQLite(t.Context(), buildLegacy(t), store)
+	imported, err := ImportSQLite(t.Context(), buildLegacy(t), store, testOwner)
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestParidadDelStoreConRust(t *testing.T) {
 			{"borrado", "dev", map[string]string{}},
 		}
 		for _, caso := range casos {
-			got, err := store.Secrets(t.Context(), caso.project, caso.env)
+			got, err := store.Secrets(t.Context(), testOwner, caso.project, caso.env)
 			if err != nil {
 				t.Fatalf("%s/%s: %v", caso.project, caso.env, err)
 			}
@@ -153,14 +153,14 @@ func TestParidadDelStoreConRust(t *testing.T) {
 	})
 
 	t.Run("un entorno renombrado se vuelve a sellar", func(t *testing.T) {
-		got, err := store.Secrets(t.Context(), "viejo", "dev")
+		got, err := store.Secrets(t.Context(), testOwner, "viejo", "dev")
 		if err != nil {
 			t.Fatalf("secrets: %v", err)
 		}
 		if got["CLAVE"] != "se-mueve" {
 			t.Fatalf("el valor renombrado quedó en %q", got["CLAVE"])
 		}
-		old, err := store.Secrets(t.Context(), "viejo", "qa")
+		old, err := store.Secrets(t.Context(), testOwner, "viejo", "qa")
 		if err != nil {
 			t.Fatalf("secrets: %v", err)
 		}
@@ -259,10 +259,10 @@ func TestParidadDelStoreConRust(t *testing.T) {
 
 func TestElImportadorNoSePisaDosVeces(t *testing.T) {
 	store := testStore(t)
-	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store); err != nil {
+	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store, testOwner); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store); err == nil {
+	if _, err := ImportSQLite(t.Context(), buildLegacy(t), store, testOwner); err == nil {
 		t.Fatal("importó dos veces lo mismo sin quejarse")
 	}
 }

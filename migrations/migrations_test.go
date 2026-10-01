@@ -106,11 +106,11 @@ func TestAplicaElEsquemaDeHeimdall(t *testing.T) {
 	if got != strings.Join(want, ",") {
 		t.Fatalf("las tablas quedaron %s", got)
 	}
-	wanted := "project:text,env:text,name:text,value:bytea,updated_at:bigint,id:text,created_at:bigint,deleted_at:bigint"
+	wanted := "project:text,env:text,name:text,value:bytea,updated_at:bigint,id:text,created_at:bigint,deleted_at:bigint,owner_kind:text,owner_id:text"
 	if got := columnsOf(t, db, "heimdall", "secrets"); strings.Join(got, ",") != wanted {
 		t.Fatalf("heimdall.secrets quedó %v", got)
 	}
-	wantedTokens := "id:text,name:text,project:text,env:text,keys:jsonb,hash:text,role:text,created_at:bigint,expires_at:bigint,last_used:bigint,updated_at:bigint,deleted_at:bigint"
+	wantedTokens := "id:text,name:text,project:text,env:text,keys:jsonb,hash:text,role:text,created_at:bigint,expires_at:bigint,last_used:bigint,updated_at:bigint,deleted_at:bigint,owner_kind:text,owner_id:text"
 	if got := columnsOf(t, db, "heimdall", "tokens"); strings.Join(got, ",") != wantedTokens {
 		t.Fatalf("heimdall.tokens quedó %v", got)
 	}
@@ -174,8 +174,8 @@ func TestElRolEsUnEnum(t *testing.T) {
 	}
 	insert := func(id, role string, keys any) error {
 		_, err := db.Exec(
-			`INSERT INTO heimdall.tokens (id, name, project, env, keys, hash, role, created_at)
-             VALUES ($1, $1, 'bifrost', 'dev', $2, 'hash', $3, 0)`, id, keys, role)
+			`INSERT INTO heimdall.tokens (id, name, owner_kind, owner_id, project, env, keys, hash, role, created_at)
+             VALUES ($1, $1, 'org', 'acme', 'bifrost', 'dev', $2, 'hash', $3, 0)`, id, keys, role)
 		return err
 	}
 	if err := insert("t1", "admin", nil); err != nil {
@@ -198,7 +198,7 @@ func TestElRolEsUnEnum(t *testing.T) {
 		t.Fatalf("las claves quedaron %q", keys)
 	}
 	if _, err := db.Exec(
-		`INSERT INTO heimdall.tokens (id, name, project, env, hash, created_at) VALUES ('t5', 'sin rol', 'bifrost', 'dev', 'hash', 0)`); err != nil {
+		`INSERT INTO heimdall.tokens (id, name, owner_kind, owner_id, project, env, hash, created_at) VALUES ('t5', 'sin rol', 'org', 'acme', 'bifrost', 'dev', 'hash', 0)`); err != nil {
 		t.Fatalf("no aceptó el rol por defecto: %v", err)
 	}
 	var role string
