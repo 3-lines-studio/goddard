@@ -238,5 +238,10 @@ migrate status     qué corrió y qué no
 ```
 go vet ./...
 go test ./...
-TEST_DATABASE_URL=postgres://… go test ./...   # suma el store y las migraciones
+TEST_DATABASE_URL=postgres://… go test ./...   # suma el store, las migraciones y las rutas
 ```
+
+Every route has its test, and they go through the route and not around it: the
+test starts the app with `apptest.Route` — the same `app.Start` the binary calls
+— and then calls the `Post`, `Get`, `Patch` or `Delete` of the package, the
+functions the router reaches. No browser and no binary in the middle.
