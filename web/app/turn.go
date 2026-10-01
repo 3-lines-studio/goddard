@@ -62,16 +62,18 @@ func (s *Service) Say(ctx context.Context, conversationID, text string) error {
 	if conversation.Title == chat.NewTitle {
 		_ = s.Chat.RenameConversation(ctx, conversationID, titleOf(text))
 	}
-	go s.answer(conversation, text)
+	go func() {
+		_, _ = s.answer(context.Background(), conversation, text)
+	}()
 	return nil
 }
 
-// answer runs one turn and leaves it written in the log. It runs on its own
-// context: the request that asked for it is long gone.
-func (s *Service) answer(conversation chat.Conversation, text string) {
-	ctx := context.Background()
+// answer runs one turn and leaves it written in the log. It returns what the
+// agent said, which is what a task of the agenda is after. The request that
+// asked for a turn is long gone by then, so the context is the caller's.
+func (s *Service) answer(ctx context.Context, conversation chat.Conversation, text string) (string, error) {
 	defer func() {
-		if err := s.Chat.Release(ctx, conversation.ID); err != nil {
+		if err := s.Chat.Release(context.WithoutCancel(ctx), conversation.ID); err != nil {
 			log.Printf("goddard: no pude soltar %s: %v", conversation.ID, err)
 		}
 	}()
@@ -79,7 +81,7 @@ func (s *Service) answer(conversation chat.Conversation, text string) {
 	entries, err := store.Live(ctx)
 	if err != nil {
 		s.failed(ctx, conversation.ID, err)
-		return
+		return "", err
 	}
 	messages := axe.DropIncompleteToolCalls(axe.ContextMessages(entries))
 	messages = append(messages, axe.Message{Role: "user", Content: text})
@@ -102,13 +104,16 @@ func (s *Service) answer(conversation chat.Conversation, text string) {
 			log.Printf("goddard: no pude guardar el turno de %s: %v", conversation.ID, err)
 		}
 	}
+	var failure error
 	switch end.Outcome.Kind {
 	case axe.OutcomeFailed:
-		s.failed(ctx, conversation.ID, errors.New(end.Outcome.Failure))
+		failure = errors.New(end.Outcome.Failure)
+		s.failed(ctx, conversation.ID, failure)
 	case axe.OutcomeCancelled:
 		sink.write(map[string]any{"event": "stopped"})
 	}
 	sink.write(map[string]any{"event": "done"})
+	return sink.reply, failure
 }
 
 func (s *Service) failed(ctx context.Context, conversationID string, cause error) {
@@ -173,6 +178,7 @@ type logSink struct {
 	axe.SinkBase
 	service        *Service
 	conversationID string
+	reply          string
 }
 
 func (l *logSink) write(event map[string]any) {
@@ -210,6 +216,7 @@ func (l *logSink) Assistant(turn int, message axe.Message, usage axe.Usage) {
 	if strings.TrimSpace(message.Content) == "" {
 		return
 	}
+	l.reply = message.Content
 	l.write(map[string]any{"event": "assistant", "text": message.Content})
 }
 

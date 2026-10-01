@@ -313,3 +313,59 @@ func TestOnlyTheEmailsOnTheListMayAskForALink(t *testing.T) {
 		t.Fatalf("dos veces seguidas dio %v", err)
 	}
 }
+
+func TestATaskRunsInItsOwnThread(t *testing.T) {
+	service := testService(t, provider(t, []string{
+		`{"choices":[{"delta":{"content":"listo, Don Berti"}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		`{"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
+	}))
+	aThread(t, service)
+	task := schedule.Task{
+		UserID:  "u1",
+		Project: "goddard",
+		Name:    "recordatorio",
+		At:      "09:00",
+		Prompt:  "avisale que corra los tests",
+	}
+	if err := service.Schedule.Add(t.Context(), task); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	text, err := service.runTask(t.Context(), task)
+	if err != nil {
+		t.Fatalf("runTask: %v", err)
+	}
+	if text != "listo, Don Berti" {
+		t.Fatalf("contestó %q", text)
+	}
+	thread, err := service.taskThread(t.Context(), task)
+	if err != nil {
+		t.Fatalf("taskThread: %v", err)
+	}
+	if thread.Title != "recordatorio" || thread.Source != chat.SourceSchedule {
+		t.Fatalf("el hilo quedó %+v", thread)
+	}
+	got := bodies(t, service, thread.ID)
+	if len(got) != 3 {
+		t.Fatalf("el log quedó %v", got)
+	}
+	first := eventOf(t, got[0])
+	if first["event"] != "user" || first["text"] != "avisale que corra los tests" {
+		t.Fatalf("primera línea: %s", got[0])
+	}
+	second := eventOf(t, got[1])
+	if second["event"] != "assistant" || second["text"] != "listo, Don Berti" {
+		t.Fatalf("segunda línea: %s", got[1])
+	}
+	if done := eventOf(t, got[2]); done["event"] != "done" {
+		t.Fatalf("tercera línea: %s", got[2])
+	}
+}
+
+func TestATaskOfAMissingProjectDoesNotRun(t *testing.T) {
+	service := testService(t, provider(t))
+	task := schedule.Task{Project: "no-existe", Name: "suelta", At: "09:00", Prompt: "hola"}
+	if _, err := service.runTask(t.Context(), task); err == nil {
+		t.Fatal("corrió una tarea sin proyecto")
+	}
+}

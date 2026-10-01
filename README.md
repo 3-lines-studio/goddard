@@ -173,6 +173,14 @@ GET  /auth?token=                       burns the link, sets the cookie and goes
 POST /api/logout                        signs the session out
 ```
 
+Serving also starts the agenda: every minute `schedule.Service` looks for what
+is due and runs it with the same agent a turn uses, in a conversation the task
+owns inside its project — made the first time the task fires and named after
+it. The run is written down either way, in `schedule.runs`, and its thread is
+where the answer is read: a task that runs alone leaves the same trail as one
+asked for by hand. The local hour is UTC plus `GODDARD_TZ_OFFSET` hours, zero
+by default.
+
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a
 comma separated list; empty means anybody, which is a goddard of one.
