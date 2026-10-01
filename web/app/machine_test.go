@@ -63,7 +63,7 @@ func TestAnAttachmentGoesThroughTheMachine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("putUpload: %v", err)
 	}
-	if err := service.Say(t.Context(), conversation.ID, "miralo", []string{upload.ID}); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "miralo", []string{upload.ID}); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	apptest.Wait(t, service, conversation.ID)
@@ -92,7 +92,7 @@ func TestTheAgentShowsAFileThroughTheMachine(t *testing.T) {
 	machine.files["grafico.png"] = image
 	service.Machine = machine
 	conversation := apptest.Thread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "mostrame el gráfico", nil); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "mostrame el gráfico", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	apptest.Wait(t, service, conversation.ID)

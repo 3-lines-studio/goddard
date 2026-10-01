@@ -21,10 +21,11 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
-	metas, err := service.Skill.List(r.Context(), service.Viewer)
+	metas, err := service.Skill.List(r.Context(), service.Viewer(user))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

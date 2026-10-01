@@ -21,7 +21,7 @@ func TestATurnLeavesTheLogWritten(t *testing.T) {
 		`{"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
 	}))
 	conversation := apptest.Thread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "cuánto es 6*7", nil); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "cuánto es 6*7", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	apptest.Wait(t, service, conversation.ID)
@@ -61,7 +61,7 @@ func TestAToolGoesIntoTheLog(t *testing.T) {
 		},
 	))
 	conversation := apptest.Thread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "saludá", nil); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "saludá", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	apptest.Wait(t, service, conversation.ID)
@@ -94,7 +94,7 @@ func TestTheSecondTurnWaitsForTheFirst(t *testing.T) {
 	if taken, err := service.Chat.Claim(t.Context(), conversation.ID, app.TurnLease); err != nil || !taken {
 		t.Fatalf("no pude tomar la conversación: %v %v", taken, err)
 	}
-	if err := service.Say(t.Context(), conversation.ID, "otra vez", nil); err != app.ErrBusy {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "otra vez", nil); err != app.ErrBusy {
 		t.Fatalf("dio %v", err)
 	}
 }
@@ -113,7 +113,7 @@ func TestAConversationFromATransportIsReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("conversations: %v", err)
 	}
-	if err := service.Say(t.Context(), conversations[0].ID, "hola", nil); err != app.ErrReadOnly {
+	if err := service.Say(t.Context(), conversations[0].ID, apptest.User(t, service), "hola", nil); err != app.ErrReadOnly {
 		t.Fatalf("dio %v", err)
 	}
 }
@@ -167,8 +167,9 @@ func TestATaskRunsInItsOwnThread(t *testing.T) {
 		`{"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
 	}))
 	conversation := apptest.Thread(t, service)
+	user := apptest.User(t, service)
 	task := schedule.Task{
-		UserID:  "u1",
+		UserID:  user.ID,
 		Project: "goddard",
 		Name:    "recordatorio",
 		At:      "09:00",
@@ -177,7 +178,7 @@ func TestATaskRunsInItsOwnThread(t *testing.T) {
 	if err := service.Schedule.Add(t.Context(), task); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	run, err := service.Agenda.RunNow(t.Context(), "u1", "goddard", "recordatorio")
+	run, err := service.Agenda.RunNow(t.Context(), user.ID, "goddard", "recordatorio")
 	if err != nil {
 		t.Fatalf("runNow: %v", err)
 	}
@@ -217,11 +218,12 @@ func TestATaskRunsInItsOwnThread(t *testing.T) {
 
 func TestATaskOfAMissingProjectLeavesTheErrorInItsRun(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t))
-	task := schedule.Task{UserID: "u1", Project: "no-existe", Name: "suelta", At: "09:00", Prompt: "hola"}
+	user := apptest.User(t, service)
+	task := schedule.Task{UserID: user.ID, Project: "no-existe", Name: "suelta", At: "09:00", Prompt: "hola"}
 	if err := service.Schedule.Add(t.Context(), task); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	run, err := service.Agenda.RunNow(t.Context(), "u1", "no-existe", "suelta")
+	run, err := service.Agenda.RunNow(t.Context(), user.ID, "no-existe", "suelta")
 	if err != nil {
 		t.Fatalf("runNow: %v", err)
 	}
@@ -243,7 +245,7 @@ func TestAnAttachmentGoesToTheLogAndToTheWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("putUpload: %v", err)
 	}
-	if err := service.Say(t.Context(), conversation.ID, "miralo", []string{upload.ID}); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "miralo", []string{upload.ID}); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	apptest.Wait(t, service, conversation.ID)
@@ -270,7 +272,7 @@ func TestAnAttachmentGoesToTheLogAndToTheWorkspace(t *testing.T) {
 func TestAMessageWithNoWordsAndNoFilesIsEmpty(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t))
 	conversation := apptest.Thread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "  ", nil); err != app.ErrEmpty {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "  ", nil); err != app.ErrEmpty {
 		t.Fatalf("un mensaje vacío dio %v", err)
 	}
 }
@@ -290,7 +292,7 @@ func TestTheAgentShowsAFileInTheThread(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(service.Workspace, "grafico.png"), image, 0o644); err != nil {
 		t.Fatalf("no pude escribir el archivo: %v", err)
 	}
-	if err := service.Say(t.Context(), conversation.ID, "mostrame el gráfico", nil); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "mostrame el gráfico", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	apptest.Wait(t, service, conversation.ID)
@@ -325,7 +327,7 @@ func TestTheAgentCannotShowWhatIsNotThere(t *testing.T) {
 			`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
 		}))
 	conversation := apptest.Thread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "mostrame lo que no hay", nil); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "mostrame lo que no hay", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	apptest.Wait(t, service, conversation.ID)

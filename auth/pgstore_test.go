@@ -91,6 +91,21 @@ func TestTheFirstLoginCreatesTheUserAndTheSecondFindsIt(t *testing.T) {
 	}
 }
 
+func TestTheUserIsFoundByTheIdTheRestOfGoddardKeeps(t *testing.T) {
+	store := testStore(t)
+	user := signIn(t, store)
+	found, ok, err := store.ByID(t.Context(), user.ID)
+	if err != nil {
+		t.Fatalf("byID: %v", err)
+	}
+	if !ok || found.Email != user.Email || found.Name != user.Name {
+		t.Fatalf("por id quedó %+v", found)
+	}
+	if _, ok, err := store.ByID(t.Context(), "no-existe"); err != nil || ok {
+		t.Fatalf("un id que no existe contestó %v (%v)", ok, err)
+	}
+}
+
 func TestALoginLinkWorksOnce(t *testing.T) {
 	store := testStore(t)
 	link, err := store.CreateLogin(t.Context(), "berti@ejemplo.com", LoginTTL)

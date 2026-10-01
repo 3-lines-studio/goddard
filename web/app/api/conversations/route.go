@@ -36,7 +36,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ese proyecto no existe", http.StatusBadRequest)
 		return
 	}
-	conversation, err := service.Chat.CreateConversation(r.Context(), body.Project, body.Title, "", user.Email)
+	conversation, err := service.Chat.CreateConversation(r.Context(), body.Project, body.Title, "", user.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

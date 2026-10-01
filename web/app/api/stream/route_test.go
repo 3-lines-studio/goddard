@@ -27,7 +27,7 @@ func TestStreamSendsTheLogAsEvents(t *testing.T) {
 	}))
 	cookie := apptest.Session(t, service, "berti@ejemplo.com")
 	conversation := apptest.Thread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "qué tal", nil); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "qué tal", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	apptest.Wait(t, service, conversation.ID)

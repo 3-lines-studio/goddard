@@ -215,8 +215,12 @@ Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a
 comma separated list; empty means anybody, which is a goddard of one.
 
+Who a turn is for comes from the session and not from the environment: the id
+the database minted is what the skills, the agenda and the memory keep, and the
+email is only how somebody comes in and can change.
+
 To run it: `DATABASE_URL` and `OPENAI_API_KEY`, plus `GODDARD_BASE`,
-`GODDARD_MODEL`, `GODDARD_WORKSPACE`, `GODDARD_USER`, `GODDARD_ORG` and
+`GODDARD_MODEL`, `GODDARD_WORKSPACE`, `GODDARD_ORG` and
 `GODDARD_ALLOWED_EMAILS` when the defaults do not fit. The link goes out
 through Resend with `RESEND_API_KEY` and `GODDARD_WEB_FROM`; without a key the
 link comes back in the response instead of in an email, which is how it is used

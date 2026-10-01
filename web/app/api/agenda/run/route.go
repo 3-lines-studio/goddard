@@ -23,7 +23,8 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	var body request
@@ -31,13 +32,12 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer la tarea", http.StatusBadRequest)
 		return
 	}
-	if _, err := service.Schedule.Get(r.Context(), service.Viewer.User, body.Project, body.Name); err != nil {
+	if _, err := service.Schedule.Get(r.Context(), user.ID, body.Project, body.Name); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	user := service.Viewer.User
 	go func() {
-		if _, err := service.Agenda.RunNow(context.Background(), user, body.Project, body.Name); err != nil {
+		if _, err := service.Agenda.RunNow(context.Background(), user.ID, body.Project, body.Name); err != nil {
 			log.Printf("goddard: la corrida de %q no salió: %v", body.Name, err)
 		}
 	}()

@@ -20,7 +20,8 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	var body request
@@ -29,14 +30,14 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		if err := service.Schedule.MarkAllRead(r.Context(), service.Viewer.User); err != nil {
+		if err := service.Schedule.MarkAllRead(r.Context(), user.ID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if err := service.Schedule.MarkRead(r.Context(), service.Viewer.User, body.Project, body.Name); err != nil {
+	if err := service.Schedule.MarkRead(r.Context(), user.ID, body.Project, body.Name); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}

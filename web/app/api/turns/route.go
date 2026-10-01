@@ -20,7 +20,8 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	var body request
@@ -28,7 +29,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer el mensaje", http.StatusBadRequest)
 		return
 	}
-	err := service.Say(r.Context(), body.Conversation, body.Text, body.Uploads)
+	err := service.Say(r.Context(), body.Conversation, user, body.Text, body.Uploads)
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusAccepted)

@@ -78,7 +78,7 @@ func TestPostCutsTheTurnThatIsRunning(t *testing.T) {
 	service := apptest.Route(t, server)
 	cookie := apptest.Session(t, service, "berti@ejemplo.com")
 	conversation := apptest.Thread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "contame algo largo", nil); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "contame algo largo", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	<-started
@@ -91,7 +91,7 @@ func TestPostCutsATurnThatHasNotStartedYet(t *testing.T) {
 	service := apptest.Route(t, server)
 	cookie := apptest.Session(t, service, "berti@ejemplo.com")
 	conversation := apptest.Thread(t, service)
-	if err := service.Say(t.Context(), conversation.ID, "contame algo largo", nil); err != nil {
+	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "contame algo largo", nil); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	stoppedRun(t, server, cookie, conversation.ID)
