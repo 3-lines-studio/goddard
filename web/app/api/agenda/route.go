@@ -49,7 +49,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	entries, err := service.Schedule.ListAll(r.Context(), user.ID)
+	entries, err := service.Schedule.ListAll(r.Context(), service.AgendaOf(r.Context(), user))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -98,7 +98,7 @@ func Patch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer la tarea", http.StatusBadRequest)
 		return
 	}
-	if err := service.Schedule.Pause(r.Context(), user.ID, body.Project, body.Name, body.Paused); err != nil {
+	if err := service.Schedule.Pause(r.Context(), service.AgendaOf(r.Context(), user), body.Project, body.Name, body.Paused); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -116,7 +116,7 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := r.URL.Query()
-	if err := service.Schedule.Remove(r.Context(), user.ID, query.Get("project"), query.Get("name")); err != nil {
+	if err := service.Schedule.Remove(r.Context(), service.AgendaOf(r.Context(), user), query.Get("project"), query.Get("name")); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}

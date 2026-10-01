@@ -1,11 +1,13 @@
 package run
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/web/app"
 	"github.com/3-lines-studio/goddard/web/app/apptest"
@@ -13,11 +15,12 @@ import (
 
 // corrida espera la corrida de la tarea: la ruta la deja corriendo y contesta,
 // así que lo que hay que mirar es el log.
-func corrida(t *testing.T, service *app.Service, userID string) schedule.Entry {
+func corrida(t *testing.T, service *app.Service, user auth.User) schedule.Entry {
 	t.Helper()
+	agenda := service.AgendaOf(context.Background(), user)
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		entry, err := service.Schedule.Get(t.Context(), userID, "goddard", "reporte")
+		entry, err := service.Schedule.Get(t.Context(), agenda, "goddard", "reporte")
 		if err == nil && len(entry.Runs) > 0 {
 			return entry
 		}
@@ -44,7 +47,7 @@ func TestPostLeavesTheTaskRunningAndTheRunIsInItsLog(t *testing.T) {
 	user := apptest.User(t, service)
 	cookie := apptest.Session(t, service, "berti@ejemplo.com")
 	apptest.Thread(t, service)
-	task := schedule.Task{UserID: user.ID, Project: "goddard", Name: "reporte", At: "09:00", Paused: true, Prompt: "reportá"}
+	task := schedule.Task{Owner: schedule.Owner{Kind: schedule.KindUser, ID: user.ID}, Project: "goddard", Name: "reporte", At: "09:00", Paused: true, Prompt: "reportá"}
 	if err := service.Schedule.Add(t.Context(), task); err != nil {
 		t.Fatalf("no pude sembrar la tarea: %v", err)
 	}
@@ -56,7 +59,7 @@ func TestPostLeavesTheTaskRunningAndTheRunIsInItsLog(t *testing.T) {
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("contestar %d: %s", recorder.Code, apptest.Text(t, recorder))
 	}
-	entry := corrida(t, service, user.ID)
+	entry := corrida(t, service, user)
 	if !entry.Runs[0].OK || entry.Runs[0].Text != "el repo está limpio" {
 		t.Fatalf("el run quedó %+v", entry.Runs[0])
 	}

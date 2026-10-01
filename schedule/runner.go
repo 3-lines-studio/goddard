@@ -73,8 +73,8 @@ func (s *Service) Once(ctx context.Context, clock Clock) error {
 
 // RunNow runs a task with no wait, the way the run button of the web does. It
 // runs it even if it already ran: it was asked for.
-func (s *Service) RunNow(ctx context.Context, userID, project, name string) (Run, error) {
-	entry, err := s.store.Get(ctx, userID, project, name)
+func (s *Service) RunNow(ctx context.Context, viewer Viewer, project, name string) (Run, error) {
+	entry, err := s.store.Get(ctx, viewer, project, name)
 	if err != nil {
 		return Run{}, err
 	}

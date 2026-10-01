@@ -30,14 +30,14 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Name == "" {
-		if err := service.Schedule.MarkAllRead(r.Context(), user.ID); err != nil {
+		if err := service.Schedule.MarkAllRead(r.Context(), service.AgendaOf(r.Context(), user)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if err := service.Schedule.MarkRead(r.Context(), user.ID, body.Project, body.Name); err != nil {
+	if err := service.Schedule.MarkRead(r.Context(), service.AgendaOf(r.Context(), user), body.Project, body.Name); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}

@@ -9,7 +9,7 @@ import (
 // texto afuera.
 func TestLaToolAgendaYLee(t *testing.T) {
 	store, _ := testStore(t)
-	tool := Tool(store, "berti", "goddard")
+	tool := Tool(store, deBerti(), Owner{Kind: KindUser, ID: "berti"}, "goddard")
 
 	got := tool.Run(`{"action":"add","name":"recordatorio-tests","at":"15:00","prompt":"Avisá que corra los tests"}`, nil)
 	if got.Text != "guardada: recordatorio-tests · todos los días 15:00" {
@@ -56,7 +56,7 @@ func TestLaToolMuestraDeQuienEsLaAgenda(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := Tool(store, "ana", "goddard").Run(`{"action":"list"}`, nil)
+	got := Tool(store, Viewer{User: "ana"}, Owner{Kind: KindUser, ID: "ana"}, "goddard").Run(`{"action":"list"}`, nil)
 	if got.Text != "no hay tareas" {
 		t.Fatalf("ana vio la agenda de otro: %q", got.Text)
 	}
@@ -73,13 +73,13 @@ func TestLaToolMuestraLaUltimaCorrida(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := Tool(store, "berti", "goddard").Run(`{"action":"list"}`, nil)
+	got := Tool(store, deBerti(), Owner{Kind: KindUser, ID: "berti"}, "goddard").Run(`{"action":"list"}`, nil)
 	want := "daily · todos los días 09:00\n  última 2026-09-14 · ok · listo, sin novedades"
 	if got.Text != want {
 		t.Fatalf("list quedó %q", got.Text)
 	}
 
-	got = Tool(store, "berti", "goddard").Run(`{"action":"show","name":"daily"}`, nil)
+	got = Tool(store, deBerti(), Owner{Kind: KindUser, ID: "berti"}, "goddard").Run(`{"action":"show","name":"daily"}`, nil)
 	if !strings.HasPrefix(got.Text, "daily · todos los días 09:00\nprompt: hacé algo\ncorridas:\n 2026-09-14 · ok · ") {
 		t.Fatalf("show quedó %q", got.Text)
 	}
@@ -97,7 +97,7 @@ func TestElListNoSeLlevaLaAgendaPuesta(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := Tool(store, "berti", "goddard").Run(`{"action":"list"}`, nil)
+	got := Tool(store, deBerti(), Owner{Kind: KindUser, ID: "berti"}, "goddard").Run(`{"action":"list"}`, nil)
 	linea := strings.Split(got.Text, "\n")[1]
 	if !strings.HasSuffix(linea, "…") {
 		t.Fatalf("la corrida larga quedó sin cortar: %q", linea)
@@ -109,7 +109,7 @@ func TestElListNoSeLlevaLaAgendaPuesta(t *testing.T) {
 
 func TestLaToolDiceQueSalióMal(t *testing.T) {
 	store, _ := testStore(t)
-	tool := Tool(store, "berti", "goddard")
+	tool := Tool(store, deBerti(), Owner{Kind: KindUser, ID: "berti"}, "goddard")
 	for _, raw := range []string{
 		`{"action":"nope"}`,
 		`{"action":"show"}`,

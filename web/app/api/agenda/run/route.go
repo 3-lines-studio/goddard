@@ -32,12 +32,13 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer la tarea", http.StatusBadRequest)
 		return
 	}
-	if _, err := service.Schedule.Get(r.Context(), user.ID, body.Project, body.Name); err != nil {
+	agenda := service.AgendaOf(r.Context(), user)
+	if _, err := service.Schedule.Get(r.Context(), agenda, body.Project, body.Name); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	go func() {
-		if _, err := service.Agenda.RunNow(context.Background(), user.ID, body.Project, body.Name); err != nil {
+		if _, err := service.Agenda.RunNow(context.Background(), agenda, body.Project, body.Name); err != nil {
 			log.Printf("goddard: la corrida de %q no salió: %v", body.Name, err)
 		}
 	}()

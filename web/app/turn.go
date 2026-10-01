@@ -43,6 +43,12 @@ var (
 // it: the skills it sees, the agenda it writes and the name in the prompt are
 // that person's.
 func (s *Service) Say(ctx context.Context, conversationID string, user auth.User, text string, uploads []string) error {
+	return s.say(ctx, conversationID, s.whoOf(ctx, user), text, uploads)
+}
+
+// say is the same turn for whoever it runs as, which is a person from the web
+// and a person or an organization from the agenda.
+func (s *Service) say(ctx context.Context, conversationID string, actor who, text string, uploads []string) error {
 	conversation, ok, err := s.Chat.Conversation(ctx, conversationID)
 	if err != nil {
 		return err
@@ -50,7 +56,7 @@ func (s *Service) Say(ctx context.Context, conversationID string, user auth.User
 	if !ok {
 		return ErrNoConversation
 	}
-	if err := s.authorize(ctx, user, conversation); err != nil {
+	if err := s.authorize(ctx, actor.viewer, conversation); err != nil {
 		return err
 	}
 	if conversation.Source != chat.SourceWeb {
@@ -85,16 +91,52 @@ func (s *Service) Say(ctx context.Context, conversationID string, user auth.User
 	s.Stops.add(conversationID, cancel)
 	go func() {
 		defer s.Stops.drop(conversationID)
-		_, _ = s.answer(turn, conversation, project, user, messageOf(text, files))
+		_, _ = s.answer(turn, conversation, project, actor, messageOf(text, files))
 	}()
 	return nil
 }
 
+// who is who a turn runs as: the skills and the agenda it sees, and the name
+// the prompt is told about. A turn of the web is a person; one of the agenda
+// can be an organization, which has no email and no name of its own.
+type who struct {
+	viewer skill.Viewer
+	name   string
+}
+
+// whoOf is a person: the skills of their organizations and their own, and the
+// name they came in with.
+func (s *Service) whoOf(ctx context.Context, user auth.User) who {
+	return who{viewer: s.Viewer(ctx, user), name: user.Name}
+}
+
+// whoOfOrg is an organization: the skills of the team, and the name of the
+// organization in the prompt.
+func (s *Service) whoOfOrg(ctx context.Context, orgID string) who {
+	name := "la organización " + orgID
+	if one, ok, err := s.Orgs.Org(ctx, orgID); err == nil && ok {
+		name = one.Name
+	}
+	return who{viewer: skill.Viewer{Orgs: []string{orgID}}, name: name}
+}
+
+// userOf is a person by the id the database minted.
+func (s *Service) userOf(ctx context.Context, id string) (auth.User, error) {
+	user, ok, err := s.Auth.ByID(ctx, id)
+	if err != nil {
+		return auth.User{}, err
+	}
+	if !ok {
+		return auth.User{}, fmt.Errorf("el usuario %q no existe", id)
+	}
+	return user, nil
+}
+
 // scopeOf is the memory a turn reads and writes: the general facts of the
 // person asking, and the ones of the project, which belong to whoever owns it.
-func (s *Service) scopeOf(project chat.Project, user auth.User) memo.Scope {
+func (s *Service) scopeOf(project chat.Project, userID string) memo.Scope {
 	return memo.Scope{
-		User:    memo.Owner{Kind: memo.KindUser, ID: user.ID},
+		User:    memo.Owner{Kind: memo.KindUser, ID: userID},
 		Project: memo.Owner{Kind: project.Owner.Kind, ID: project.Owner.ID},
 		Slug:    project.Slug,
 	}
@@ -105,7 +147,7 @@ func (s *Service) scopeOf(project chat.Project, user auth.User) memo.Scope {
 // which is how the page ends up showing what the prompt shows.
 func (s *Service) Scope(ctx context.Context, user auth.User, slug string) (memo.Scope, bool) {
 	if slug == "" {
-		return s.scopeOf(chat.Project{}, user), true
+		return s.scopeOf(chat.Project{}, user.ID), true
 	}
 	projects, err := s.Chat.Projects(ctx, chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, s.viewerOrgs(ctx, user.ID))
 	if err != nil {
@@ -114,7 +156,7 @@ func (s *Service) Scope(ctx context.Context, user auth.User, slug string) (memo.
 	}
 	for _, project := range projects {
 		if project.Slug == slug {
-			return s.scopeOf(project, user), true
+			return s.scopeOf(project, user.ID), true
 		}
 	}
 	return memo.Scope{}, false
@@ -144,6 +186,12 @@ func (s *Service) viewerOrgs(ctx context.Context, userID string) []string {
 	return ids
 }
 
+// AgendaOf is who is asking for the agenda: the person and the organizations
+// they are in, so the tasks of a shared project are in the same list.
+func (s *Service) AgendaOf(ctx context.Context, user auth.User) schedule.Viewer {
+	return schedule.Viewer{User: user.ID, Orgs: s.viewerOrgs(ctx, user.ID)}
+}
+
 // OrgsOf is the ids of the organizations this user is in, or nothing when it
 // goes wrong: a project of an organization nobody can read is worse than an
 // empty list.
@@ -162,8 +210,8 @@ func (s *Service) OrgsOf(ctx context.Context, userID string) ([]string, error) {
 // authorize is who may use a conversation: whoever created it, or anybody in
 // the organization its project belongs to. It runs before anything is written,
 // so what it refuses never reaches the log.
-func (s *Service) authorize(ctx context.Context, user auth.User, conversation chat.Conversation) error {
-	if conversation.CreatedBy == user.ID {
+func (s *Service) authorize(ctx context.Context, viewer skill.Viewer, conversation chat.Conversation) error {
+	if conversation.CreatedBy == viewer.User {
 		return nil
 	}
 	project, ok, err := s.Chat.Project(ctx, conversation.ProjectID)
@@ -174,7 +222,7 @@ func (s *Service) authorize(ctx context.Context, user auth.User, conversation ch
 		return ErrNotYours
 	}
 	if project.Owner.Kind == chat.OwnerOrg {
-		_, in, err := s.Orgs.Role(ctx, project.Owner.ID, user.ID)
+		_, in, err := s.Orgs.Role(ctx, project.Owner.ID, viewer.User)
 		if err != nil {
 			return err
 		}
@@ -248,7 +296,7 @@ func first(files []attached) string {
 // answer runs one turn and leaves it written in the log. It returns what the
 // agent said, which is what a task of the agenda is after. The request that
 // asked for a turn is long gone by then, so the context is the caller's.
-func (s *Service) answer(ctx context.Context, conversation chat.Conversation, project chat.Project, user auth.User, text string) (string, error) {
+func (s *Service) answer(ctx context.Context, conversation chat.Conversation, project chat.Project, actor who, text string) (string, error) {
 	defer func() {
 		if err := s.Chat.Release(context.WithoutCancel(ctx), conversation.ID); err != nil {
 			log.Printf("goddard: no pude soltar %s: %v", conversation.ID, err)
@@ -269,10 +317,10 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, pr
 	messages := axe.DropIncompleteToolCalls(axe.ContextMessages(entries))
 	messages = append(messages, axe.Message{Role: "user", Content: text})
 	machine := s.machine(project)
-	tools := s.tools(ctx, project, conversation.ID, machine, user)
+	tools := s.tools(project, conversation.ID, machine, actor)
 	options := &axe.RunOptions{
 		Model:    s.Model,
-		System:   s.system(ctx, tools, conversation, project, machine, user),
+		System:   s.system(ctx, tools, conversation, project, actor),
 		Tools:    tools,
 		MaxTurns: math.MaxInt,
 	}
@@ -317,22 +365,24 @@ func (s *Service) write(ctx context.Context, conversationID string, event map[st
 // tools is what the agent can do: the harness' own, plus the memory, the
 // skills and the agenda of the project this conversation belongs to, and the
 // way to show a file in this thread.
-func (s *Service) tools(ctx context.Context, project chat.Project, conversationID string, machine axe.Machine, user auth.User) []axe.Tool {
+func (s *Service) tools(project chat.Project, conversationID string, machine axe.Machine, actor who) []axe.Tool {
 	tools := axe.BuildToolsOn(machine)
-	tools = append(tools, memo.Tool(s.Memo, s.scopeOf(project, user)), skill.Tool(s.Skill, s.Viewer(ctx, user)), schedule.Tool(s.Schedule, user.ID, project.Slug), s.sendTool(conversationID, machine))
+	owner := schedule.Owner{Kind: project.Owner.Kind, ID: project.Owner.ID}
+	agenda := schedule.Viewer{User: actor.viewer.User, Orgs: actor.viewer.Orgs}
+	tools = append(tools, memo.Tool(s.Memo, s.scopeOf(project, actor.viewer.User)), skill.Tool(s.Skill, actor.viewer), schedule.Tool(s.Schedule, agenda, owner, project.Slug), s.sendTool(conversationID, machine))
 	return tools
 }
 
 // system is the prompt: what the harness says about its tools, the fragments
 // of goddard, the memory of the project and where this turn is running.
-func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project chat.Project, machine axe.Machine, user auth.User) string {
+func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project chat.Project, actor who) string {
 	out := axe.SystemPrompt(tools)
-	skills, err := s.Skill.Index(ctx, s.Viewer(ctx, user))
+	skills, err := s.Skill.Index(ctx, actor.viewer)
 	if err != nil {
 		log.Printf("goddard: no pude leer las skills: %v", err)
 	}
 	fragments, err := prompt.Assemble(s.Language, s.Spec, []fs.FS{prompt.Builtin}, []prompt.Var{
-		{Name: "usuario", Value: user.Name},
+		{Name: "usuario", Value: actor.name},
 		{Name: "asistente", Value: s.Assistant},
 		{Name: "skills", Value: skills},
 	})
@@ -341,7 +391,7 @@ func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation cha
 		return out + "\n" + s.context(conversation, project)
 	}
 	out += "\n\n" + fragments
-	memory, err := s.Memo.Render(ctx, s.scopeOf(project, user))
+	memory, err := s.Memo.Render(ctx, s.scopeOf(project, actor.viewer.User))
 	if err != nil {
 		log.Printf("goddard: no pude leer la memoria: %v", err)
 	}

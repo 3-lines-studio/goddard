@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/3-lines-studio/goddard/migrations"
@@ -57,12 +58,17 @@ func testStore(t *testing.T) (*PgStore, *sql.DB) {
 
 func unaTarea(name string) Task {
 	return Task{
-		UserID:  "berti",
+		Owner:   Owner{Kind: KindUser, ID: "berti"},
 		Project: "goddard",
 		Name:    name,
 		At:      "09:00",
 		Prompt:  "hacé algo",
 	}
+}
+
+// deBerti es la agenda que ve una persona: la suya y la de nadie más.
+func deBerti() Viewer {
+	return Viewer{User: "berti"}
 }
 
 func clk(now int64, date, clock string) Clock {
@@ -79,9 +85,9 @@ func corridasDe(t *testing.T, db *sql.DB, task Task, cantidad int) {
 	t.Helper()
 	for index := 0; index < cantidad; index++ {
 		_, err := db.ExecContext(t.Context(),
-			`INSERT INTO schedule.runs (user_id, project, name, run_ts, run_date, ms, ok, body)
-			 VALUES ($1, $2, $3, $4, $5, 10, true, 'ok')`,
-			task.UserID, task.Project, task.Name, int64(900+index), "2026-09-14")
+			`INSERT INTO schedule.runs (owner_kind, owner_id, project, name, run_ts, run_date, ms, ok, body)
+			 VALUES ($1, $2, $3, $4, $5, $6, 10, true, 'ok')`,
+			task.Owner.Kind, task.Owner.ID, task.Project, task.Name, int64(900+index), "2026-09-14")
 		if err != nil {
 			t.Fatalf("no pude sembrar una corrida de %q: %v", task.Name, err)
 		}
@@ -102,7 +108,7 @@ func TestAddYListDanLaMismaTarea(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +144,7 @@ func TestAddReemplazaLaTarea(t *testing.T) {
 	if rows != 1 {
 		t.Fatalf("quedaron %d filas", rows)
 	}
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,14 +160,19 @@ func TestCadaQuienVeSuAgenda(t *testing.T) {
 	if err := store.Add(ctx, unaTarea("de-berti")); err != nil {
 		t.Fatal(err)
 	}
-	compartida := unaTarea("del-proyecto")
-	compartida.UserID = ""
-	if err := store.Add(ctx, compartida); err != nil {
+	delProyecto := unaTarea("del-proyecto")
+	delProyecto.Owner = Owner{}
+	if err := store.Add(ctx, delProyecto); err != nil {
 		t.Fatal(err)
 	}
-	otra := unaTarea("de-ana")
-	otra.UserID = "ana"
-	if err := store.Add(ctx, otra); err != nil {
+	deAna := unaTarea("de-ana")
+	deAna.Owner = Owner{Kind: KindUser, ID: "ana"}
+	if err := store.Add(ctx, deAna); err != nil {
+		t.Fatal(err)
+	}
+	deLaOrg := unaTarea("de-la-org")
+	deLaOrg.Owner = Owner{Kind: KindOrg, ID: "acme"}
+	if err := store.Add(ctx, deLaOrg); err != nil {
 		t.Fatal(err)
 	}
 	otroProyecto := unaTarea("de-otro-proyecto")
@@ -170,18 +181,31 @@ func TestCadaQuienVeSuAgenda(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := store.List(ctx, "berti", "goddard")
+	names := []string{}
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
-	names := []string{}
 	for _, entry := range entries {
 		names = append(names, entry.Task.Name)
 	}
-	if len(names) != 1 || names[0] != "de-berti" {
+	if !slices.Equal(names, []string{"de-berti", "del-proyecto"}) {
 		t.Fatalf("la agenda de berti trajo %v", names)
 	}
-	entries, err = store.List(ctx, "", "goddard")
+
+	names = []string{}
+	entries, err = store.List(ctx, Viewer{User: "berta", Orgs: []string{"acme"}}, "goddard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		names = append(names, entry.Task.Name)
+	}
+	if !slices.Equal(names, []string{"de-la-org", "del-proyecto"}) {
+		t.Fatalf("la agenda de un miembro de la org trajo %v", names)
+	}
+
+	entries, err = store.List(ctx, Viewer{}, "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,14 +225,14 @@ func TestListAllTraeTodosLosProyectos(t *testing.T) {
 		}
 	}
 
-	entries, err := store.ListAll(ctx, "berti")
+	entries, err := store.ListAll(ctx, deBerti())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 2 || entries[0].Task.Project != "goddard" || entries[1].Task.Project != "picsel" {
 		t.Fatalf("la agenda quedó %+v", entries)
 	}
-	ajena, err := store.ListAll(ctx, "otro")
+	ajena, err := store.ListAll(ctx, Viewer{User: "otro"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +250,7 @@ func TestLoQueNadieLeyoEsLoUltimo(t *testing.T) {
 	}
 	corridasDe(t, db, task, 3)
 
-	entry, err := store.Get(ctx, "berti", "goddard", "memoria")
+	entry, err := store.Get(ctx, deBerti(), "goddard", "memoria")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,10 +258,10 @@ func TestLoQueNadieLeyoEsLoUltimo(t *testing.T) {
 		t.Fatalf("dijo %d sin leer", entry.Unread)
 	}
 
-	if err := store.MarkRead(ctx, "berti", "goddard", "memoria"); err != nil {
+	if err := store.MarkRead(ctx, deBerti(), "goddard", "memoria"); err != nil {
 		t.Fatal(err)
 	}
-	entry, err = store.Get(ctx, "berti", "goddard", "memoria")
+	entry, err = store.Get(ctx, deBerti(), "goddard", "memoria")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,14 +272,14 @@ func TestLoQueNadieLeyoEsLoUltimo(t *testing.T) {
 	if err := store.Finish(ctx, task, Run{TS: 9_999, Date: "2026-09-14", MS: 1, OK: true, Text: "nueva"}); err != nil {
 		t.Fatal(err)
 	}
-	entry, err = store.Get(ctx, "berti", "goddard", "memoria")
+	entry, err = store.Get(ctx, deBerti(), "goddard", "memoria")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if entry.Unread != 1 {
 		t.Fatalf("la corrida nueva quedó en %d", entry.Unread)
 	}
-	if err := store.MarkRead(ctx, "berti", "goddard", "fantasma"); err == nil {
+	if err := store.MarkRead(ctx, deBerti(), "goddard", "fantasma"); err == nil {
 		t.Fatal("leer una tarea que no existe tendría que fallar")
 	}
 }
@@ -271,10 +295,10 @@ func TestMarcarTodoLeido(t *testing.T) {
 		}
 		corridasDe(t, db, task, 2)
 	}
-	if err := store.MarkAllRead(ctx, "berti"); err != nil {
+	if err := store.MarkAllRead(ctx, deBerti()); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := store.ListAll(ctx, "berti")
+	entries, err := store.ListAll(ctx, deBerti())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,10 +342,10 @@ func TestPauseYRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := store.Pause(ctx, "berti", "goddard", "recordatorio-tests", true); err != nil {
+	if err := store.Pause(ctx, deBerti(), "goddard", "recordatorio-tests", true); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,21 +353,49 @@ func TestPauseYRemove(t *testing.T) {
 		t.Fatal("la tarea no quedó pausada")
 	}
 
-	if err := store.Remove(ctx, "berti", "goddard", "recordatorio-tests"); err != nil {
+	if err := store.Remove(ctx, deBerti(), "goddard", "recordatorio-tests"); err != nil {
 		t.Fatal(err)
 	}
-	entries, err = store.List(ctx, "berti", "goddard")
+	entries, err = store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 0 {
 		t.Fatalf("quedaron %d tareas", len(entries))
 	}
-	if err := store.Pause(ctx, "berti", "goddard", "recordatorio-tests", true); err == nil {
+	if err := store.Pause(ctx, deBerti(), "goddard", "recordatorio-tests", true); err == nil {
 		t.Fatal("pausar lo que no existe no falló")
 	}
-	if err := store.Remove(ctx, "berti", "goddard", "recordatorio-tests"); err == nil {
+	if err := store.Remove(ctx, deBerti(), "goddard", "recordatorio-tests"); err == nil {
 		t.Fatal("borrar lo que no existe no falló")
+	}
+}
+
+func TestUnMiembroDeLaOrgEscribeLaAgendaDeLaOrg(t *testing.T) {
+	store, _ := testStore(t)
+	ctx := t.Context()
+
+	deLaOrg := unaTarea("del-equipo")
+	deLaOrg.Owner = Owner{Kind: KindOrg, ID: "acme"}
+	if err := store.Add(ctx, deLaOrg); err != nil {
+		t.Fatal(err)
+	}
+
+	berta := Viewer{User: "berta", Orgs: []string{"acme"}}
+	if err := store.Pause(ctx, berta, "goddard", "del-equipo", true); err != nil {
+		t.Fatalf("un miembro de la org no pudo pausarla: %v", err)
+	}
+	if entry, err := store.Get(ctx, berta, "goddard", "del-equipo"); err != nil || !entry.Task.Paused {
+		t.Fatalf("la tarea quedó %+v (%v)", entry.Task, err)
+	}
+	if err := store.Remove(ctx, Viewer{User: "ajeno"}, "goddard", "del-equipo"); err == nil {
+		t.Fatal("alguien de afuera la borró")
+	}
+	if err := store.Pause(ctx, berta, "goddard", "del-equipo", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Remove(ctx, berta, "goddard", "del-equipo"); err != nil {
+		t.Fatalf("un miembro de la org no pudo borrarla: %v", err)
 	}
 }
 
@@ -493,7 +545,7 @@ func TestFinishGuardaLaCorridaYPoda(t *testing.T) {
 	if err := store.Finish(ctx, task, run); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +558,7 @@ func TestFinishGuardaLaCorridaYPoda(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	entries, err = store.List(ctx, "berti", "goddard")
+	entries, err = store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +591,7 @@ func TestFinishDeUnaTareaBorradaNoDejaCorrida(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("no la reclamó: %v", entries)
 	}
-	if err := store.Remove(ctx, "berti", "goddard", "efimera"); err != nil {
+	if err := store.Remove(ctx, deBerti(), "goddard", "efimera"); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Finish(ctx, task, Run{TS: 1_000, Date: "2026-09-14", MS: 5, OK: true, Text: "tarde"}); err != nil {
