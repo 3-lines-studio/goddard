@@ -294,3 +294,30 @@ func TestParidadConElRust(t *testing.T) {
 		}
 	}
 }
+
+func TestTheShippedFragmentsTalkAboutGoddard(t *testing.T) {
+	got, err := Assemble("", Default, []fs.FS{Builtin}, []Var{
+		{"usuario", "Ana"}, {"asistente", "Jimmy"}, {"skills", "No hay ninguna instalada."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, wrong := range []string{
+		"cargo ",
+		"jimmy ",
+		"recall",
+		"memory.jsonl",
+		"state/schedule",
+		"embebe axe como librería",
+		"browse (skill",
+	} {
+		if strings.Contains(strings.ToLower(got), strings.ToLower(wrong)) {
+			t.Fatalf("el prompt sigue hablando de jimmy: %q\n%s", wrong, got)
+		}
+	}
+	for _, right := range []string{"bifrost", "Postgres", "tool `memo`", "tool `skill`", "tool `schedule`"} {
+		if !strings.Contains(got, right) {
+			t.Fatalf("el prompt no dice %q", right)
+		}
+	}
+}

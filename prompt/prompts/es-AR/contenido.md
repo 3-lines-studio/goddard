@@ -17,7 +17,7 @@ Flujo:
    `browse goto "file://$PWD/projects/contenido/build/<archivo>.html" --shot --size 1080x1080`
    (story: `1080x1920`). Para lo fotográfico, `gen-image --ref` con un asset de marca.
 6. Para un short, el método completo está en `projects/contenido/shorts/README.md`. En resumen: escribí el spec en `shorts/<slug>.json` y corré `projects/contenido/bin/render-short.sh projects/contenido/shorts/<slug>.json`. Sale un MP4 1080x1920 sin audio en `build/<slug>.mp4`.
-7. Mostrá la preview con `jimmy send` y esperá el ok antes de dar algo por final.
+7. Mostrá la preview y esperá el ok antes de dar algo por final.
 8. Asentá lo aprobado en `semanas/<año>-W<semana>.md`.
 
 El contenido de `marca/`, `assets/` y `templates/` lo provee cada instancia.
