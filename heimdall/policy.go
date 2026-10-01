@@ -75,18 +75,18 @@ func Authenticate(ctx context.Context, store *Store, user, bearer, adminToken st
 
 // ScopedRequest is the whole guard of a read: the scope has to be there and the
 // actor has to reach it.
-func (a Actor) ScopedRequest(project, env string) *StatusError {
+func (a Actor) ScopedRequest(owner Owner, project, env string) *StatusError {
 	if project == "" || env == "" {
 		return Refuse(bad("faltan project y env"))
 	}
-	return a.Allows(project, env)
+	return a.Allows(owner, project, env)
 }
 
-func (a Actor) Allows(project, env string) *StatusError {
+func (a Actor) Allows(owner Owner, project, env string) *StatusError {
 	if a.Admin {
 		return nil
 	}
-	if a.Token != nil && covers(a.Token.Project, project) && covers(a.Token.Env, env) {
+	if a.Token != nil && a.Token.Owner == owner && covers(a.Token.Project, project) && covers(a.Token.Env, env) {
 		return nil
 	}
 	return forbidden("este token no llega a ese entorno")

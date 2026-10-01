@@ -35,18 +35,18 @@ func TestARequestWithoutATokenIsRejected(t *testing.T) {
 
 func TestTheAdminWritesAndATokenReads(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev"})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "dev"})
 	actor := refusalOf(t, plain, store)
 	if actor.Admin || actor.Name != "agente" || actor.Token == nil {
 		t.Fatalf("quedó %v", actor)
 	}
-	if refusal := actor.ScopedRequest("bifrost", "dev"); refusal != nil {
+	if refusal := actor.ScopedRequest(testOwner, "bifrost", "dev"); refusal != nil {
 		t.Fatalf("no llegó: %d %s", refusal.Status, refusal.Message)
 	}
-	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -69,9 +69,9 @@ func TestTheAdminWritesAndATokenReads(t *testing.T) {
 
 func TestATokenDoesNotReachAnotherEnvironment(t *testing.T) {
 	store := testStore(t)
-	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev"})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "dev"})
 	actor := refusalOf(t, plain, store)
-	refusal := actor.Allows("bifrost", "prod")
+	refusal := actor.Allows(testOwner, "bifrost", "prod")
 	if refusal == nil {
 		t.Fatal("llegó a producción")
 	}
@@ -82,15 +82,15 @@ func TestATokenDoesNotReachAnotherEnvironment(t *testing.T) {
 
 func TestATokenWithKeysOnlySeesThose(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.Set(t.Context(), "bifrost", "dev", "B", "2", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "B", "2", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev", Keys: []string{"A"}})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "dev", Keys: []string{"A"}})
 	actor := refusalOf(t, plain, store)
-	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -115,12 +115,12 @@ func TestATokenWithKeysOnlySeesThose(t *testing.T) {
 
 func TestATokenWithoutKeysSeesTheWholeEnvironment(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev"})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "dev"})
 	actor := refusalOf(t, plain, store)
-	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestATokenWithoutKeysSeesTheWholeEnvironment(t *testing.T) {
 
 func TestATokenCannotWriteOrAdministrate(t *testing.T) {
 	store := testStore(t)
-	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev"})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "dev"})
 	actor := refusalOf(t, plain, store)
 	refusal := actor.AllowsAdmin()
 	if refusal == nil {
@@ -147,7 +147,7 @@ func TestATokenCannotWriteOrAdministrate(t *testing.T) {
 
 func TestAnAdminTokenAdministrates(t *testing.T) {
 	store := testStore(t)
-	_, plain := mint(t, store, NewToken{Name: "jimmy", Role: RoleAdmin})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "jimmy", Role: RoleAdmin})
 	actor := refusalOf(t, plain, store)
 	if !actor.Admin || actor.Name != "jimmy" || actor.Token != nil {
 		t.Fatalf("quedó %v", actor)
@@ -155,7 +155,7 @@ func TestAnAdminTokenAdministrates(t *testing.T) {
 	if refusal := actor.AllowsAdmin(); refusal != nil {
 		t.Fatalf("no pudo administrar: %s", refusal.Message)
 	}
-	if refusal := actor.Allows("axe", "prod"); refusal != nil {
+	if refusal := actor.Allows(testOwner, "axe", "prod"); refusal != nil {
 		t.Fatalf("no llegó: %s", refusal.Message)
 	}
 }
@@ -163,7 +163,7 @@ func TestAnAdminTokenAdministrates(t *testing.T) {
 func TestAnExpiredTokenIsA401(t *testing.T) {
 	store := testStore(t)
 	expired := int64(-1)
-	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev", TTL: &expired})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "dev", TTL: &expired})
 	_, refusal := Authenticate(t.Context(), store, "", plain, "hd_admin")
 	if refusal == nil {
 		t.Fatal("el token vencido entró")
@@ -200,7 +200,7 @@ func TestTheUserTheAppResolvedEnters(t *testing.T) {
 
 func TestAUsedTokenIsMarkedAsUsed(t *testing.T) {
 	store := testStore(t)
-	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "dev"})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "dev"})
 	refusalOf(t, plain, store)
 	tokens, err := store.Tokens(t.Context())
 	if err != nil {
@@ -213,26 +213,26 @@ func TestAUsedTokenIsMarkedAsUsed(t *testing.T) {
 
 func TestAWildcardTokenReachesEveryProjectInItsEnvironment(t *testing.T) {
 	store := testStore(t)
-	_, plain := mint(t, store, NewToken{Name: "runner", Project: "*", Env: "dev"})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "runner", Project: "*", Env: "dev"})
 	actor := refusalOf(t, plain, store)
 	for _, project := range []string{"bifrost", "axe", "picsel"} {
-		if refusal := actor.Allows(project, "dev"); refusal != nil {
+		if refusal := actor.Allows(testOwner, project, "dev"); refusal != nil {
 			t.Fatalf("no llegó a %s/dev: %s", project, refusal.Message)
 		}
 	}
-	if refusal := actor.Allows("bifrost", "prod"); refusal == nil {
+	if refusal := actor.Allows(testOwner, "bifrost", "prod"); refusal == nil {
 		t.Fatal("el comodín llegó a producción")
 	}
 }
 
 func TestAWildcardInTheEnvironmentStaysInsideItsProject(t *testing.T) {
 	store := testStore(t)
-	_, plain := mint(t, store, NewToken{Name: "agente", Project: "bifrost", Env: "*"})
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "*"})
 	actor := refusalOf(t, plain, store)
-	if refusal := actor.Allows("bifrost", "prod"); refusal != nil {
+	if refusal := actor.Allows(testOwner, "bifrost", "prod"); refusal != nil {
 		t.Fatalf("no llegó a bifrost/prod: %s", refusal.Message)
 	}
-	if refusal := actor.Allows("axe", "dev"); refusal == nil {
+	if refusal := actor.Allows(testOwner, "axe", "dev"); refusal == nil {
 		t.Fatal("se fue a otro proyecto")
 	}
 }
@@ -242,14 +242,14 @@ func TestScopedRequestRejectsAnEmptyScope(t *testing.T) {
 	if refusal != nil {
 		t.Fatalf("no entró el admin: %s", refusal.Message)
 	}
-	refusal = actor.ScopedRequest("", "dev")
+	refusal = actor.ScopedRequest(testOwner, "", "dev")
 	if refusal == nil {
 		t.Fatal("leyó sin proyecto")
 	}
 	if refusal.Status != 400 || refusal.Message != "faltan project y env" {
 		t.Fatalf("dio %d %s", refusal.Status, refusal.Message)
 	}
-	if refusal := actor.ScopedRequest("bifrost", "dev"); refusal != nil {
+	if refusal := actor.ScopedRequest(testOwner, "bifrost", "dev"); refusal != nil {
 		t.Fatalf("el admin no pudo leer: %s", refusal.Message)
 	}
 }
@@ -265,5 +265,21 @@ func TestRefuseMapsWhatTheStoreReturned(t *testing.T) {
 	}
 	if refusal.Cause == nil || refusal.Cause.Error() != "disco lleno" {
 		t.Fatalf("perdió la causa: %v", refusal.Cause)
+	}
+}
+
+func TestATokenDoesNotReachAnotherOwner(t *testing.T) {
+	store := testStore(t)
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	_, plain := mint(t, store, NewToken{Owner: testOwner, Name: "agente", Project: "bifrost", Env: "dev"})
+	actor := refusalOf(t, plain, store)
+
+	if refusal := actor.Allows(testOwner, "bifrost", "dev"); refusal != nil {
+		t.Fatalf("el token no llegó a lo suyo: %d %s", refusal.Status, refusal.Message)
+	}
+	if refusal := actor.Allows(Org("otra"), "bifrost", "dev"); refusal == nil {
+		t.Fatal("el token llegó al proyecto de otro dueño")
 	}
 }

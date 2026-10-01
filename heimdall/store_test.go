@@ -55,13 +55,15 @@ func testStore(t *testing.T) *Store {
 	return NewStore(testDB(t), testKey(t))
 }
 
+var testOwner = Org("acme")
+
 func storeAt(t *testing.T, path string) *Store {
 	t.Helper()
 	return testStore(t)
 }
 
 func newToken(name, project, env string) NewToken {
-	return NewToken{Name: name, Project: project, Env: env}
+	return NewToken{Owner: testOwner, Name: name, Project: project, Env: env}
 }
 
 func agent(t *testing.T, store *Store) string {
@@ -75,7 +77,7 @@ func agent(t *testing.T, store *Store) string {
 
 func names(t *testing.T, store *Store) []string {
 	t.Helper()
-	got, err := store.Names(t.Context())
+	got, err := store.Names(t.Context(), testOwner)
 	if err != nil {
 		t.Fatalf("names: %v", err)
 	}
@@ -114,11 +116,11 @@ func storedText(t *testing.T, store *Store, query string) string {
 
 func TestASecretSurvivesAReopen(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "STRIPE_KEY", "sk_test_123", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "STRIPE_KEY", "sk_test_123", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	reopened := NewStore(store.db, testKey(t))
-	secrets, err := reopened.Secrets(t.Context(), "bifrost", "dev")
+	secrets, err := reopened.Secrets(t.Context(), testOwner, "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -129,7 +131,7 @@ func TestASecretSurvivesAReopen(t *testing.T) {
 
 func TestTheValueNeverLandsInClear(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "DB_PASSWORD", "hunter2", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "DB_PASSWORD", "hunter2", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	raw := storedValue(t, store, "bifrost", "dev", "DB_PASSWORD")
@@ -147,7 +149,7 @@ func TestEnvironmentsAndProjectsDoNotMix(t *testing.T) {
 		{"bifrost", "prod", "2"},
 		{"axe", "dev", "3"},
 	} {
-		if err := store.Set(t.Context(), caso.project, caso.env, "A", caso.value, "berti"); err != nil {
+		if err := store.Set(t.Context(), testOwner, caso.project, caso.env, "A", caso.value, "berti"); err != nil {
 			t.Fatalf("set: %v", err)
 		}
 	}
@@ -158,7 +160,7 @@ func TestEnvironmentsAndProjectsDoNotMix(t *testing.T) {
 		{"bifrost", "prod", "2"},
 		{"axe", "dev", "3"},
 	} {
-		secrets, err := store.Secrets(t.Context(), caso.project, caso.env)
+		secrets, err := store.Secrets(t.Context(), testOwner, caso.project, caso.env)
 		if err != nil {
 			t.Fatalf("secrets: %v", err)
 		}
@@ -179,14 +181,14 @@ func TestBadNamesAreRejected(t *testing.T) {
 		{"bifrost", "dev", "1ABC"},
 	}
 	for _, caso := range casos {
-		if err := store.Set(t.Context(), caso.project, caso.env, caso.name, "1", "berti"); err == nil {
+		if err := store.Set(t.Context(), testOwner, caso.project, caso.env, caso.name, "1", "berti"); err == nil {
 			t.Fatalf("aceptó %s/%s/%s", caso.project, caso.env, caso.name)
 		}
 	}
 }
 
 func TestMissingSecretsAreAnEmptyMap(t *testing.T) {
-	secrets, err := testStore(t).Secrets(t.Context(), "bifrost", "prod")
+	secrets, err := testStore(t).Secrets(t.Context(), testOwner, "bifrost", "prod")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -197,27 +199,27 @@ func TestMissingSecretsAreAnEmptyMap(t *testing.T) {
 
 func TestARemovedKeyIsNoLongerThere(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.Unset(t.Context(), "bifrost", "dev", "A", "berti"); err != nil {
+	if err := store.Unset(t.Context(), testOwner, "bifrost", "dev", "A", "berti"); err != nil {
 		t.Fatalf("unset: %v", err)
 	}
-	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
 	if len(secrets) != 0 {
 		t.Fatalf("quedó %v", secrets)
 	}
-	if err := store.Unset(t.Context(), "bifrost", "dev", "A", "berti"); err == nil {
+	if err := store.Unset(t.Context(), testOwner, "bifrost", "dev", "A", "berti"); err == nil {
 		t.Fatal("sacó dos veces la misma clave")
 	}
 }
 
 func TestAFailedUnsetLeavesNoAuditRow(t *testing.T) {
 	store := testStore(t)
-	if err := store.Unset(t.Context(), "bifrost", "dev", "A", "berti"); err == nil {
+	if err := store.Unset(t.Context(), testOwner, "bifrost", "dev", "A", "berti"); err == nil {
 		t.Fatal("sacó algo que no estaba")
 	}
 	log, err := store.AuditLog(t.Context(), 10)
@@ -357,7 +359,7 @@ func TestAUsedTokenSaysSo(t *testing.T) {
 
 func TestTheAuditRecordsNoValues(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "DB_PASSWORD", "hunter2", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "DB_PASSWORD", "hunter2", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	log, err := store.AuditLog(t.Context(), 10)
@@ -378,7 +380,7 @@ func TestTheAuditRecordsNoValues(t *testing.T) {
 func TestTheAuditIsNewestFirstAndCapped(t *testing.T) {
 	store := testStore(t)
 	for _, name := range []string{"A", "B", "C"} {
-		if err := store.Set(t.Context(), "bifrost", "dev", name, "1", "berti"); err != nil {
+		if err := store.Set(t.Context(), testOwner, "bifrost", "dev", name, "1", "berti"); err != nil {
 			t.Fatalf("set: %v", err)
 		}
 	}
@@ -401,7 +403,7 @@ func TestNamesListsWhatExists(t *testing.T) {
 		{"bifrost", "prod"},
 		{"axe", "dev"},
 	} {
-		if err := store.Set(t.Context(), caso.project, caso.env, "A", "1", "berti"); err != nil {
+		if err := store.Set(t.Context(), testOwner, caso.project, caso.env, "A", "1", "berti"); err != nil {
 			t.Fatalf("set: %v", err)
 		}
 	}
@@ -413,13 +415,13 @@ func TestNamesListsWhatExists(t *testing.T) {
 
 func TestAnEnvironmentCanExistBeforeItsFirstSecret(t *testing.T) {
 	store := testStore(t)
-	if err := store.CreateEnvironment(t.Context(), "bifrost", "dev", "berti"); err != nil {
+	if err := store.CreateEnvironment(t.Context(), testOwner, "bifrost", "dev", "berti"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if got := names(t, store); !reflect.DeepEqual(got, []string{"bifrost/dev"}) {
 		t.Fatalf("got %v", got)
 	}
-	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -430,10 +432,10 @@ func TestAnEnvironmentCanExistBeforeItsFirstSecret(t *testing.T) {
 
 func TestTheListingAlsoShowsWhatWasThereBeforeTheTable(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "axe", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "axe", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.CreateEnvironment(t.Context(), "bifrost", "dev", "berti"); err != nil {
+	if err := store.CreateEnvironment(t.Context(), testOwner, "bifrost", "dev", "berti"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	want := []string{"axe/dev", "bifrost/dev"}
@@ -444,26 +446,26 @@ func TestTheListingAlsoShowsWhatWasThereBeforeTheTable(t *testing.T) {
 
 func TestDroppingAnEnvironmentTakesItsSecrets(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.Set(t.Context(), "bifrost", "prod", "A", "2", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "prod", "A", "2", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.DropEnvironment(t.Context(), "bifrost", "dev", "berti"); err != nil {
+	if err := store.DropEnvironment(t.Context(), testOwner, "bifrost", "dev", "berti"); err != nil {
 		t.Fatalf("drop: %v", err)
 	}
 	if got := names(t, store); !reflect.DeepEqual(got, []string{"bifrost/prod"}) {
 		t.Fatalf("got %v", got)
 	}
-	secrets, err := store.Secrets(t.Context(), "bifrost", "dev")
+	secrets, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
 	if len(secrets) != 0 {
 		t.Fatalf("quedó %v", secrets)
 	}
-	kept, err := store.Secrets(t.Context(), "bifrost", "prod")
+	kept, err := store.Secrets(t.Context(), testOwner, "bifrost", "prod")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -474,16 +476,16 @@ func TestDroppingAnEnvironmentTakesItsSecrets(t *testing.T) {
 
 func TestDroppingAnEmptyEnvironmentWorksToo(t *testing.T) {
 	store := testStore(t)
-	if err := store.CreateEnvironment(t.Context(), "bifrost", "dev", "berti"); err != nil {
+	if err := store.CreateEnvironment(t.Context(), testOwner, "bifrost", "dev", "berti"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := store.DropEnvironment(t.Context(), "bifrost", "dev", "berti"); err != nil {
+	if err := store.DropEnvironment(t.Context(), testOwner, "bifrost", "dev", "berti"); err != nil {
 		t.Fatalf("drop: %v", err)
 	}
 	if got := names(t, store); len(got) != 0 {
 		t.Fatalf("quedó %v", got)
 	}
-	if err := store.DropEnvironment(t.Context(), "bifrost", "dev", "berti"); err == nil {
+	if err := store.DropEnvironment(t.Context(), testOwner, "bifrost", "dev", "berti"); err == nil {
 		t.Fatal("sacó un entorno que ya no estaba")
 	}
 }
@@ -495,31 +497,31 @@ func TestDroppingAProjectTakesEverything(t *testing.T) {
 		{"bifrost", "prod", "2"},
 		{"axe", "dev", "3"},
 	} {
-		if err := store.Set(t.Context(), caso.project, caso.env, "A", caso.value, "berti"); err != nil {
+		if err := store.Set(t.Context(), testOwner, caso.project, caso.env, "A", caso.value, "berti"); err != nil {
 			t.Fatalf("set: %v", err)
 		}
 	}
-	if err := store.DropProject(t.Context(), "bifrost", "berti"); err != nil {
+	if err := store.DropProject(t.Context(), testOwner, "bifrost", "berti"); err != nil {
 		t.Fatalf("drop: %v", err)
 	}
 	if got := names(t, store); !reflect.DeepEqual(got, []string{"axe/dev"}) {
 		t.Fatalf("got %v", got)
 	}
-	if err := store.DropProject(t.Context(), "bifrost", "berti"); err == nil {
+	if err := store.DropProject(t.Context(), testOwner, "bifrost", "berti"); err == nil {
 		t.Fatal("sacó un proyecto que ya no estaba")
 	}
 }
 
 func TestDroppingAnEnvironmentTakesItsTokens(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	_, plain, err := store.CreateToken(t.Context(), newToken("agente", "bifrost", "dev"), "berti")
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
-	if err := store.DropEnvironment(t.Context(), "bifrost", "dev", "berti"); err != nil {
+	if err := store.DropEnvironment(t.Context(), testOwner, "bifrost", "dev", "berti"); err != nil {
 		t.Fatalf("drop: %v", err)
 	}
 	found, err := store.Find(t.Context(), plain)
@@ -540,7 +542,7 @@ func TestDroppingAnEnvironmentTakesItsTokens(t *testing.T) {
 
 func TestDroppingAProjectLeavesTheAdminTokensAlone(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	_, agente, err := store.CreateToken(t.Context(), newToken("agente", "bifrost", "dev"), "berti")
@@ -553,7 +555,7 @@ func TestDroppingAProjectLeavesTheAdminTokensAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
-	if err := store.DropProject(t.Context(), "bifrost", "berti"); err != nil {
+	if err := store.DropProject(t.Context(), testOwner, "bifrost", "berti"); err != nil {
 		t.Fatalf("drop: %v", err)
 	}
 	found, err := store.Find(t.Context(), plain)
@@ -574,23 +576,23 @@ func TestDroppingAProjectLeavesTheAdminTokensAlone(t *testing.T) {
 
 func TestRenamingAnEnvironmentKeepsItsValuesWorking(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "STRIPE_KEY", "sk_test_123", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "STRIPE_KEY", "sk_test_123", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.RenameEnvironment(t.Context(), "bifrost", "dev", "testing", "berti"); err != nil {
+	if err := store.RenameEnvironment(t.Context(), testOwner, "bifrost", "dev", "testing", "berti"); err != nil {
 		t.Fatalf("rename: %v", err)
 	}
 	if got := names(t, store); !reflect.DeepEqual(got, []string{"bifrost/testing"}) {
 		t.Fatalf("got %v", got)
 	}
-	secrets, err := store.Secrets(t.Context(), "bifrost", "testing")
+	secrets, err := store.Secrets(t.Context(), testOwner, "bifrost", "testing")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
 	if secrets["STRIPE_KEY"] != "sk_test_123" {
 		t.Fatalf("quedó en %q", secrets["STRIPE_KEY"])
 	}
-	old, err := store.Secrets(t.Context(), "bifrost", "dev")
+	old, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -601,16 +603,16 @@ func TestRenamingAnEnvironmentKeepsItsValuesWorking(t *testing.T) {
 
 func TestRenamingAnEnvironmentIntoATakenOneIsRefused(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.Set(t.Context(), "bifrost", "prod", "A", "2", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "prod", "A", "2", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.RenameEnvironment(t.Context(), "bifrost", "dev", "prod", "berti"); err == nil {
+	if err := store.RenameEnvironment(t.Context(), testOwner, "bifrost", "dev", "prod", "berti"); err == nil {
 		t.Fatal("pisó un entorno que ya existía")
 	}
-	secrets, err := store.Secrets(t.Context(), "bifrost", "prod")
+	secrets, err := store.Secrets(t.Context(), testOwner, "bifrost", "prod")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -621,24 +623,24 @@ func TestRenamingAnEnvironmentIntoATakenOneIsRefused(t *testing.T) {
 
 func TestRenamingAProjectKeepsEveryValueWorking(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.Set(t.Context(), "bifrost", "prod", "B", "2", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "prod", "B", "2", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.RenameProject(t.Context(), "bifrost", "puente", "berti"); err != nil {
+	if err := store.RenameProject(t.Context(), testOwner, "bifrost", "puente", "berti"); err != nil {
 		t.Fatalf("rename: %v", err)
 	}
 	want := []string{"puente/dev", "puente/prod"}
 	if got := names(t, store); !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v want %v", got, want)
 	}
-	dev, err := store.Secrets(t.Context(), "puente", "dev")
+	dev, err := store.Secrets(t.Context(), testOwner, "puente", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
-	prod, err := store.Secrets(t.Context(), "puente", "prod")
+	prod, err := store.Secrets(t.Context(), testOwner, "puente", "prod")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -649,16 +651,16 @@ func TestRenamingAProjectKeepsEveryValueWorking(t *testing.T) {
 
 func TestRenamingAProjectOntoAnotherIsRefused(t *testing.T) {
 	store := testStore(t)
-	if err := store.Set(t.Context(), "bifrost", "dev", "A", "1", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "A", "1", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.Set(t.Context(), "axe", "dev", "A", "2", "berti"); err != nil {
+	if err := store.Set(t.Context(), testOwner, "axe", "dev", "A", "2", "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if err := store.RenameProject(t.Context(), "bifrost", "axe", "berti"); err == nil {
+	if err := store.RenameProject(t.Context(), testOwner, "bifrost", "axe", "berti"); err == nil {
 		t.Fatal("pisó un proyecto que ya existía")
 	}
-	secrets, err := store.Secrets(t.Context(), "axe", "dev")
+	secrets, err := store.Secrets(t.Context(), testOwner, "axe", "dev")
 	if err != nil {
 		t.Fatalf("secrets: %v", err)
 	}
@@ -668,14 +670,14 @@ func TestRenamingAProjectOntoAnotherIsRefused(t *testing.T) {
 }
 
 func TestRenamingAnEmptyProjectIsRefused(t *testing.T) {
-	if err := testStore(t).RenameProject(t.Context(), "nada", "otro", "berti"); err == nil {
+	if err := testStore(t).RenameProject(t.Context(), testOwner, "nada", "otro", "berti"); err == nil {
 		t.Fatal("renombró un proyecto que no existe")
 	}
 }
 
 func TestTheWildcardIsAllowedInATokenScope(t *testing.T) {
 	store := testStore(t)
-	_, plain, err := store.CreateToken(t.Context(), NewToken{Name: "jimmy", Project: "*", Env: "dev"}, "berti")
+	_, plain, err := store.CreateToken(t.Context(), NewToken{Owner: testOwner, Name: "jimmy", Project: "*", Env: "dev"}, "berti")
 	if err != nil {
 		t.Fatalf("token: %v", err)
 	}
@@ -686,7 +688,49 @@ func TestTheWildcardIsAllowedInATokenScope(t *testing.T) {
 	if token.Project != "*" || token.Env != "dev" {
 		t.Fatalf("quedó %s/%s", token.Project, token.Env)
 	}
-	if _, _, err := store.CreateToken(t.Context(), NewToken{Name: "jimmy", Project: "*", Env: "*"}, "berti"); err != nil {
+	if _, _, err := store.CreateToken(t.Context(), NewToken{Owner: testOwner, Name: "jimmy", Project: "*", Env: "*"}, "berti"); err != nil {
 		t.Fatalf("token: %v", err)
+	}
+}
+
+func TestTwoOwnersDoNotSeeTheSameProject(t *testing.T) {
+	store := testStore(t)
+	other := Org("otra")
+	if err := store.Set(t.Context(), testOwner, "bifrost", "dev", "STRIPE_KEY", "sk_test_123", "berti"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if err := store.Set(t.Context(), other, "bifrost", "dev", "STRIPE_KEY", "sk_test_999", "otro"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	mine, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
+	if err != nil {
+		t.Fatalf("secrets: %v", err)
+	}
+	theirs, err := store.Secrets(t.Context(), other, "bifrost", "dev")
+	if err != nil {
+		t.Fatalf("secrets: %v", err)
+	}
+	if mine["STRIPE_KEY"] != "sk_test_123" || theirs["STRIPE_KEY"] != "sk_test_999" {
+		t.Fatalf("se cruzaron: %v y %v", mine, theirs)
+	}
+
+	names, err := store.Names(t.Context(), other)
+	if err != nil {
+		t.Fatalf("names: %v", err)
+	}
+	if len(names) != 1 || names[0] != "bifrost/dev" {
+		t.Fatalf("los nombres del otro quedaron %v", names)
+	}
+
+	if err := store.DropProject(t.Context(), other, "bifrost", "otro"); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	kept, err := store.Secrets(t.Context(), testOwner, "bifrost", "dev")
+	if err != nil {
+		t.Fatalf("secrets: %v", err)
+	}
+	if kept["STRIPE_KEY"] != "sk_test_123" {
+		t.Fatalf("el drop del otro se llevó lo mío: %v", kept)
 	}
 }

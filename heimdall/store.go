@@ -14,7 +14,7 @@ import (
 
 const MaxValue = 64 * 1024
 
-const tokenColumns = "id, name, project, env, keys, role, created_at, expires_at, last_used"
+const tokenColumns = "id, name, owner_kind, owner_id, project, env, keys, role, created_at, expires_at, last_used"
 
 const (
 	RoleAgent = "agent"
@@ -48,6 +48,7 @@ func internal(message string) error {
 type Token struct {
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
+	Owner     Owner    `json:"owner"`
 	Project   string   `json:"project"`
 	Env       string   `json:"env"`
 	Keys      []string `json:"keys"`
@@ -59,6 +60,7 @@ type Token struct {
 
 type NewToken struct {
 	Name    string
+	Owner   Owner
 	Project string
 	Env     string
 	Keys    []string
@@ -69,6 +71,7 @@ type NewToken struct {
 type AuditRow struct {
 	At      int64   `json:"at"`
 	Actor   string  `json:"actor"`
+	Owner   Owner   `json:"owner"`
 	Action  string  `json:"action"`
 	Project string  `json:"project"`
 	Env     string  `json:"env"`
@@ -92,11 +95,14 @@ func (s *Store) Close() error {
 
 // Names is what was declared plus what already has secrets: the environments
 // that existed before there was a table still show up, with nothing migrated.
-func (s *Store) Names(ctx context.Context) ([]string, error) {
-	return s.namesOf(ctx, s.db)
+func (s *Store) Names(ctx context.Context, owner Owner) ([]string, error) {
+	return s.namesOf(ctx, s.db, owner)
 }
 
-func (s *Store) CreateEnvironment(ctx context.Context, project, env, actor string) error {
+func (s *Store) CreateEnvironment(ctx context.Context, owner Owner, project, env, actor string) error {
+	if err := owner.check(); err != nil {
+		return err
+	}
 	if err := slug(project); err != nil {
 		return err
 	}
@@ -105,62 +111,62 @@ func (s *Store) CreateEnvironment(ctx context.Context, project, env, actor strin
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
-			"INSERT INTO heimdall.environments (project, env, created_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-			project, env, now())
+			"INSERT INTO heimdall.environments (owner_kind, owner_id, project, env, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+			owner.Kind, owner.ID, project, env, now())
 		if err != nil {
 			return internal(err.Error())
 		}
-		return audit(ctx, tx, actor, "env-create", project, env, nil)
+		return audit(ctx, tx, owner, actor, "env-create", project, env, nil)
 	})
 }
 
 // DropEnvironment takes the tokens that pointed at the environment with it:
 // they make no sense over something that stopped existing.
-func (s *Store) DropEnvironment(ctx context.Context, project, env, actor string) error {
+func (s *Store) DropEnvironment(ctx context.Context, owner Owner, project, env, actor string) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
-		secrets, err := tx.ExecContext(ctx, "DELETE FROM heimdall.secrets WHERE project = $1 AND env = $2", project, env)
+		secrets, err := tx.ExecContext(ctx, "DELETE FROM heimdall.secrets WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND env = $4", owner.Kind, owner.ID, project, env)
 		if err != nil {
 			return internal(err.Error())
 		}
-		declared, err := tx.ExecContext(ctx, "DELETE FROM heimdall.environments WHERE project = $1 AND env = $2", project, env)
+		declared, err := tx.ExecContext(ctx, "DELETE FROM heimdall.environments WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND env = $4", owner.Kind, owner.ID, project, env)
 		if err != nil {
 			return internal(err.Error())
 		}
-		tokens, err := tx.ExecContext(ctx, "DELETE FROM heimdall.tokens WHERE project = $1 AND env = $2", project, env)
+		tokens, err := tx.ExecContext(ctx, "DELETE FROM heimdall.tokens WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND env = $4", owner.Kind, owner.ID, project, env)
 		if err != nil {
 			return internal(err.Error())
 		}
 		if count(secrets)+count(declared)+count(tokens) == 0 {
 			return bad(fmt.Sprintf("%s/%s no existe", project, env))
 		}
-		return audit(ctx, tx, actor, "env-drop", project, env, nil)
+		return audit(ctx, tx, owner, actor, "env-drop", project, env, nil)
 	})
 }
 
-func (s *Store) DropProject(ctx context.Context, project, actor string) error {
+func (s *Store) DropProject(ctx context.Context, owner Owner, project, actor string) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
-		secrets, err := tx.ExecContext(ctx, "DELETE FROM heimdall.secrets WHERE project = $1", project)
+		secrets, err := tx.ExecContext(ctx, "DELETE FROM heimdall.secrets WHERE owner_kind = $1 AND owner_id = $2 AND project = $3", owner.Kind, owner.ID, project)
 		if err != nil {
 			return internal(err.Error())
 		}
-		declared, err := tx.ExecContext(ctx, "DELETE FROM heimdall.environments WHERE project = $1", project)
+		declared, err := tx.ExecContext(ctx, "DELETE FROM heimdall.environments WHERE owner_kind = $1 AND owner_id = $2 AND project = $3", owner.Kind, owner.ID, project)
 		if err != nil {
 			return internal(err.Error())
 		}
-		tokens, err := tx.ExecContext(ctx, "DELETE FROM heimdall.tokens WHERE project = $1", project)
+		tokens, err := tx.ExecContext(ctx, "DELETE FROM heimdall.tokens WHERE owner_kind = $1 AND owner_id = $2 AND project = $3", owner.Kind, owner.ID, project)
 		if err != nil {
 			return internal(err.Error())
 		}
 		if count(secrets)+count(declared)+count(tokens) == 0 {
 			return bad(fmt.Sprintf("%s no existe", project))
 		}
-		return audit(ctx, tx, actor, "project-drop", project, "", nil)
+		return audit(ctx, tx, owner, actor, "project-drop", project, "", nil)
 	})
 }
 
 // RenameEnvironment moves the derived key and the data with it, so every value
 // is sealed again: the old box does not open under the new name.
-func (s *Store) RenameEnvironment(ctx context.Context, project, env, to, actor string) error {
+func (s *Store) RenameEnvironment(ctx context.Context, owner Owner, project, env, to, actor string) error {
 	if err := slug(to); err != nil {
 		return err
 	}
@@ -168,44 +174,44 @@ func (s *Store) RenameEnvironment(ctx context.Context, project, env, to, actor s
 		return nil
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
-		moved, err := s.secretsOf(ctx, tx, project, env)
+		moved, err := s.secretsOf(ctx, tx, owner, project, env)
 		if err != nil {
 			return err
 		}
-		taken, err := s.secretsOf(ctx, tx, project, to)
+		taken, err := s.secretsOf(ctx, tx, owner, project, to)
 		if err != nil {
 			return err
 		}
 		if len(taken) > 0 {
 			return bad(fmt.Sprintf("%s/%s ya tiene secretos", project, to))
 		}
-		subkey := s.key.Derive(secretContext(project, to))
+		subkey := s.key.Derive(secretContext(owner, project, to))
 		for name, value := range moved {
-			sealed, err := subkey.Seal([]byte(value), []byte(aad(project, to, name)))
+			sealed, err := subkey.Seal([]byte(value), []byte(aad(owner, project, to, name)))
 			if err != nil {
 				return internal(err.Error())
 			}
 			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO heimdall.secrets (project, env, name, value, updated_at) VALUES ($1, $2, $3, $4, $5)",
-				project, to, name, sealed, now(),
+				"INSERT INTO heimdall.secrets (owner_kind, owner_id, project, env, name, value, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+				owner.Kind, owner.ID, project, to, name, sealed, now(),
 			); err != nil {
 				return internal(err.Error())
 			}
 		}
-		if _, err := tx.ExecContext(ctx, "DELETE FROM heimdall.secrets WHERE project = $1 AND env = $2", project, env); err != nil {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM heimdall.secrets WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND env = $4", owner.Kind, owner.ID, project, env); err != nil {
 			return internal(err.Error())
 		}
-		if _, err := tx.ExecContext(ctx, "DELETE FROM heimdall.environments WHERE project = $1 AND env = $2", project, to); err != nil {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM heimdall.environments WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND env = $4", owner.Kind, owner.ID, project, to); err != nil {
 			return internal(err.Error())
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE heimdall.environments SET env = $1 WHERE project = $2 AND env = $3", to, project, env); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE heimdall.environments SET env = $1 WHERE owner_kind = $2 AND owner_id = $3 AND project = $4 AND env = $5", to, owner.Kind, owner.ID, project, env); err != nil {
 			return internal(err.Error())
 		}
-		return audit(ctx, tx, actor, "env-rename", project, to, &env)
+		return audit(ctx, tx, owner, actor, "env-rename", project, to, &env)
 	})
 }
 
-func (s *Store) RenameProject(ctx context.Context, project, to, actor string) error {
+func (s *Store) RenameProject(ctx context.Context, owner Owner, project, to, actor string) error {
 	if err := slug(to); err != nil {
 		return err
 	}
@@ -213,7 +219,7 @@ func (s *Store) RenameProject(ctx context.Context, project, to, actor string) er
 		return nil
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
-		names, err := s.namesOf(ctx, tx)
+		names, err := s.namesOf(ctx, tx, owner)
 		if err != nil {
 			return err
 		}
@@ -222,9 +228,9 @@ func (s *Store) RenameProject(ctx context.Context, project, to, actor string) er
 				return bad(fmt.Sprintf("%s ya existe", to))
 			}
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT env FROM heimdall.environments WHERE project = $1
+		rows, err := tx.QueryContext(ctx, `SELECT env FROM heimdall.environments WHERE owner_kind = $1 AND owner_id = $2 AND project = $3
              UNION
-             SELECT DISTINCT env FROM heimdall.secrets WHERE project = $1`, project)
+             SELECT DISTINCT env FROM heimdall.secrets WHERE owner_kind = $1 AND owner_id = $2 AND project = $3`, owner.Kind, owner.ID, project)
 		if err != nil {
 			return internal(err.Error())
 		}
@@ -245,42 +251,42 @@ func (s *Store) RenameProject(ctx context.Context, project, to, actor string) er
 			return bad(fmt.Sprintf("%s no existe", project))
 		}
 		for _, env := range envs {
-			held, err := s.secretsOf(ctx, tx, project, env)
+			held, err := s.secretsOf(ctx, tx, owner, project, env)
 			if err != nil {
 				return err
 			}
-			subkey := s.key.Derive(secretContext(to, env))
+			subkey := s.key.Derive(secretContext(owner, to, env))
 			for name, value := range held {
-				sealed, err := subkey.Seal([]byte(value), []byte(aad(to, env, name)))
+				sealed, err := subkey.Seal([]byte(value), []byte(aad(owner, to, env, name)))
 				if err != nil {
 					return internal(err.Error())
 				}
 				if _, err := tx.ExecContext(ctx,
-					"INSERT INTO heimdall.secrets (project, env, name, value, updated_at) VALUES ($1, $2, $3, $4, $5)",
-					to, env, name, sealed, now(),
+					"INSERT INTO heimdall.secrets (owner_kind, owner_id, project, env, name, value, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+					owner.Kind, owner.ID, to, env, name, sealed, now(),
 				); err != nil {
 					return internal(err.Error())
 				}
 			}
 		}
-		if _, err := tx.ExecContext(ctx, "DELETE FROM heimdall.secrets WHERE project = $1", project); err != nil {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM heimdall.secrets WHERE owner_kind = $1 AND owner_id = $2 AND project = $3", owner.Kind, owner.ID, project); err != nil {
 			return internal(err.Error())
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE heimdall.environments SET project = $1 WHERE project = $2", to, project); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE heimdall.environments SET project = $1 WHERE owner_kind = $2 AND owner_id = $3 AND project = $4", to, owner.Kind, owner.ID, project); err != nil {
 			return internal(err.Error())
 		}
-		return audit(ctx, tx, actor, "project-rename", to, "", &project)
+		return audit(ctx, tx, owner, actor, "project-rename", to, "", &project)
 	})
 }
 
-func (s *Store) Secrets(ctx context.Context, project, env string) (map[string]string, error) {
-	return s.secretsOf(ctx, s.db, project, env)
+func (s *Store) Secrets(ctx context.Context, owner Owner, project, env string) (map[string]string, error) {
+	return s.secretsOf(ctx, s.db, owner, project, env)
 }
 
-func (s *Store) secretsOf(ctx context.Context, db querier, project, env string) (map[string]string, error) {
-	subkey := s.key.Derive(secretContext(project, env))
+func (s *Store) secretsOf(ctx context.Context, db querier, owner Owner, project, env string) (map[string]string, error) {
+	subkey := s.key.Derive(secretContext(owner, project, env))
 	rows, err := db.QueryContext(ctx,
-		"SELECT name, value FROM heimdall.secrets WHERE project = $1 AND env = $2", project, env)
+		"SELECT name, value FROM heimdall.secrets WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND env = $4", owner.Kind, owner.ID, project, env)
 	if err != nil {
 		return nil, internal(err.Error())
 	}
@@ -292,7 +298,7 @@ func (s *Store) secretsOf(ctx context.Context, db querier, project, env string) 
 		if err := rows.Scan(&name, &value); err != nil {
 			return nil, internal(err.Error())
 		}
-		plain, err := subkey.Open(value, []byte(aad(project, env, name)))
+		plain, err := subkey.Open(value, []byte(aad(owner, project, env, name)))
 		if err != nil {
 			return nil, internal(err.Error())
 		}
@@ -304,7 +310,10 @@ func (s *Store) secretsOf(ctx context.Context, db querier, project, env string) 
 	return secrets, rows.Err()
 }
 
-func (s *Store) Set(ctx context.Context, project, env, name, value, actor string) error {
+func (s *Store) Set(ctx context.Context, owner Owner, project, env, name, value, actor string) error {
+	if err := owner.check(); err != nil {
+		return err
+	}
 	if err := slug(project); err != nil {
 		return err
 	}
@@ -317,33 +326,33 @@ func (s *Store) Set(ctx context.Context, project, env, name, value, actor string
 	if len(value) > MaxValue {
 		return bad(fmt.Sprintf("el valor pasa los %d bytes", MaxValue))
 	}
-	sealed, err := s.key.Derive(secretContext(project, env)).Seal([]byte(value), []byte(aad(project, env, name)))
+	sealed, err := s.key.Derive(secretContext(owner, project, env)).Seal([]byte(value), []byte(aad(owner, project, env, name)))
 	if err != nil {
 		return internal(err.Error())
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO heimdall.secrets (project, env, name, value, updated_at) VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (project, env, name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-			project, env, name, sealed, now(),
+			`INSERT INTO heimdall.secrets (owner_kind, owner_id, project, env, name, value, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (owner_kind, owner_id, project, env, name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+			owner.Kind, owner.ID, project, env, name, sealed, now(),
 		); err != nil {
 			return internal(err.Error())
 		}
-		return audit(ctx, tx, actor, "set", project, env, &name)
+		return audit(ctx, tx, owner, actor, "set", project, env, &name)
 	})
 }
 
-func (s *Store) Unset(ctx context.Context, project, env, name, actor string) error {
+func (s *Store) Unset(ctx context.Context, owner Owner, project, env, name, actor string) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
 		removed, err := tx.ExecContext(ctx,
-			"DELETE FROM heimdall.secrets WHERE project = $1 AND env = $2 AND name = $3", project, env, name)
+			"DELETE FROM heimdall.secrets WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND env = $4 AND name = $5", owner.Kind, owner.ID, project, env, name)
 		if err != nil {
 			return internal(err.Error())
 		}
 		if count(removed) == 0 {
 			return bad(fmt.Sprintf("%s no está en %s/%s", name, project, env))
 		}
-		return audit(ctx, tx, actor, "unset", project, env, &name)
+		return audit(ctx, tx, owner, actor, "unset", project, env, &name)
 	})
 }
 
@@ -380,6 +389,9 @@ func (s *Store) CreateToken(ctx context.Context, new NewToken, actor string) (To
 	if strings.TrimSpace(new.Name) == "" {
 		return Token{}, "", bad("el token necesita un nombre")
 	}
+	if err := new.Owner.check(); err != nil {
+		return Token{}, "", err
+	}
 	plain, err := RandomHex(24)
 	if err != nil {
 		return Token{}, "", internal(err.Error())
@@ -391,6 +403,7 @@ func (s *Store) CreateToken(ctx context.Context, new NewToken, actor string) (To
 	token := Token{
 		ID:        id,
 		Name:      new.Name,
+		Owner:     new.Owner,
 		Project:   new.Project,
 		Env:       new.Env,
 		Keys:      new.Keys,
@@ -412,13 +425,13 @@ func (s *Store) CreateToken(ctx context.Context, new NewToken, actor string) (To
 	plain = "hd_" + plain
 	err = s.write(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO heimdall.tokens (id, name, project, env, keys, hash, role, created_at, expires_at, last_used)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL)`,
-			token.ID, token.Name, token.Project, token.Env, keys, Hash(plain), token.Role, token.CreatedAt, token.ExpiresAt,
+			`INSERT INTO heimdall.tokens (id, name, owner_kind, owner_id, project, env, keys, hash, role, created_at, expires_at, last_used)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL)`,
+			token.ID, token.Name, token.Owner.Kind, token.Owner.ID, token.Project, token.Env, keys, Hash(plain), token.Role, token.CreatedAt, token.ExpiresAt,
 		); err != nil {
 			return internal(err.Error())
 		}
-		return audit(ctx, tx, actor, "token-create", token.Project, token.Env, &token.Name)
+		return audit(ctx, tx, token.Owner, actor, "token-create", token.Project, token.Env, &token.Name)
 	})
 	if err != nil {
 		return Token{}, "", err
@@ -446,7 +459,7 @@ func (s *Store) Revoke(ctx context.Context, id, actor string) (Token, error) {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM heimdall.tokens WHERE id = $1", id); err != nil {
 			return internal(err.Error())
 		}
-		return audit(ctx, tx, actor, "token-revoke", token.Project, token.Env, &token.Name)
+		return audit(ctx, tx, token.Owner, actor, "token-revoke", token.Project, token.Env, &token.Name)
 	})
 	if err != nil {
 		return Token{}, err
@@ -484,13 +497,13 @@ func (s *Store) Touch(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *Store) Audit(ctx context.Context, actor, action, project, env string, name *string) error {
-	return audit(ctx, s.db, actor, action, project, env, name)
+func (s *Store) Audit(ctx context.Context, owner Owner, actor, action, project, env string, name *string) error {
+	return audit(ctx, s.db, owner, actor, action, project, env, name)
 }
 
 func (s *Store) AuditLog(ctx context.Context, limit int) ([]AuditRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT at, actor, action, project, env, name FROM heimdall.audit ORDER BY seq DESC LIMIT $1", limit)
+		"SELECT at, actor, owner_kind, owner_id, action, project, env, name FROM heimdall.audit ORDER BY seq DESC LIMIT $1", limit)
 	if err != nil {
 		return nil, internal(err.Error())
 	}
@@ -498,7 +511,7 @@ func (s *Store) AuditLog(ctx context.Context, limit int) ([]AuditRow, error) {
 	log := []AuditRow{}
 	for rows.Next() {
 		var row AuditRow
-		if err := rows.Scan(&row.At, &row.Actor, &row.Action, &row.Project, &row.Env, &row.Key); err != nil {
+		if err := rows.Scan(&row.At, &row.Actor, &row.Owner.Kind, &row.Owner.ID, &row.Action, &row.Project, &row.Env, &row.Key); err != nil {
 			return nil, internal(err.Error())
 		}
 		log = append(log, row)
@@ -506,11 +519,13 @@ func (s *Store) AuditLog(ctx context.Context, limit int) ([]AuditRow, error) {
 	return log, rows.Err()
 }
 
-func (s *Store) namesOf(ctx context.Context, db querier) ([]string, error) {
+func (s *Store) namesOf(ctx context.Context, db querier, owner Owner) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `SELECT project || '/' || env FROM heimdall.environments
+         WHERE owner_kind = $1 AND owner_id = $2
          UNION
          SELECT DISTINCT project || '/' || env FROM heimdall.secrets
-         ORDER BY 1`)
+         WHERE owner_kind = $1 AND owner_id = $2
+         ORDER BY 1`, owner.Kind, owner.ID)
 	if err != nil {
 		return nil, internal(err.Error())
 	}
@@ -550,10 +565,10 @@ type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-func audit(ctx context.Context, db querier, actor, action, project, env string, name *string) error {
+func audit(ctx context.Context, db querier, owner Owner, actor, action, project, env string, name *string) error {
 	if _, err := db.ExecContext(ctx,
-		"INSERT INTO heimdall.audit (at, actor, action, project, env, name) VALUES ($1, $2, $3, $4, $5, $6)",
-		now(), actor, action, project, env, name,
+		"INSERT INTO heimdall.audit (at, actor, owner_kind, owner_id, action, project, env, name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		now(), actor, owner.Kind, owner.ID, action, project, env, name,
 	); err != nil {
 		return internal(err.Error())
 	}
@@ -576,7 +591,7 @@ func scanToken(row interface{ Scan(...any) error }, withHash bool) (Token, strin
 	var token Token
 	var keys []byte
 	var hash string
-	targets := []any{&token.ID, &token.Name, &token.Project, &token.Env, &keys, &token.Role,
+	targets := []any{&token.ID, &token.Name, &token.Owner.Kind, &token.Owner.ID, &token.Project, &token.Env, &keys, &token.Role,
 		&token.CreatedAt, &token.ExpiresAt, &token.LastUsed}
 	if withHash {
 		targets = append(targets, &hash)
@@ -600,14 +615,14 @@ func count(result sql.Result) int64 {
 	return rows
 }
 
-func secretContext(project, env string) string {
-	return fmt.Sprintf("secrets/%s/%s", project, env)
+func secretContext(owner Owner, project, env string) string {
+	return fmt.Sprintf("secrets/%s/%s/%s", owner.String(), project, env)
 }
 
 // The sealed box carries its own name inside, so moving it to another row does
 // not turn it into another secret.
-func aad(project, env, name string) string {
-	return fmt.Sprintf("secrets/%s/%s/%s", project, env, name)
+func aad(owner Owner, project, env, name string) string {
+	return fmt.Sprintf("secrets/%s/%s/%s/%s", owner.String(), project, env, name)
 }
 
 func now() int64 {
