@@ -213,8 +213,14 @@ runs with, and the log gets a `stopped` and then its `done`. It stops between
 steps — the model's next token, the next tool — so a command already running
 finishes on its own, the way it does in axe.
 
+Every project has a directory of its own inside `GODDARD_WORKSPACE`, under the
+owner of the project and its slug — `<workspace>/<owner>/<slug>` — and that is
+where the tools of a turn run. Two people name their projects the same way, so
+the owner comes first; and two projects are two trees, so one never reads the
+files of the other.
+
 A message may carry files. They are kept in the database — any instance serves
-any conversation — and written into the workspace when the turn runs, under
+any conversation — and written into that workspace when the turn runs, under
 `files/<conversation>/`, because that is where the agent's tools look: what it
 reads is the same file the thread is showing. `POST /api/uploads` takes one and
 names it, `POST /api/turns` puts it in the message, and the log keeps a `file`

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"math"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -65,13 +66,14 @@ func (s *Service) Say(ctx context.Context, conversationID string, user auth.User
 	if !taken {
 		return ErrBusy
 	}
+	project, _ := s.projectOf(ctx, conversation)
 	if strings.TrimSpace(text) != "" {
 		if _, err := s.write(ctx, conversationID, map[string]any{"event": "user", "text": text}); err != nil {
 			_ = s.Chat.Release(ctx, conversationID)
 			return err
 		}
 	}
-	files, err := s.attach(ctx, conversation, uploads)
+	files, err := s.attach(ctx, conversation, s.machine(project), uploads)
 	if err != nil {
 		_ = s.Chat.Release(ctx, conversationID)
 		return err
@@ -83,7 +85,7 @@ func (s *Service) Say(ctx context.Context, conversationID string, user auth.User
 	s.Stops.add(conversationID, cancel)
 	go func() {
 		defer s.Stops.drop(conversationID)
-		_, _ = s.answer(turn, conversation, user, messageOf(text, files))
+		_, _ = s.answer(turn, conversation, project, user, messageOf(text, files))
 	}()
 	return nil
 }
@@ -163,7 +165,7 @@ type attached struct {
 // the conversation they belong to, and leaves them in the log. The bytes live
 // in the database, which is what any instance can serve; the workspace is
 // where the agent reads them, which is where its tools look.
-func (s *Service) attach(ctx context.Context, conversation chat.Conversation, uploads []string) ([]attached, error) {
+func (s *Service) attach(ctx context.Context, conversation chat.Conversation, machine axe.Machine, uploads []string) ([]attached, error) {
 	files := []attached{}
 	for _, id := range uploads {
 		upload, ok, err := s.Chat.Upload(ctx, id)
@@ -175,7 +177,7 @@ func (s *Service) attach(ctx context.Context, conversation chat.Conversation, up
 		}
 		name := filepath.Base(upload.Name)
 		path := filepath.Join("files", conversation.ID, name)
-		if err := s.Machine.Write(path, upload.Bytes); err != nil {
+		if err := machine.Write(path, upload.Bytes); err != nil {
 			return nil, err
 		}
 		if _, err := s.write(ctx, conversation.ID, map[string]any{
@@ -216,7 +218,7 @@ func first(files []attached) string {
 // answer runs one turn and leaves it written in the log. It returns what the
 // agent said, which is what a task of the agenda is after. The request that
 // asked for a turn is long gone by then, so the context is the caller's.
-func (s *Service) answer(ctx context.Context, conversation chat.Conversation, user auth.User, text string) (string, error) {
+func (s *Service) answer(ctx context.Context, conversation chat.Conversation, project chat.Project, user auth.User, text string) (string, error) {
 	defer func() {
 		if err := s.Chat.Release(context.WithoutCancel(ctx), conversation.ID); err != nil {
 			log.Printf("goddard: no pude soltar %s: %v", conversation.ID, err)
@@ -236,11 +238,11 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, us
 	}
 	messages := axe.DropIncompleteToolCalls(axe.ContextMessages(entries))
 	messages = append(messages, axe.Message{Role: "user", Content: text})
-	project := s.projectSlug(ctx, conversation)
-	tools := s.tools(ctx, project, conversation.ID, user)
+	machine := s.machine(project)
+	tools := s.tools(ctx, project, conversation.ID, machine, user)
 	options := &axe.RunOptions{
 		Model:    s.Model,
-		System:   s.system(ctx, tools, conversation, project, user),
+		System:   s.system(ctx, tools, conversation, project, machine, user),
 		Tools:    tools,
 		MaxTurns: math.MaxInt,
 	}
@@ -285,15 +287,15 @@ func (s *Service) write(ctx context.Context, conversationID string, event map[st
 // tools is what the agent can do: the harness' own, plus the memory, the
 // skills and the agenda of the project this conversation belongs to, and the
 // way to show a file in this thread.
-func (s *Service) tools(ctx context.Context, project, conversationID string, user auth.User) []axe.Tool {
-	tools := axe.BuildToolsOn(s.Machine)
-	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer(ctx, user)), schedule.Tool(s.Schedule, user.ID, project), s.sendTool(conversationID))
+func (s *Service) tools(ctx context.Context, project chat.Project, conversationID string, machine axe.Machine, user auth.User) []axe.Tool {
+	tools := axe.BuildToolsOn(machine)
+	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer(ctx, user)), schedule.Tool(s.Schedule, user.ID, project.Slug), s.sendTool(conversationID, machine))
 	return tools
 }
 
 // system is the prompt: what the harness says about its tools, the fragments
 // of goddard, the memory of the project and where this turn is running.
-func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project string, user auth.User) string {
+func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project chat.Project, machine axe.Machine, user auth.User) string {
 	out := axe.SystemPrompt(tools)
 	skills, err := s.Skill.Index(ctx, s.Viewer(ctx, user))
 	if err != nil {
@@ -306,22 +308,22 @@ func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation cha
 	})
 	if err != nil {
 		log.Printf("goddard: no pude armar el prompt: %v", err)
-		return out + "\n" + s.context(conversation)
+		return out + "\n" + s.context(conversation, project)
 	}
 	out += "\n\n" + fragments
-	memory, err := s.Memo.Render(ctx, project)
+	memory, err := s.Memo.Render(ctx, project.Slug)
 	if err != nil {
 		log.Printf("goddard: no pude leer la memoria: %v", err)
 	}
 	if strings.TrimSpace(memory) != "" {
 		out += "\n\n## Memoria en contexto\n\n" + memory
 	}
-	return out + "\n" + s.context(conversation)
+	return out + "\n" + s.context(conversation, project)
 }
 
-func (s *Service) context(conversation chat.Conversation) string {
+func (s *Service) context(conversation chat.Conversation, project chat.Project) string {
 	return fmt.Sprintf("## Entorno de ejecución\n- Modelo: %s\n- Workspace: %s\n- Conversación: %s\n",
-		s.Model, s.Workspace, conversation.ID)
+		s.Model, s.projectDir(project), conversation.ID)
 }
 
 // logSink turns what axe does into the events the web reads: what is worth
@@ -391,16 +393,31 @@ func titleOf(text string) string {
 	return title
 }
 
-// projectSlug is the name the rest of goddard knows the project by: the memory
-// and the agenda of a project live under it.
-func (s *Service) projectSlug(ctx context.Context, conversation chat.Conversation) string {
+// projectOf is the project a conversation belongs to.
+func (s *Service) projectOf(ctx context.Context, conversation chat.Conversation) (chat.Project, bool) {
 	project, ok, err := s.Chat.Project(ctx, conversation.ProjectID)
 	if err != nil {
 		log.Printf("goddard: no pude leer el proyecto de %s: %v", conversation.ID, err)
-		return ""
+		return chat.Project{}, false
 	}
-	if !ok {
-		return ""
+	return project, ok
+}
+
+// machine is where the tools of a turn run: the directory of the project inside
+// the root, which is the workspace of whoever owns it — a person, or an
+// organization. Everybody has their own, so one project never reads the files
+// of another. A machine that is not this host, the compute of a user, plugs in
+// here and does not change anything else.
+func (s *Service) machine(project chat.Project) axe.Machine {
+	dir := s.projectDir(project)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("goddard: no pude armar el workspace de %q: %v", project.Slug, err)
 	}
-	return project.Slug
+	return axe.NewLocal(dir)
+}
+
+// projectDir is the directory of a project: the owner, because two people name
+// their projects the same way, and the slug, which names a directory already.
+func (s *Service) projectDir(project chat.Project) string {
+	return filepath.Join(s.Workspace, project.Owner.ID, project.Slug)
 }

@@ -32,12 +32,12 @@ type sendArgs struct {
 // stores it with the attachments of the conversation and leaves a `file` event
 // in the log, which is what the thread draws. The bytes are the same ones the
 // upload route keeps, so the picture in the thread is the picture on disk.
-func (s *Service) sendTool(conversationID string) axe.Tool {
+func (s *Service) sendTool(conversationID string, machine axe.Machine) axe.Tool {
 	return axe.NewTool("send",
 		"Send a file from the workspace to this conversation: a picture shows up in the thread, anything else as a link. Use it when a screenshot or a document is the answer, and not to show what you can describe in words.",
 		sendSchema,
 		func(in sendArgs) string {
-			text, err := s.send(context.Background(), conversationID, in)
+			text, err := s.send(context.Background(), conversationID, machine, in)
 			if err != nil {
 				return "error: " + err.Error()
 			}
@@ -45,11 +45,11 @@ func (s *Service) sendTool(conversationID string) axe.Tool {
 		})
 }
 
-func (s *Service) send(ctx context.Context, conversationID string, in sendArgs) (string, error) {
+func (s *Service) send(ctx context.Context, conversationID string, machine axe.Machine, in sendArgs) (string, error) {
 	if strings.TrimSpace(in.Path) == "" {
 		return "", errors.New("decime qué archivo mandar")
 	}
-	info, err := s.Machine.Stat(in.Path)
+	info, err := machine.Stat(in.Path)
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +59,7 @@ func (s *Service) send(ctx context.Context, conversationID string, in sendArgs) 
 	if info.Size > MaxSend {
 		return "", fmt.Errorf("%s pesa %d bytes y el tope es %d", in.Path, info.Size, MaxSend)
 	}
-	bytes, err := s.Machine.Read(in.Path)
+	bytes, err := machine.Read(in.Path)
 	if err != nil {
 		return "", err
 	}
