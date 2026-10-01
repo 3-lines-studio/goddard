@@ -39,15 +39,16 @@ below.
   filesystem is a file the others cannot show. Renaming a project keeps its
   slug, and both are marked as gone instead of dropped: what happened keeps
   pointing at them.
-- `heimdall` — the secrets store: projects, environments and tokens scoped to
-  one environment and, if you want, to a list of key names, so an agent gets
-  test credentials with no path to production. Port of
+- `heimdall` — the secrets store: an owner — an organization or a user — and
+  under it the projects, the environments and the tokens scoped to one
+  environment and, if you want, to a list of key names, so an agent gets test
+  credentials with no path to production. Port of
   [heimdall](https://github.com/3-lines-studio/heimdall), on the same Postgres
   as the rest of goddard and in its own `heimdall` schema, with the schema as a
-  migration like everything else (see `migrations/`). Verified both ways: what
-  the Rust crate left in its SQLite file imports into this store with the
-  sealed values intact, and the Rust server serves a store this one wrote. The
-  command line keeps the `doppler` dialect,
+  migration like everything else (see `migrations/`). Nothing of the store that
+  came before crosses: goddard starts with the owner in the schema and inside
+  the sealed box, so there is no migration to write and nothing to be
+  compatible with. The command line keeps the `doppler` dialect,
   `heimdall run --preserve-env -- npm test`. Outside: the HTTP server, the web
   page and the magic link, which bifrost and `auth` bring.
 - `skill` — the skills: named instructions the agent loads into its context
@@ -90,14 +91,13 @@ below.
   the app plugs in: how a prompt is answered, and where a copy goes when
   the task names a target.
 
-Five dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
+Four dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
 article extraction is the one layer of `axe` that is not byte-for-byte with the
 Rust, which runs Readability and htmd), `golang.org/x/crypto` and
 `github.com/zeebo/blake3` for the sealed boxes and the key derived per
-environment, `github.com/jackc/pgx/v5` for the store, and `modernc.org/sqlite`,
-pure Go, to read the old store once and bring it across. `prompt`, `skill` and
-`schedule` do not add one: fragments, variables, skills and rows are the
-standard library and nothing else.
+owner, project and environment, and `github.com/jackc/pgx/v5` for the store.
+`prompt`, `skill` and `schedule` do not add one: fragments, variables, skills and
+rows are the standard library and nothing else.
 
 ## Embed
 
