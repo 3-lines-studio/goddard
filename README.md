@@ -17,9 +17,9 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
   fragment is `<language>/<name>.md` inside every `fs.FS`, in order, so a
   directory the embedder puts first overrides the one that ships with the
   binary, and a fragment a language does not have falls back to the default
-  one, `es-AR`. The fragments we ship — jimmy's prompts, as they are — are the
-  default language and travel embedded in the binary. The Rust harness that
-  compiles jimmy's `prompt.rs` on its own left
+  one, `es-AR`. The fragments we ship are jimmy's, adapted as the port
+  reaches them, and travel embedded in the binary as the default language. The
+  Rust harness that compiles jimmy's `prompt.rs` on its own left
   `prompt/testdata/paridad-rust.txt`, and the tests replay it byte for byte.
 - `heimdall` — the secrets store: projects, environments and tokens scoped to
   one environment and, if you want, to a list of key names, so an agent gets
@@ -43,6 +43,19 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
   system's are read only and nobody installs them through this package. It is
   the tool the harness gives the agent, with the store and the viewer already
   in: `list` renders what that viewer can see and `load` reads one.
+- `memo` — the memory: the durable facts the agent keeps about itself and about
+  the project it is working on, in the `memo` schema of the same Postgres. Port
+  of jimmy's `src/memo.rs`, with the tree of files replaced by rows. A fact is a
+  key, a kind from a short list, a body and the day it was last touched, and the
+  key says where it belongs: `usuario` is a general fact and `jimmy/telemetria`
+  one of the project `jimmy`. What the prompt gets is `Render` — every general
+  fact plus the newest of the project in hand — and the rest stays in the store
+  until the topic comes back. `Add` is one transaction that writes the fact and
+  the revision behind it, so jimmy's `sync` is gone: the store already knows
+  whether it created, updated, reasserted or left a fact alone, and says so. The
+  tool the harness gets is the command line jimmy had, `add`, `show` and `list`,
+  and the dump jimmy's binary left in `memo/testdata/paridad-rust.txt` is
+  replayed byte for byte.
 
 Five dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
 article extraction is the one layer of `axe` that is not byte-for-byte with the
