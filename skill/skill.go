@@ -17,6 +17,7 @@ package skill
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -41,10 +42,10 @@ type Owner struct {
 	ID   string
 }
 
-// Viewer is who is asking. It sees the system's skills, the ones of its own
-// organization and its own, and the ones its role is allowed to see.
+// Viewer is who is asking. It sees the system's skills, the ones of every
+// organization it is in and its own, and the ones its role is allowed to see.
 type Viewer struct {
-	Org  string
+	Orgs []string
 	User string
 	Role string
 }
@@ -98,10 +99,10 @@ func canWrite(viewer Viewer, owner Owner) error {
 	case System:
 		return ErrReadOnly
 	case Org:
-		if owner.ID == viewer.Org {
+		if slices.Contains(viewer.Orgs, owner.ID) {
 			return nil
 		}
-		return fmt.Errorf("el skill es de la organización %q y no de la tuya", owner.ID)
+		return fmt.Errorf("el skill es de la organización %q y no de las tuyas", owner.ID)
 	case User:
 		if owner.ID == viewer.User {
 			return nil

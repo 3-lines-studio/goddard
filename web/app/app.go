@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"database/sql"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -11,6 +13,7 @@ import (
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/memo"
+	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
 )
@@ -36,7 +39,7 @@ type Service struct {
 	Model     string
 	Workspace string
 	Machine   axe.Machine
-	Org       string
+	Orgs      *org.PgStore
 	Assistant string
 	Language  string
 	Spec      string
@@ -71,10 +74,20 @@ func env(key, fallback string) string {
 }
 
 // Viewer is who a turn is for: the id the database minted, which is what the
-// skills, the agenda and the memory keep. It comes from the session and not
-// from the environment, because the environment is one for every user.
-func (s *Service) Viewer(user auth.User) skill.Viewer {
-	return skill.Viewer{Org: s.Org, User: user.ID}
+// skills, the agenda and the memory keep, and the organizations that person is
+// in. It comes from the session and not from the environment, because the
+// environment is one for every user.
+func (s *Service) Viewer(ctx context.Context, user auth.User) skill.Viewer {
+	viewer := skill.Viewer{User: user.ID}
+	orgs, err := s.Orgs.Orgs(ctx, user.ID)
+	if err != nil {
+		log.Printf("goddard: no pude leer las organizaciones de %s: %v", user.ID, err)
+		return viewer
+	}
+	for _, one := range orgs {
+		viewer.Orgs = append(viewer.Orgs, one.ID)
+	}
+	return viewer
 }
 
 // Running says whether a turn is going on in that conversation right now. The

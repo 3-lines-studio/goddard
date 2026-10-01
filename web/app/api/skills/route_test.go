@@ -23,7 +23,7 @@ func TestSkillsIsTheIndexThePromptShows(t *testing.T) {
 	service := apptest.Route(t, apptest.Provider(t))
 	cookie := apptest.Session(t, service, apptest.TestEmail)
 	user := apptest.User(t, service)
-	if err := service.Skill.Put(t.Context(), service.Viewer(user), skill.Skill{
+	if err := service.Skill.Put(t.Context(), service.Viewer(t.Context(), user), skill.Skill{
 		Meta: skill.Meta{
 			Owner:       skill.Owner{Kind: skill.User, ID: user.ID},
 			Name:        "picsel-deploy",

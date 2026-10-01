@@ -22,14 +22,14 @@ const metaColumns = `owner_kind, owner_id, role, name, description, updated_at`
 
 const skillColumns = metaColumns + `, body, created_by, created_at`
 
-const visible = `(owner_kind = 'system' OR (owner_kind = 'org' AND owner_id = $1) OR (owner_kind = 'user' AND owner_id = $2)) AND (role = '' OR role = $3)`
+const visible = `(owner_kind = 'system' OR (owner_kind = 'org' AND owner_id = ANY($1)) OR (owner_kind = 'user' AND owner_id = $2)) AND (role = '' OR role = $3)`
 
 // List is every skill this viewer can see, one row per name, the closest
 // owner's, in alphabetical order.
 func (s *PgStore) List(ctx context.Context, viewer Viewer) ([]Meta, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+metaColumns+` FROM skill.skills WHERE `+visible,
-		viewer.Org, viewer.User, viewer.Role)
+		viewer.Orgs, viewer.User, viewer.Role)
 	if err != nil {
 		return nil, fmt.Errorf("no pude listar los skills: %w", err)
 	}
@@ -76,7 +76,7 @@ func (s *PgStore) Get(ctx context.Context, viewer Viewer, name string) (Skill, b
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+skillColumns+` FROM skill.skills WHERE name = $4 AND `+visible,
-		viewer.Org, viewer.User, viewer.Role, name)
+		viewer.Orgs, viewer.User, viewer.Role, name)
 	if err != nil {
 		return Skill{}, false, fmt.Errorf("no pude leer la skill %q: %w", name, err)
 	}

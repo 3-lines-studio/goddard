@@ -168,7 +168,7 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, us
 	messages := axe.DropIncompleteToolCalls(axe.ContextMessages(entries))
 	messages = append(messages, axe.Message{Role: "user", Content: text})
 	project := s.projectSlug(ctx, conversation)
-	tools := s.tools(project, conversation.ID, user)
+	tools := s.tools(ctx, project, conversation.ID, user)
 	options := &axe.RunOptions{
 		Model:    s.Model,
 		System:   s.system(ctx, tools, conversation, project, user),
@@ -216,9 +216,9 @@ func (s *Service) write(ctx context.Context, conversationID string, event map[st
 // tools is what the agent can do: the harness' own, plus the memory, the
 // skills and the agenda of the project this conversation belongs to, and the
 // way to show a file in this thread.
-func (s *Service) tools(project, conversationID string, user auth.User) []axe.Tool {
+func (s *Service) tools(ctx context.Context, project, conversationID string, user auth.User) []axe.Tool {
 	tools := axe.BuildToolsOn(s.Machine)
-	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer(user)), schedule.Tool(s.Schedule, user.ID, project), s.sendTool(conversationID))
+	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer(ctx, user)), schedule.Tool(s.Schedule, user.ID, project), s.sendTool(conversationID))
 	return tools
 }
 
@@ -226,7 +226,7 @@ func (s *Service) tools(project, conversationID string, user auth.User) []axe.To
 // of goddard, the memory of the project and where this turn is running.
 func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project string, user auth.User) string {
 	out := axe.SystemPrompt(tools)
-	skills, err := s.Skill.Index(ctx, s.Viewer(user))
+	skills, err := s.Skill.Index(ctx, s.Viewer(ctx, user))
 	if err != nil {
 		log.Printf("goddard: no pude leer las skills: %v", err)
 	}
