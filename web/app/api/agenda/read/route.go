@@ -1,9 +1,7 @@
-package run
+package read
 
 import (
-	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/3-lines-studio/goddard/web/app"
@@ -14,9 +12,8 @@ type request struct {
 	Name    string `json:"name"`
 }
 
-// Post hands the task over and answers: a run takes as long as the agent takes,
-// and the web is not going to hold the request for it. What the task answered
-// is written in its log, which is where the agenda reads it.
+// Post marks a task read, or every task of the user when the request does not
+// name one: the agenda is one list and what is read there is read once.
 func Post(w http.ResponseWriter, r *http.Request) {
 	service := app.Current()
 	if service == nil {
@@ -31,15 +28,17 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer la tarea", http.StatusBadRequest)
 		return
 	}
-	if _, err := service.Schedule.Get(r.Context(), service.Viewer.User, body.Project, body.Name); err != nil {
+	if body.Name == "" {
+		if err := service.Schedule.MarkAllRead(r.Context(), service.Viewer.User); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err := service.Schedule.MarkRead(r.Context(), service.Viewer.User, body.Project, body.Name); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	user := service.Viewer.User
-	go func() {
-		if _, err := service.Agenda.RunNow(context.Background(), user, body.Project, body.Name); err != nil {
-			log.Printf("goddard: la corrida de %q no salió: %v", body.Name, err)
-		}
-	}()
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -19,6 +19,7 @@ type Project = {
 
 type Task = {
   name: string;
+  project: string;
   when: string;
   at: string;
   every: string;
@@ -26,7 +27,8 @@ type Task = {
   paused: boolean;
   silent: boolean;
   target: string;
-  last: { ts: number; ms: number; ok: boolean; text: string } | null;
+  unread: number;
+  runs: { ts: number; date: string; ms: number; ok: boolean; text: string }[];
 };
 
 type Fact = {
@@ -85,8 +87,13 @@ function writeList(key: string, values: string[]) {
   }
 }
 
+function keyOf(task: Task) {
+  return `${task.project}/${task.name}`;
+}
+
 function tabFromKey(key: string, projects: Project[]): Tab | null {
-  for (const view of ["agenda", "memoria"] as const) {
+  if (key === "agenda") return { key, kind: "agenda", slug: "", title: "Agenda" };
+  for (const view of ["memoria"] as const) {
     if (!key.startsWith(view + ":")) continue;
     const slug = key.slice(view.length + 1);
     const project = projects.find((one) => one.slug === slug);
@@ -122,8 +129,9 @@ export function Chat() {
   const [facts, setFacts] = useState<Fact[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [openTasks, setOpenTasks] = useState<Set<string>>(new Set());
   const [removingTask, setRemovingTask] = useState("");
-  const [running, setRunning] = useState("");
+  const [pending, setPending] = useState<{ key: string; ts: number } | null>(null);
   const [attachments, setAttachments] = useState<{ id: string; name: string; mime: string }[]>([]);
   const files = useRef<HTMLInputElement>(null);
   const [needLogin, setNeedLogin] = useState(false);
@@ -136,6 +144,7 @@ export function Chat() {
   const tab = tabs.find((one) => one.key === active) ?? tabs[tabs.length - 1] ?? null;
   const panel = projects.find((one) => one.slug === tab?.slug) ?? null;
   const open = tab?.kind === "thread" ? tab.key : "";
+  const unread = tasks.reduce((total, task) => total + task.unread, 0);
 
   useEffect(() => {
     if (restored.current) writeList(TABS_KEY, keys);
@@ -194,9 +203,22 @@ export function Chat() {
   }, [open, load]);
 
   useEffect(() => {
-    if (tab?.kind === "agenda") void loadAgenda(tab.slug);
+    if (tab?.kind === "agenda") void loadTasks();
     if (tab?.kind === "memoria") void loadMemory(tab.slug);
   }, [tab?.kind, tab?.slug]);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadTasks();
+    const tick = setInterval(() => void loadTasks(), 60_000);
+    return () => clearInterval(tick);
+  }, [user]);
+
+  useEffect(() => {
+    if (!pending) return;
+    const tick = setInterval(() => void loadTasks(), 3_000);
+    return () => clearInterval(tick);
+  }, [pending]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -332,14 +354,21 @@ export function Chat() {
     load();
   }
 
-  async function loadAgenda(slug: string) {
-    const response = await fetch(`/api/agenda?project=${encodeURIComponent(slug)}`);
+  async function loadTasks() {
+    const response = await fetch("/api/agenda");
     if (!response.ok) {
       setError(await response.text());
       return;
     }
     const data = await response.json();
-    setTasks(data.tasks ?? []);
+    const tasks: Task[] = data.tasks ?? [];
+    setTasks(tasks);
+    setPending((current) => {
+      if (!current) return current;
+      const task = tasks.find((one) => keyOf(one) === current.key);
+      if (!task) return null;
+      return (task.runs[0]?.ts ?? 0) === current.ts ? current : null;
+    });
   }
 
   async function loadMemory(slug: string) {
@@ -387,8 +416,8 @@ export function Chat() {
     });
   }
 
-  function openAgenda(project: Project) {
-    openTab(`agenda:${project.slug}`);
+  function openAgenda() {
+    openTab("agenda");
   }
 
   function openMemory(project: Project) {
@@ -405,53 +434,79 @@ export function Chat() {
   }
 
   async function runTask(task: Task) {
-    if (tab?.kind !== "agenda") return;
-    setRunning(task.name);
+    setPending({ key: keyOf(task), ts: task.runs[0]?.ts ?? 0 });
     const response = await fetch("/api/agenda/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ project: tab.slug, name: task.name }),
+      body: JSON.stringify({ project: task.project, name: task.name }),
     });
-    setRunning("");
     if (!response.ok) {
+      setPending(null);
       setError(await response.text());
-      return;
     }
-    await loadAgenda(tab.slug);
   }
 
   async function pauseTask(task: Task) {
-    if (tab?.kind !== "agenda") return;
     const response = await fetch("/api/agenda", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ project: tab.slug, name: task.name, paused: !task.paused }),
+      body: JSON.stringify({ project: task.project, name: task.name, paused: !task.paused }),
     });
     if (!response.ok) {
       setError(await response.text());
       return;
     }
-    await loadAgenda(tab.slug);
+    await loadTasks();
+  }
+
+  async function readTask(task: Task) {
+    const key = keyOf(task);
+    setOpenTasks((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    if (task.unread === 0) return;
+    setTasks((current) => current.map((one) => (keyOf(one) === key ? { ...one, unread: 0 } : one)));
+    const response = await fetch("/api/agenda/read", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ project: task.project, name: task.name }),
+    });
+    if (!response.ok) setError(await response.text());
+  }
+
+  async function readAll() {
+    const response = await fetch("/api/agenda/read", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadTasks();
   }
 
   function askTask(task: Task) {
-    if (removingTask !== task.name) {
-      setRemovingTask(task.name);
+    if (removingTask !== keyOf(task)) {
+      setRemovingTask(keyOf(task));
       return;
     }
     void removeTask(task);
   }
 
   async function removeTask(task: Task) {
-    if (tab?.kind !== "agenda") return;
     setRemovingTask("");
-    const query = `project=${encodeURIComponent(tab.slug)}&name=${encodeURIComponent(task.name)}`;
+    const query = `project=${encodeURIComponent(task.project)}&name=${encodeURIComponent(task.name)}`;
     const response = await fetch(`/api/agenda?${query}`, { method: "DELETE" });
     if (!response.ok) {
       setError(await response.text());
       return;
     }
-    await loadAgenda(tab.slug);
+    await loadTasks();
   }
 
   async function newConversation(project: string) {
@@ -575,14 +630,6 @@ export function Chat() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => openAgenda(project)}
-                      data-agenda={project.id}
-                      className="rounded px-2 py-1 text-left hover:bg-neutral-900"
-                    >
-                      agenda
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => openMemory(project)}
                       data-memory={project.id}
                       className="rounded px-2 py-1 text-left hover:bg-neutral-900"
@@ -676,6 +723,23 @@ export function Chat() {
           })}
           {projects.length === 0 ? <p className="p-2 text-sm opacity-60">Todavía no hay proyectos.</p> : null}
         </nav>
+        <div className="border-t border-neutral-800 p-2">
+          <button
+            type="button"
+            onClick={openAgenda}
+            data-agenda=""
+            className={`flex w-full items-center gap-2 rounded px-2 py-1 text-sm ${
+              tab?.kind === "agenda" ? "bg-neutral-800" : "hover:bg-neutral-900"
+            }`}
+          >
+            Agenda
+            {unread > 0 ? (
+              <span data-agenda-badge="" className="rounded bg-neutral-700 px-1 text-xs">
+                {unread}
+              </span>
+            ) : null}
+          </button>
+        </div>
         <div className="flex items-center justify-between border-t border-neutral-800 p-3 text-xs">
           <span className="truncate opacity-60">{user}</span>
           <button type="button" onClick={logout} data-logout="" className="rounded border border-neutral-700 px-2 py-1">
@@ -748,12 +812,31 @@ export function Chat() {
         ) : tab?.kind === "agenda" ? (
           <div className="flex-1 overflow-y-auto p-4">
             <div className="mx-auto flex max-w-3xl flex-col gap-3">
-              <h2 className="text-sm font-semibold">Agenda de {panel?.name}</h2>
-              {tasks.length === 0 ? <p className="text-sm opacity-60">No hay tareas en este proyecto.</p> : null}
+              {tasks.length === 0 ? <p className="text-sm opacity-60">No hay tareas agendadas.</p> : null}
               {tasks.map((task) => (
-                <Task key={task.name} task={task} running={running} removing={removingTask}
-                  run={() => runTask(task)} pause={() => pauseTask(task)} ask={() => askTask(task)} />
+                <Task
+                  key={keyOf(task)}
+                  task={task}
+                  project={nameOfProject(projects, task.project)}
+                  open={openTasks.has(keyOf(task))}
+                  running={pending?.key === keyOf(task)}
+                  removing={removingTask === keyOf(task)}
+                  toggle={() => readTask(task)}
+                  run={() => runTask(task)}
+                  pause={() => pauseTask(task)}
+                  ask={() => askTask(task)}
+                />
               ))}
+              {unread > 0 ? (
+                <button
+                  type="button"
+                  onClick={readAll}
+                  data-read-all=""
+                  className="self-start rounded border border-neutral-700 px-2 py-1 text-xs"
+                >
+                  marcar todo leído
+                </button>
+              ) : null}
             </div>
           </div>
         ) : (
@@ -897,64 +980,125 @@ function File({ line }: { line: Event }) {
 
 function Task({
   task,
+  project,
+  open,
   running,
   removing,
+  toggle,
   run,
   pause,
   ask,
 }: {
   task: Task;
-  running: string;
-  removing: string;
+  project: string;
+  open: boolean;
+  running: boolean;
+  removing: boolean;
+  toggle: () => void;
   run: () => void;
   pause: () => void;
   ask: () => void;
 }) {
+  const key = keyOf(task);
+  const last = task.runs[0];
+  const state = running ? "running" : !last ? "" : last.ok ? "done" : "error";
   return (
-    <div className="rounded border border-neutral-800 p-3 text-sm" data-task={task.name}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold">{task.name}</span>
+    <article className="rounded border border-neutral-800 text-sm" data-task={key}>
+      <div className="flex items-center gap-2 p-2">
+        <button
+          type="button"
+          onClick={toggle}
+          data-task-toggle={key}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <span
+            data-task-state={state}
+            className={`h-2 w-2 shrink-0 rounded-full ${
+              state === "running"
+                ? "bg-neutral-100"
+                : state === "done"
+                  ? "bg-emerald-500"
+                  : state === "error"
+                    ? "bg-red-500"
+                    : "border border-neutral-600"
+            }`}
+          />
+          <span className="font-semibold">{task.name}</span>
+          <span className="truncate text-xs opacity-60">
+            {project}
+            {" · "}
+            {whenOf(task)}
+          </span>
+          {task.unread > 0 ? (
+            <span data-task-unread={key} className="rounded bg-neutral-700 px-1 text-xs">
+              {task.unread}
+            </span>
+          ) : null}
+          {task.paused ? (
+            <span className="rounded border border-neutral-700 px-1 text-xs opacity-60">pausada</span>
+          ) : null}
+          {task.silent ? (
+            <span className="rounded border border-neutral-700 px-1 text-xs opacity-60">callada</span>
+          ) : null}
+        </button>
         <span className="flex shrink-0 items-center gap-1 text-xs">
           <button
             type="button"
             onClick={run}
-            disabled={running === task.name}
-            data-run-task={task.name}
+            disabled={running}
+            data-run-task={key}
             className="rounded border border-neutral-700 px-2 py-0.5 disabled:opacity-40"
           >
-            {running === task.name ? "corriendo…" : "correr"}
+            {running ? "corriendo…" : "correr"}
           </button>
-          <button type="button" onClick={pause} data-pause-task={task.name} className="rounded border border-neutral-700 px-2 py-0.5">
+          <button type="button" onClick={pause} data-pause-task={key} className="rounded border border-neutral-700 px-2 py-0.5">
             {task.paused ? "seguir" : "pausar"}
           </button>
           <button
             type="button"
             onClick={ask}
-            data-remove-task={task.name}
-            className={`rounded px-2 py-0.5 ${removing === task.name ? "bg-red-900 text-red-100" : "border border-neutral-700 opacity-60"}`}
+            data-remove-task={key}
+            className={`rounded px-2 py-0.5 ${removing ? "bg-red-900 text-red-100" : "border border-neutral-700 opacity-60"}`}
           >
-            {removing === task.name ? "borrar" : "✕"}
+            {removing ? "borrar" : "✕"}
           </button>
         </span>
       </div>
-      <p className="mt-1 text-xs opacity-60">
-        {whenOf(task)}
-        {task.paused ? " · pausada" : ""}
-        {task.silent ? " · callada" : ""}
-      </p>
-      <p className="mt-2 whitespace-pre-wrap opacity-80">{task.prompt}</p>
-      {task.last ? (
-        <details className="mt-2 text-xs">
-          <summary className="cursor-pointer opacity-60">
-            última corrida {task.last.ok ? "ok" : "con error"} · {task.last.ms} ms · hace {ago(task.last.ts)}
-          </summary>
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap opacity-80">{task.last.text}</pre>
-        </details>
-      ) : (
-        <p className="mt-2 text-xs opacity-60">todavía no corrió</p>
-      )}
-    </div>
+      <p className="px-2 pb-2 text-xs whitespace-pre-wrap opacity-60">{task.prompt}</p>
+      {open ? (
+        <div className="border-t border-neutral-800 p-2">
+          {task.runs.length === 0 ? <p className="text-xs opacity-60">Todavía no corrió.</p> : null}
+          {task.runs.map((one) => (
+            <div key={one.ts} className="mt-1 first:mt-0">
+              <span className="text-xs opacity-60" title={`hace ${ago(one.ts)} · ${one.ms} ms`}>
+                {moment(one.date, one.ts)}
+                {one.ok ? "" : " · con error"}
+              </span>
+              <div
+                className={`md text-sm ${one.ok ? "opacity-80" : "text-red-400"}`}
+                dangerouslySetInnerHTML={{ __html: markdown(one.text.trim() || "sin novedades") }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </article>
   );
+}
+
+function nameOfProject(projects: Project[], slug: string) {
+  return projects.find((one) => one.slug === slug)?.name ?? slug;
+}
+
+function moment(date: string, ts: number) {
+  const at = new Date(ts * 1000);
+  const clock = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  const today = new Date();
+  const day = (one: Date) =>
+    `${one.getFullYear()}-${String(one.getMonth() + 1).padStart(2, "0")}-${String(one.getDate()).padStart(2, "0")}`;
+  if (date === day(today)) return `hoy ${clock}`;
+  if (date === day(new Date(today.getTime() - 86_400_000))) return `ayer ${clock}`;
+  return `${date} ${clock}`;
 }
 
 function day(days: number) {

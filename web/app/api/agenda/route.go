@@ -7,23 +7,30 @@ import (
 	"github.com/3-lines-studio/goddard/web/app"
 )
 
+// shown is how many runs of a task the agenda hands over: the store keeps more,
+// and the last ones are what somebody reads.
+const shown = 5
+
 type runView struct {
 	TS   int64  `json:"ts"`
+	Date string `json:"date"`
 	MS   int64  `json:"ms"`
 	OK   bool   `json:"ok"`
 	Text string `json:"text"`
 }
 
 type taskView struct {
-	Name   string   `json:"name"`
-	When   string   `json:"when"`
-	At     string   `json:"at"`
-	Every  string   `json:"every"`
-	Prompt string   `json:"prompt"`
-	Paused bool     `json:"paused"`
-	Silent bool     `json:"silent"`
-	Target string   `json:"target"`
-	Last   *runView `json:"last"`
+	Name    string    `json:"name"`
+	Project string    `json:"project"`
+	When    string    `json:"when"`
+	At      string    `json:"at"`
+	Every   string    `json:"every"`
+	Prompt  string    `json:"prompt"`
+	Paused  bool      `json:"paused"`
+	Silent  bool      `json:"silent"`
+	Target  string    `json:"target"`
+	Unread  int       `json:"unread"`
+	Runs    []runView `json:"runs"`
 }
 
 type pause struct {
@@ -41,7 +48,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	if _, ok := app.Session(service, w, r); !ok {
 		return
 	}
-	entries, err := service.Schedule.List(r.Context(), service.Viewer.User, r.URL.Query().Get("project"))
+	entries, err := service.Schedule.ListAll(r.Context(), service.Viewer.User)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -49,18 +56,25 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	views := make([]taskView, 0, len(entries))
 	for _, entry := range entries {
 		view := taskView{
-			Name:   entry.Task.Name,
-			When:   entry.Task.When,
-			At:     entry.Task.At,
-			Every:  entry.Task.Every,
-			Prompt: entry.Task.Prompt,
-			Paused: entry.Task.Paused,
-			Silent: entry.Task.Silent,
-			Target: entry.Task.Target,
+			Name:    entry.Task.Name,
+			Project: entry.Task.Project,
+			When:    entry.Task.When,
+			At:      entry.Task.At,
+			Every:   entry.Task.Every,
+			Prompt:  entry.Task.Prompt,
+			Paused:  entry.Task.Paused,
+			Silent:  entry.Task.Silent,
+			Target:  entry.Task.Target,
+			Unread:  entry.Unread,
+			Runs:    []runView{},
 		}
-		if len(entry.Runs) > 0 {
-			last := entry.Runs[0]
-			view.Last = &runView{TS: last.TS, MS: last.MS, OK: last.OK, Text: last.Text}
+		runs := entry.Runs
+		if len(runs) > shown {
+			runs = runs[len(runs)-shown:]
+		}
+		for index := len(runs) - 1; index >= 0; index-- {
+			run := runs[index]
+			view.Runs = append(view.Runs, runView{TS: run.TS, Date: run.Date, MS: run.MS, OK: run.OK, Text: run.Text})
 		}
 		views = append(views, view)
 	}
