@@ -92,7 +92,14 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 	return err
 }
 
-const conversationColumns = "id, project_id, title, source, created_by, updated_at"
+const conversationColumns = "id, project_id, title, source, created_by, COALESCE(claimed_until, 0), updated_at"
+
+func scanConversation(row interface{ Scan(...any) error }) (Conversation, error) {
+	var conversation Conversation
+	err := row.Scan(&conversation.ID, &conversation.ProjectID, &conversation.Title, &conversation.Source,
+		&conversation.CreatedBy, &conversation.ClaimedUntil, &conversation.UpdatedAt)
+	return conversation, err
+}
 
 // Conversations is what is alive inside a project, most recently touched
 // first.
@@ -106,9 +113,8 @@ func (s *Store) Conversations(ctx context.Context, projectID string) ([]Conversa
 	defer rows.Close()
 	conversations := []Conversation{}
 	for rows.Next() {
-		var conversation Conversation
-		if err := rows.Scan(&conversation.ID, &conversation.ProjectID, &conversation.Title,
-			&conversation.Source, &conversation.CreatedBy, &conversation.UpdatedAt); err != nil {
+		conversation, err := scanConversation(rows)
+		if err != nil {
 			return nil, err
 		}
 		conversations = append(conversations, conversation)
@@ -118,11 +124,8 @@ func (s *Store) Conversations(ctx context.Context, projectID string) ([]Conversa
 
 // Conversation finds one by id.
 func (s *Store) Conversation(ctx context.Context, id string) (Conversation, bool, error) {
-	var conversation Conversation
-	err := s.db.QueryRowContext(ctx,
-		"SELECT "+conversationColumns+" FROM chat.conversations WHERE id = $1 AND deleted_at IS NULL", id).
-		Scan(&conversation.ID, &conversation.ProjectID, &conversation.Title,
-			&conversation.Source, &conversation.CreatedBy, &conversation.UpdatedAt)
+	conversation, err := scanConversation(s.db.QueryRowContext(ctx,
+		"SELECT "+conversationColumns+" FROM chat.conversations WHERE id = $1 AND deleted_at IS NULL", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Conversation{}, false, nil
 	}

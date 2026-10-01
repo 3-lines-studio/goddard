@@ -144,3 +144,44 @@ func TestTwoWritersDoNotFightForTheNumber(t *testing.T) {
 		t.Fatalf("quedaron %d números para %d líneas", len(numbers), len(seen))
 	}
 }
+
+func TestATurnIsClaimedOnce(t *testing.T) {
+	store := testStore(t)
+	conversation := thread(t, store)
+	taken, err := store.Claim(t.Context(), conversation.ID, 900)
+	if err != nil || !taken {
+		t.Fatalf("el primero no pudo: %v %v", taken, err)
+	}
+	found, ok, err := store.Conversation(t.Context(), conversation.ID)
+	if err != nil || !ok {
+		t.Fatalf("no la encontré: %v %v", ok, err)
+	}
+	if found.ClaimedUntil == 0 {
+		t.Fatal("la conversación no dice que está tomada")
+	}
+	again, err := store.Claim(t.Context(), conversation.ID, 900)
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if again {
+		t.Fatal("el segundo turno entró igual")
+	}
+	if err := store.Release(t.Context(), conversation.ID); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	after, err := store.Claim(t.Context(), conversation.ID, 900)
+	if err != nil || !after {
+		t.Fatalf("después del release no pudo: %v %v", after, err)
+	}
+}
+
+func TestAClaimThatExpiredIsFree(t *testing.T) {
+	store := testStore(t)
+	conversation := thread(t, store)
+	if taken, err := store.Claim(t.Context(), conversation.ID, -1); err != nil || !taken {
+		t.Fatalf("el primero no pudo: %v %v", taken, err)
+	}
+	if taken, err := store.Claim(t.Context(), conversation.ID, 900); err != nil || !taken {
+		t.Fatalf("el vencido siguió tomado: %v %v", taken, err)
+	}
+}
