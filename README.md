@@ -16,7 +16,7 @@ below.
   each one is a markdown file with `{{variables}}`, and the language picks
   which file answers. Port of jimmy's assembler with the languages in it: a
   fragment is `<language>/<name>.md` inside every `fs.FS`, in order, so a
-  directory the service puts first overrides the one that ships with the
+  directory the app puts first overrides the one that ships with the
   binary, and a fragment a language does not have falls back to the default
   one, `es-AR`. The fragments we ship are jimmy's, adapted as the port
   reaches them, and travel embedded in the binary as the default language. The
@@ -57,7 +57,7 @@ below.
   tool the harness gets is the command line jimmy had, `add`, `show` and `list`,
   and the dump jimmy's binary left in `memo/testdata/paridad-rust.txt` is
   replayed byte for byte.
-- `schedule` — the agenda: the tasks the service runs on their own, in the
+- `schedule` — the agenda: the tasks the app runs on their own, in the
   `schedule` schema of the same Postgres. Port of jimmy's `src/schedule.rs`,
   with the directory of TOML files replaced by rows. A task belongs to a user
   inside a project — an empty user is the project's own task, the one everybody
@@ -68,7 +68,7 @@ below.
   takes what is due with `FOR UPDATE SKIP LOCKED` and holds it with a lease
   while it runs, so two instances never run the same task and one that dies
   mid-run leaves its task for the next pass. `Runner` and `Notifier` are what
-  the service plugs in: how a prompt is answered, and where a copy goes when
+  the app plugs in: how a prompt is answered, and where a copy goes when
   the task names a target.
 
 Five dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
@@ -100,7 +100,7 @@ stopped (`OutcomeDone`, `OutcomeMaxTurns`, `OutcomeCancelled`,
 `OutcomeCompact`, `OutcomeFailed`).
 
 The transcript is saved through a `Store`. The one that ships is
-`axe.NewPgStore(db, scope)` — the pool the service already has for heimdall,
+`axe.NewPgStore(db, scope)` — the pool the app already has for heimdall,
 with the migrations applied first and the driver registered by whoever opens
 it (`_ "github.com/jackc/pgx/v5/stdlib"`):
 
@@ -116,8 +116,8 @@ for _, message := range end.Messages {
 store.Append(ctx, entries)
 ```
 
-The scope is whatever the service says a conversation set is — a chat, a
-project, a user — and two services over the same database and scope see the
+The scope is whatever the app says a conversation set is — a chat, a
+project, a user — and two instances over the same database and scope see the
 same history. There is no store on files: the port of the Rust `FsStore` is
 gone, because a cloud axe has no volume to mount.
 
@@ -136,7 +136,7 @@ make -C web serve     # runs it, DATABASE_URL in the environment
 ## Migrate
 
 The schema is not applied by the binary the agent travels in: it is
-`cmd/migrate`, for whoever operates the service. The external one does not
+`cmd/migrate`, for whoever operates the app. The external one does not
 carry it, so asking for a skill cannot change the database.
 
 ```

@@ -9,12 +9,12 @@ import (
 )
 
 const (
-	// Tick is how often the service looks for tasks to run.
+	// Tick is how often the app looks for tasks to run.
 	Tick = 60 * time.Second
 
 	// Lease is how long a claim holds, in seconds. It is long on purpose: a
 	// task the agent is working on is not up for grabs just because it takes a
-	// while. A service that dies mid-run leaves its task free after this.
+	// while. An instance that dies mid-run leaves its task free after this.
 	Lease int64 = 900
 
 	// Limit is how many tasks one tick takes at most.
@@ -22,7 +22,7 @@ const (
 )
 
 // Runner answers a task: it runs the prompt in a clean context, without the
-// conversation it came from, and returns what the agent said. The service puts
+// conversation it came from, and returns what the agent said. The app puts
 // it together with the model and the tools it already has.
 type Runner func(ctx context.Context, task Task) (string, error)
 
@@ -44,7 +44,7 @@ type Service struct {
 }
 
 // NewService is a service over that store, running with the local hour the
-// offset asks for. The offset is the same one the rest of the service uses.
+// offset asks for. The offset is the same one the rest of the app uses.
 func NewService(store *PgStore, run Runner, offset int64) *Service {
 	return &Service{store: store, run: run, offset: offset}
 }

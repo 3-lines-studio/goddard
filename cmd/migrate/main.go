@@ -1,4 +1,4 @@
-// Command migrate is the schema of goddard, for whoever operates the service.
+// Command migrate is the schema of goddard, for whoever operates the app.
 // It is not part of the user facing binary: nobody who asks for a skill should
 // be able to change the database by doing it.
 package main

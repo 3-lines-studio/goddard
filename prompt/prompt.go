@@ -4,7 +4,7 @@
 // languages in it.
 //
 // Inside every fs.FS a fragment is `<language>/<name>.md`, and the fs.FS values
-// go in order: the first one that has it wins, so a directory the service puts
+// go in order: the first one that has it wins, so a directory the app puts
 // first overrides the one that ships with the binary. A fragment a language
 // does not have falls back to DefaultLanguage's, and a fragment nobody has is
 // an error.

@@ -1,4 +1,4 @@
-// Package schedule keeps the programmed tasks of goddard: prompts the service
+// Package schedule keeps the programmed tasks of goddard: prompts the app
 // runs on their own, in a clean context, and the log of what each run
 // answered. Port of jimmy's `src/schedule.rs`, with the directory of TOML
 // files replaced by rows in the `schedule` schema of the shared database (see
@@ -7,7 +7,7 @@
 // A task says when it runs in one of three ways and only one: `when`, a date
 // and a time it fires once, `at`, an hour it fires every day, or `every`, a
 // period since the last run. The local hour is UTC plus an offset, and a task
-// with none of the three never fires. What the service keeps of a task is its
+// with none of the three never fires. What the app keeps of a task is its
 // last runs, and that log is also its state: the last run is what `every`
 // measures from and the one that tells `when` and `at` they already fired.
 package schedule
@@ -63,7 +63,7 @@ type Clock struct {
 }
 
 // At is the local moment a Unix second falls on, with the hours of offset the
-// service runs in.
+// app runs in.
 func At(unix, offset int64) Clock {
 	date, clock := LocalParts(unix, offset)
 	return Clock{Now: unix, Date: date, Time: clock}

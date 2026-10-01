@@ -41,7 +41,7 @@ func Internal(cause error) *StatusError {
 	return &StatusError{Status: 500, Message: "algo se rompió acá adentro", Cause: cause}
 }
 
-// Authenticate takes the session cookie, the bearer token and the service's own
+// Authenticate takes the session cookie, the bearer token and heimdall's own
 // admin token. The cookie and the bearer are already split out by whoever
 // parsed the request: this does not know about HTTP.
 func Authenticate(ctx context.Context, store *Store, cookie, bearer, adminToken string) (Actor, *StatusError) {
