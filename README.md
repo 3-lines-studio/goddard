@@ -38,8 +38,8 @@ below.
   is no invitation to accept yet.
 - `naming` — the slug: a name turned into what a directory and the tables can
   hold, lowercase, without accents and with single dashes. The projects and the
-  organizations share it, because both of them name a directory of the
-  workspace.
+  organizations share it: the slug of a project names its directory, and both
+  are the names the tables of goddard keep.
 - `chat` — the projects and the conversations, in the `chat` schema of the
   same Postgres. A project belongs to a user or to an organization, and the
   organizations' are what several people share. Its slug is the string the rest
@@ -222,10 +222,11 @@ steps — the model's next token, the next tool — so a command already running
 finishes on its own, the way it does in axe.
 
 Every project has a directory of its own in the workspace, under the owner of
-the project and its slug — `<owner>/<slug>`, inside `/data/workspaces` — and
-that is where the tools of a turn run. Two people name their projects the same
-way, so the owner comes first; and two projects are two trees, so one never
-reads the files of the other.
+the project and its slug — `<owner>/<slug>`, inside `/data/workspaces`, with
+the id of the owner in front and not its name — and that is where the tools of
+a turn run. Two people name their projects the same way, so the owner comes
+first; and two projects are two trees, so one never reads the files of the
+other.
 
 A message may carry files. They are kept in the database — any instance serves
 any conversation — and written into that workspace when the turn runs, under

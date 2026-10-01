@@ -28,8 +28,8 @@ var (
 	ErrLastOwner = errors.New("la organización se quedaría sin dueño")
 )
 
-// Org is an organization: its slug names the directory of its workspace, the
-// same way the slug of a project does.
+// Org is an organization: its id names the directory of its workspace, the way
+// the id of a person does.
 type Org struct {
 	ID        string `json:"id"`
 	Slug      string `json:"slug"`

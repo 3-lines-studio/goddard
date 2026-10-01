@@ -11,7 +11,8 @@ import (
 var ErrTaken = errors.New("ese proyecto ya existe")
 
 // Owner is who a project belongs to: a user, or the organization it is
-// shared with. It is the same kind and id the skills and the secrets keep.
+// shared with. It is the same kind and id the skills and the secrets keep, and
+// the id is what names the directory of its workspace.
 type Owner struct {
 	Kind string `json:"kind"`
 	ID   string `json:"id"`
