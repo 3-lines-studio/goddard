@@ -403,7 +403,7 @@ func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation cha
 
 func (s *Service) context(conversation chat.Conversation, project chat.Project) string {
 	return fmt.Sprintf("## Entorno de ejecución\n- Modelo: %s\n- Workspace: %s\n- Conversación: %s\n",
-		s.Model, s.projectDir(project), conversation.ID)
+		s.Model, s.ProjectDir(project), conversation.ID)
 }
 
 // logSink turns what axe does into the events the web reads: what is worth
@@ -489,15 +489,15 @@ func (s *Service) projectOf(ctx context.Context, conversation chat.Conversation)
 // of another. A machine that is not this host, the compute of a user, plugs in
 // here and does not change anything else.
 func (s *Service) machine(project chat.Project) axe.Machine {
-	dir := s.projectDir(project)
+	dir := s.ProjectDir(project)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		log.Printf("goddard: no pude armar el workspace de %q: %v", project.Slug, err)
 	}
 	return axe.NewLocal(dir)
 }
 
-// projectDir is the directory of a project: the owner, because two people name
+// ProjectDir is the directory of a project: the owner, because two people name
 // their projects the same way, and the slug, which names a directory already.
-func (s *Service) projectDir(project chat.Project) string {
+func (s *Service) ProjectDir(project chat.Project) string {
 	return filepath.Join(s.Workspace, project.Owner.ID, project.Slug)
 }

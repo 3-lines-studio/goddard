@@ -53,6 +53,7 @@ func TestStateLeavesTheAgendaThreadsOut(t *testing.T) {
 func TestStateIsTheProjectsAndWhoIsAsking(t *testing.T) {
 	service := apptest.Route(t, apptest.Provider(t))
 	cookie := apptest.Session(t, service, "berti@ejemplo.com")
+	user := apptest.User(t, service)
 	thread := apptest.Thread(t, service)
 
 	recorder := httptest.NewRecorder()
@@ -61,10 +62,10 @@ func TestStateIsTheProjectsAndWhoIsAsking(t *testing.T) {
 		t.Fatalf("contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
 	}
 	var body struct {
-		User      string `json:"user"`
-		Workspace string `json:"workspace"`
-		Projects  []struct {
+		User     string `json:"user"`
+		Projects []struct {
 			Slug          string `json:"slug"`
+			Workspace     string `json:"workspace"`
 			Conversations []struct {
 				ID      string `json:"id"`
 				Running bool   `json:"running"`
@@ -77,8 +78,12 @@ func TestStateIsTheProjectsAndWhoIsAsking(t *testing.T) {
 	if body.User != "berti@ejemplo.com" {
 		t.Fatalf("el usuario quedó %q", body.User)
 	}
-	if body.Workspace != service.Workspace {
-		t.Fatalf("el workspace quedó %q", body.Workspace)
+	projects, err := service.Chat.Projects(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, nil)
+	if err != nil {
+		t.Fatalf("projects: %v", err)
+	}
+	if len(projects) != 1 || body.Projects[0].Workspace != service.ProjectDir(projects[0]) {
+		t.Fatalf("el workspace del proyecto quedó %q", body.Projects[0].Workspace)
 	}
 	if len(body.Projects) != 1 || body.Projects[0].Slug != "goddard" {
 		t.Fatalf("los proyectos quedaron %+v", body.Projects)

@@ -74,7 +74,6 @@ export function Chat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [user, setUser] = useState("");
-  const [workspace, setWorkspace] = useState("");
   const [editing, setEditing] = useState("");
   const [removing, setRemoving] = useState("");
   const [facts, setFacts] = useState<Fact[]>([]);
@@ -121,7 +120,6 @@ export function Chat() {
     const data = await response.json();
     setNeedLogin(false);
     setUser(data.user ?? "");
-    setWorkspace(data.workspace ?? "");
     const projects: Project[] = data.projects ?? [];
     setProjects(projects);
     setOrgs(data.orgs ?? []);
@@ -672,7 +670,7 @@ export function Chat() {
                   />
                 </div>
               ) : (
-                <Thread lines={lines} partial={partial} workspace={workspace} />
+                <Thread lines={lines} partial={partial} workspace={panel?.workspace ?? ""} />
               )}
             </TabsContent>
           ) : (

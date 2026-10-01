@@ -15,6 +15,7 @@ export type Project = {
   slug: string;
   name: string;
   owner: Owner;
+  workspace: string;
   conversations: Line[];
 };
 

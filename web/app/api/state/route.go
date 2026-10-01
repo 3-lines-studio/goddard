@@ -20,6 +20,7 @@ type projectView struct {
 	Slug          string             `json:"slug"`
 	Name          string             `json:"name"`
 	Owner         chat.Owner         `json:"owner"`
+	Workspace     string             `json:"workspace"`
 	Conversations []conversationView `json:"conversations"`
 }
 
@@ -70,7 +71,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		view := projectView{ID: project.ID, Slug: project.Slug, Name: project.Name, Owner: project.Owner, Conversations: []conversationView{}}
+		view := projectView{ID: project.ID, Slug: project.Slug, Name: project.Name, Owner: project.Owner, Workspace: service.ProjectDir(project), Conversations: []conversationView{}}
 		for _, conversation := range conversations {
 			if conversation.Source == chat.SourceSchedule {
 				continue
@@ -86,9 +87,8 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"projects":  views,
-		"orgs":      orgViews,
-		"user":      user.Email,
-		"workspace": service.Workspace,
+		"projects": views,
+		"orgs":     orgViews,
+		"user":     user.Email,
 	})
 }
