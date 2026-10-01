@@ -1,7 +1,7 @@
 // Package naming turns a name into what a directory and the tables of goddard
 // can hold: lowercase, no accents, no punctuation, words joined by single
-// dashes. It is the same rule for the projects and for the organizations,
-// because both of them name a directory of the workspace.
+// dashes. The projects and the organizations share the rule: the slug of a
+// project names a directory, and the owners are named by their id.
 package naming
 
 import (

@@ -13,7 +13,7 @@ import { Memory } from "./memory";
 import { Orgs } from "./orgs";
 import { Rail } from "./rail";
 import { Composer, Thread } from "./thread";
-import type { Event, Fact, Machine, Member, Org, Project, Skill, Tab, Task, Upload } from "./types";
+import type { Event, Fact, Member, Org, Project, Skill, Tab, Task, Upload } from "./types";
 
 const TABS_KEY = "goddard-tabs";
 const OPEN_KEY = "goddard-open-projects";
@@ -74,8 +74,6 @@ export function Chat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [user, setUser] = useState("");
-  const [workspace, setWorkspace] = useState("");
-  const [machine, setMachine] = useState<Machine | null>(null);
   const [editing, setEditing] = useState("");
   const [removing, setRemoving] = useState("");
   const [facts, setFacts] = useState<Fact[]>([]);
@@ -122,8 +120,6 @@ export function Chat() {
     const data = await response.json();
     setNeedLogin(false);
     setUser(data.user ?? "");
-    setWorkspace(data.workspace ?? "");
-    setMachine(data.machine ?? null);
     const projects: Project[] = data.projects ?? [];
     setProjects(projects);
     setOrgs(data.orgs ?? []);
@@ -582,8 +578,6 @@ export function Chat() {
         tab={tab}
         unread={unread}
         user={user}
-        machine={machine}
-        workspace={workspace}
         theme={theme}
         collapsed={collapsed}
         more={more}
@@ -676,7 +670,7 @@ export function Chat() {
                   />
                 </div>
               ) : (
-                <Thread lines={lines} partial={partial} workspace={workspace} />
+                <Thread lines={lines} partial={partial} workspace={panel?.workspace ?? ""} />
               )}
             </TabsContent>
           ) : (

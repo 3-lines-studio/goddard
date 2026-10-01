@@ -3,9 +3,7 @@ import {
   BrainIcon,
   CalendarClockIcon,
   ChevronDownIcon,
-  CpuIcon,
   EllipsisIcon,
-  HardDriveIcon,
   LogOutIcon,
   MessageSquarePlusIcon,
   MoonIcon,
@@ -44,9 +42,8 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
-import { machinePercent, machineRatio, machineSize } from "../_lib/machine";
 import { Avatar } from "./avatar";
-import type { Machine, Org, Project, Tab } from "./types";
+import type { Org, Project, Tab } from "./types";
 import { VISIBLE } from "./types";
 
 export function Rail({
@@ -55,8 +52,6 @@ export function Rail({
   tab,
   unread,
   user,
-  machine,
-  workspace,
   theme,
   collapsed,
   more,
@@ -83,8 +78,6 @@ export function Rail({
   tab: Tab | null;
   unread: number;
   user: string;
-  machine: Machine | null;
-  workspace: string;
   theme: string;
   collapsed: Set<string>;
   more: Set<string>;
@@ -320,31 +313,6 @@ export function Rail({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-
-        {machine ? (
-          <div className="flex items-center justify-between gap-2 px-2 text-xs" data-machine="">
-            <span
-              data-machine-memory=""
-              className="flex items-center gap-1 text-muted-foreground"
-              title={`${machineRatio(machine.memory.used, machine.memory.total)} · la memoria del contenedor, cache y kernel incluidos (anónima ${machineSize(
-                machine.memory.anon,
-              )}, cache ${machineSize(machine.memory.cache)}, kernel ${machineSize(machine.memory.kernel)})`}
-            >
-              <CpuIcon />
-              {machineSize(machine.memory.used)}
-            </span>
-            {machine.disk.total > 0 ? (
-              <span
-                data-machine-disk=""
-                className="flex items-center gap-1 text-muted-foreground"
-                title={`${machineRatio(machine.disk.used, machine.disk.total)} · el volumen ${workspace}`}
-              >
-                <HardDriveIcon />
-                {machinePercent(machine.disk.used, machine.disk.total)}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
 
         <div className="flex items-center justify-between gap-2 px-2 text-xs">
           <span className="truncate text-muted-foreground">{user}</span>
