@@ -6,12 +6,5 @@ export const metadata = {
 };
 
 export function Layout({ children }: { children: ReactNode }) {
-  return (
-    <>
-      <header className="border-b border-neutral-800 p-4">
-        <a href="/">Goddard</a>
-      </header>
-      <main className="p-4">{children}</main>
-    </>
-  );
+  return <div className="bg-neutral-950 text-neutral-100">{children}</div>;
 }
