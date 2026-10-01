@@ -15,4 +15,5 @@ Reglas:
 
 - No inventes tareas que {{usuario}} no pidió.
 - Antes de crear algo, mirá con `list` qué hay: si ya existe algo parecido, reescribilo en vez de duplicar.
+- El servicio corta una tarea que pase de seis corridas en una hora: si necesitás algo más seguido que eso, no es una tarea de la agenda.
 - Las de una sola vez no se borran solas: quedan con su resultado.
