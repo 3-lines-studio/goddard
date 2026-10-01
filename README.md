@@ -158,6 +158,7 @@ POST /api/projects                      {name}
 POST /api/conversations                 {project, title}
 POST /api/turns                         {conversation, text}: 202, and the turn runs
 GET  /api/events?conversation=&since=   the log of the thread
+GET  /api/stream?conversation=&since=   the same log, live: text/event-stream
 ```
 
 To run it: `DATABASE_URL` and `OPENAI_API_KEY`, plus `GODDARD_BASE`,
