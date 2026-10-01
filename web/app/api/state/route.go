@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/web/app"
 )
 
@@ -45,6 +46,9 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		}
 		view := projectView{ID: project.ID, Slug: project.Slug, Name: project.Name, Conversations: []conversationView{}}
 		for _, conversation := range conversations {
+			if conversation.Source == chat.SourceSchedule {
+				continue
+			}
 			view.Conversations = append(view.Conversations, conversationView{
 				ID:      conversation.ID,
 				Title:   conversation.Title,

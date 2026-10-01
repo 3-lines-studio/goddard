@@ -45,9 +45,11 @@ type Skill = {
   updated: number;
 };
 
-type Panel = {
-  project: Project;
-  view: "agenda" | "memoria";
+type Tab = {
+  key: string;
+  kind: "thread" | "agenda" | "memoria";
+  title: string;
+  slug: string;
 };
 
 type Event = {
@@ -62,9 +64,51 @@ type Event = {
   message?: string;
 };
 
+const TABS_KEY = "goddard-tabs";
+const OPEN_KEY = "goddard-open-projects";
+const VISIBLE = 10;
+
+function readList(key: string): string[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value.filter((one) => typeof one === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeList(key: string, values: string[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(values));
+  } catch {
+    return;
+  }
+}
+
+function tabFromKey(key: string, projects: Project[]): Tab | null {
+  for (const view of ["agenda", "memoria"] as const) {
+    if (!key.startsWith(view + ":")) continue;
+    const slug = key.slice(view.length + 1);
+    const project = projects.find((one) => one.slug === slug);
+    if (!project) return null;
+    const name = view === "agenda" ? "Agenda" : "Memoria";
+    return { key, kind: view, slug, title: `${name} · ${project.name}` };
+  }
+  for (const project of projects) {
+    for (const line of project.conversations ?? []) {
+      if (line.id === key) return { key, kind: "thread", slug: project.slug, title: line.title };
+    }
+  }
+  return null;
+}
+
 export function Chat() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [open, setOpen] = useState("");
+  const [keys, setKeys] = useState<string[]>([]);
+  const [active, setActive] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [more, setMore] = useState<Set<string>>(new Set());
+  const [menuProject, setMenuProject] = useState("");
   const [lines, setLines] = useState<Event[]>([]);
   const [partial, setPartial] = useState("");
   const [text, setText] = useState("");
@@ -75,7 +119,6 @@ export function Chat() {
   const [workspace, setWorkspace] = useState("");
   const [editing, setEditing] = useState("");
   const [removing, setRemoving] = useState("");
-  const [panel, setPanel] = useState<Panel | null>(null);
   const [facts, setFacts] = useState<Fact[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -87,6 +130,20 @@ export function Chat() {
   const [sent, setSent] = useState("");
   const [link, setLink] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
+  const restored = useRef(false);
+
+  const tabs = keys.map((key) => tabFromKey(key, projects)).filter((one): one is Tab => one !== null);
+  const tab = tabs.find((one) => one.key === active) ?? tabs[tabs.length - 1] ?? null;
+  const panel = projects.find((one) => one.slug === tab?.slug) ?? null;
+  const open = tab?.kind === "thread" ? tab.key : "";
+
+  useEffect(() => {
+    if (restored.current) writeList(TABS_KEY, keys);
+  }, [keys]);
+
+  useEffect(() => {
+    if (restored.current) writeList(OPEN_KEY, [...collapsed]);
+  }, [collapsed]);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/state");
@@ -104,12 +161,13 @@ export function Chat() {
     setWorkspace(data.workspace ?? "");
     const projects: Project[] = data.projects ?? [];
     setProjects(projects);
-    setOpen((current) =>
-      projects.some((project) => (project.conversations ?? []).some((line) => line.id === current))
-        ? current
-        : "",
-    );
-    setPanel((current) => (projects.some((project) => project.id === current?.project.id) ? current : null));
+    if (!restored.current) {
+      restored.current = true;
+      setCollapsed(new Set(readList(OPEN_KEY)));
+      const wanted = readList(TABS_KEY).filter((key) => tabFromKey(key, projects) !== null);
+      setKeys(wanted);
+      setActive(wanted[wanted.length - 1] ?? "");
+    }
   }, []);
 
   useEffect(() => {
@@ -134,6 +192,11 @@ export function Chat() {
     };
     return () => stream.close();
   }, [open, load]);
+
+  useEffect(() => {
+    if (tab?.kind === "agenda") void loadAgenda(tab.slug);
+    if (tab?.kind === "memoria") void loadMemory(tab.slug);
+  }, [tab?.kind, tab?.slug]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -210,7 +273,8 @@ export function Chat() {
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
     setProjects([]);
-    setOpen("");
+    setKeys([]);
+    setActive("");
     setLines([]);
     setUser("");
     setSent("");
@@ -220,7 +284,8 @@ export function Chat() {
 
   async function newProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const name = new FormData(event.currentTarget).get("name");
+    const form = event.currentTarget;
+    const name = new FormData(form).get("name");
     if (typeof name !== "string" || !name.trim()) return;
     const response = await fetch("/api/projects", {
       method: "POST",
@@ -231,7 +296,7 @@ export function Chat() {
       setError(await response.text());
       return;
     }
-    event.currentTarget.reset();
+    form.reset();
     load();
   }
 
@@ -277,16 +342,8 @@ export function Chat() {
     setTasks(data.tasks ?? []);
   }
 
-  async function openAgenda(project: Project) {
-    setPanel({ project, view: "agenda" });
-    setMenu(false);
-    await loadAgenda(project.slug);
-  }
-
-  async function openMemory(project: Project) {
-    setPanel({ project, view: "memoria" });
-    setMenu(false);
-    const memory = await fetch(`/api/memo?project=${encodeURIComponent(project.slug)}`);
+  async function loadMemory(slug: string) {
+    const memory = await fetch(`/api/memo?project=${encodeURIComponent(slug)}`);
     if (!memory.ok) {
       setError(await memory.text());
       return;
@@ -300,34 +357,81 @@ export function Chat() {
     setSkills((await installed.json()).skills ?? []);
   }
 
+  function openTab(key: string) {
+    setKeys((current) => (current.includes(key) ? current : [...current, key]));
+    setActive(key);
+    setMenu(false);
+    setMenuProject("");
+  }
+
+  function closeTab(key: string) {
+    setKeys((current) => current.filter((one) => one !== key));
+    setActive((current) => (current === key ? "" : current));
+  }
+
+  function toggleProject(slug: string) {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+  }
+
+  function toggleMore(slug: string) {
+    setMore((current) => {
+      const next = new Set(current);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+  }
+
+  function openAgenda(project: Project) {
+    openTab(`agenda:${project.slug}`);
+  }
+
+  function openMemory(project: Project) {
+    openTab(`memoria:${project.slug}`);
+  }
+
+  function openProject(project: Project) {
+    const newest = (project.conversations ?? [])[0];
+    if (!newest) {
+      void newConversation(project.id);
+      return;
+    }
+    openTab(newest.id);
+  }
+
   async function runTask(task: Task) {
-    if (!panel) return;
+    if (tab?.kind !== "agenda") return;
     setRunning(task.name);
     const response = await fetch("/api/agenda/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ project: panel.project.slug, name: task.name }),
+      body: JSON.stringify({ project: tab.slug, name: task.name }),
     });
     setRunning("");
     if (!response.ok) {
       setError(await response.text());
       return;
     }
-    await loadAgenda(panel.project.slug);
+    await loadAgenda(tab.slug);
   }
 
   async function pauseTask(task: Task) {
-    if (!panel) return;
+    if (tab?.kind !== "agenda") return;
     const response = await fetch("/api/agenda", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ project: panel.project.slug, name: task.name, paused: !task.paused }),
+      body: JSON.stringify({ project: tab.slug, name: task.name, paused: !task.paused }),
     });
     if (!response.ok) {
       setError(await response.text());
       return;
     }
-    await loadAgenda(panel.project.slug);
+    await loadAgenda(tab.slug);
   }
 
   function askTask(task: Task) {
@@ -339,15 +443,15 @@ export function Chat() {
   }
 
   async function removeTask(task: Task) {
-    if (!panel) return;
+    if (tab?.kind !== "agenda") return;
     setRemovingTask("");
-    const query = `project=${encodeURIComponent(panel.project.slug)}&name=${encodeURIComponent(task.name)}`;
+    const query = `project=${encodeURIComponent(tab.slug)}&name=${encodeURIComponent(task.name)}`;
     const response = await fetch(`/api/agenda?${query}`, { method: "DELETE" });
     if (!response.ok) {
       setError(await response.text());
       return;
     }
-    await loadAgenda(panel.project.slug);
+    await loadAgenda(tab.slug);
   }
 
   async function newConversation(project: string) {
@@ -362,9 +466,7 @@ export function Chat() {
     }
     const line: Line = await response.json();
     await load();
-    setPanel(null);
-    setOpen(line.id);
-    setMenu(false);
+    openTab(line.id);
   }
 
   const working =
@@ -414,135 +516,165 @@ export function Chat() {
             placeholder="Nuevo proyecto"
             className="w-full rounded border border-neutral-700 bg-transparent px-2 py-1 text-sm"
           />
-          <button type="submit" className="rounded border border-neutral-700 px-2 text-sm">
+          <button type="submit" aria-label="Agregar proyecto" className="rounded border border-neutral-700 px-2 text-sm">
             +
           </button>
         </form>
-        <nav className="flex-1 overflow-y-auto p-3">
-          {projects.map((project) => (
-            <div key={project.id} className="mb-4">
-              <div className="flex items-center justify-between gap-1">
-                {editing === project.id ? (
-                  <Name
-                    value={project.name}
-                    save={(name) => rename("/api/projects", { id: project.id, name })}
-                    cancel={() => setEditing("")}
-                  />
-                ) : (
-                  <span className="truncate text-sm font-semibold">{project.name}</span>
-                )}
-                <span className="flex items-center gap-1">
+        <nav className="flex-1 overflow-y-auto p-2">
+          {projects.map((project) => {
+            const threads = project.conversations ?? [];
+            const shut = collapsed.has(project.slug);
+            const shown = more.has(project.slug) ? threads : threads.slice(0, VISIBLE);
+            return (
+              <div key={project.id} className="mb-3">
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setEditing(project.id)}
-                    data-rename-project={project.id}
-                    aria-label={`Renombrar ${project.name}`}
-                    className="text-xs opacity-40 hover:opacity-100"
+                    onClick={() => toggleProject(project.slug)}
+                    data-toggle-project={project.id}
+                    aria-label={shut ? `Mostrar los hilos de ${project.name}` : `Ocultar los hilos de ${project.name}`}
+                    className="w-4 shrink-0 rounded text-xs opacity-60 hover:opacity-100"
                   >
-                    ✎
+                    {shut ? "▸" : "▾"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => ask("/api/projects", project.id)}
-                    data-delete-project={project.id}
-                    aria-label={`Borrar ${project.name}`}
-                    title={removing === project.id ? "otra vez para borrar" : `Borrar ${project.name}`}
-                    className={`rounded px-1 text-xs ${
-                      removing === project.id ? "bg-red-900 text-red-100" : "opacity-40 hover:opacity-100"
-                    }`}
-                  >
-                    {removing === project.id ? "borrar" : "✕"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => newConversation(project.id)}
-                    data-new-conversation={project.id}
-                    className="rounded border border-neutral-700 px-1 text-xs"
-                    aria-label={`Nueva conversación en ${project.name}`}
-                  >
-                    nueva
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openAgenda(project)}
-                    data-agenda={project.id}
-                    aria-label={`Agenda de ${project.name}`}
-                    className={`rounded border px-1 text-xs ${
-                      panel?.view === "agenda" && panel.project.id === project.id
-                        ? "border-neutral-500"
-                        : "border-neutral-800 opacity-60"
-                    }`}
-                  >
-                    agenda
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void openMemory(project)}
-                    data-memory={project.id}
-                    aria-label={`Lo que sabe de ${project.name}`}
-                    className={`rounded border px-1 text-xs ${
-                      panel?.view === "memoria" && panel.project.id === project.id
-                        ? "border-neutral-500"
-                        : "border-neutral-800 opacity-60"
-                    }`}
-                  >
-                    memoria
-                  </button>
-                </span>
-              </div>
-              <ul className="mt-1">
-                {(project.conversations ?? []).map((line) => (
-                  <li key={line.id} className="group flex items-center gap-1">
-                    {editing === line.id ? (
-                      <Name
-                        value={line.title}
-                        save={(title) => rename("/api/conversations", { id: line.id, title })}
-                        cancel={() => setEditing("")}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPanel(null);
-                          setOpen(line.id);
-                          setMenu(false);
-                        }}
-                        data-conversation={line.id}
-                        className={`min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-sm ${
-                          open === line.id ? "bg-neutral-800" : "hover:bg-neutral-900"
-                        }`}
-                      >
-                        {line.title}
-                        {line.running ? <span className="ml-1 text-xs opacity-60">·</span> : null}
-                      </button>
-                    )}
+                  {editing === project.id ? (
+                    <Name
+                      value={project.name}
+                      save={(name) => rename("/api/projects", { id: project.id, name })}
+                      cancel={() => setEditing("")}
+                    />
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => setEditing(line.id)}
-                      data-rename-conversation={line.id}
-                      aria-label={`Renombrar ${line.title}`}
-                      className="text-xs opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
+                      onClick={() => openProject(project)}
+                      data-project={project.id}
+                      className="min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-sm font-semibold hover:bg-neutral-900"
                     >
-                      ✎
+                      {project.name}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setMenuProject(menuProject === project.slug ? "" : project.slug)}
+                    data-project-menu={project.id}
+                    aria-label={`Opciones de ${project.name}`}
+                    className="shrink-0 rounded px-1 text-xs opacity-60 hover:opacity-100"
+                  >
+                    ⋮
+                  </button>
+                </div>
+                {menuProject === project.slug ? (
+                  <div className="my-1 flex flex-col rounded border border-neutral-800 p-1 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => newConversation(project.id)}
+                      data-new-conversation={project.id}
+                      className="rounded px-2 py-1 text-left hover:bg-neutral-900"
+                    >
+                      nueva conversación
                     </button>
                     <button
                       type="button"
-                      onClick={() => ask("/api/conversations", line.id)}
-                      data-delete-conversation={line.id}
-                      aria-label={`Borrar ${line.title}`}
-                      title={removing === line.id ? "otra vez para borrar" : `Borrar ${line.title}`}
-                      className={`shrink-0 rounded px-1 text-xs ${
-                        removing === line.id ? "bg-red-900 text-red-100" : "opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
+                      onClick={() => openAgenda(project)}
+                      data-agenda={project.id}
+                      className="rounded px-2 py-1 text-left hover:bg-neutral-900"
+                    >
+                      agenda
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openMemory(project)}
+                      data-memory={project.id}
+                      className="rounded px-2 py-1 text-left hover:bg-neutral-900"
+                    >
+                      memoria
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuProject("");
+                        setEditing(project.id);
+                      }}
+                      data-rename-project={project.id}
+                      className="rounded px-2 py-1 text-left hover:bg-neutral-900"
+                    >
+                      renombrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => ask("/api/projects", project.id)}
+                      data-delete-project={project.id}
+                      title={removing === project.id ? "otra vez para borrar" : `Borrar ${project.name}`}
+                      className={`rounded px-2 py-1 text-left hover:bg-neutral-900 ${
+                        removing === project.id ? "bg-red-900 text-red-100" : "text-red-400"
                       }`}
                     >
-                      {removing === line.id ? "borrar" : "✕"}
+                      {removing === project.id ? "otra vez para borrar" : "quitar"}
                     </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-          {projects.length === 0 ? <p className="text-sm opacity-60">Todavía no hay proyectos.</p> : null}
+                  </div>
+                ) : null}
+                {shut ? null : (
+                  <ul className="mt-1">
+                    {shown.map((line) => (
+                      <li key={line.id} className="group flex items-center gap-1">
+                        {editing === line.id ? (
+                          <Name
+                            value={line.title}
+                            save={(title) => rename("/api/conversations", { id: line.id, title })}
+                            cancel={() => setEditing("")}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openTab(line.id)}
+                            data-conversation={line.id}
+                            className={`min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-sm ${
+                              tab?.key === line.id ? "bg-neutral-800" : "hover:bg-neutral-900"
+                            }`}
+                          >
+                            {line.title}
+                            {line.running ? <span className="ml-1 text-xs opacity-60">·</span> : null}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setEditing(line.id)}
+                          data-rename-conversation={line.id}
+                          aria-label={`Renombrar ${line.title}`}
+                          className="text-xs opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => ask("/api/conversations", line.id)}
+                          data-delete-conversation={line.id}
+                          aria-label={`Borrar ${line.title}`}
+                          title={removing === line.id ? "otra vez para borrar" : `Borrar ${line.title}`}
+                          className={`shrink-0 rounded px-1 text-xs ${
+                            removing === line.id ? "bg-red-900 text-red-100" : "opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
+                          }`}
+                        >
+                          {removing === line.id ? "borrar" : "✕"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!shut && threads.length > VISIBLE ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleMore(project.slug)}
+                    data-more-threads={project.slug}
+                    className="mt-1 px-2 text-xs opacity-60 hover:opacity-100"
+                  >
+                    {more.has(project.slug) ? "ver menos" : `ver más (${threads.length - VISIBLE})`}
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+          {projects.length === 0 ? <p className="p-2 text-sm opacity-60">Todavía no hay proyectos.</p> : null}
         </nav>
         <div className="flex items-center justify-between border-t border-neutral-800 p-3 text-xs">
           <span className="truncate opacity-60">{user}</span>
@@ -553,16 +685,38 @@ export function Chat() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b border-neutral-800 p-3 md:hidden">
+        <header className="flex items-center gap-2 border-b border-neutral-800 p-2 md:hidden">
           <button type="button" onClick={() => setMenu(!menu)} className="rounded border border-neutral-700 px-2 text-sm">
             proyectos
           </button>
-          <span className="truncate text-sm">
-            {panel ? `${panel.view === "agenda" ? "Agenda" : "Memoria"} de ${panel.project.name}` : titleOf(projects, open)}
-          </span>
+          <span className="truncate text-sm">{tab ? tab.title : "Goddard"}</span>
         </header>
 
-        {panel?.view === "memoria" ? (
+        <nav className="flex items-center gap-1 overflow-x-auto border-b border-neutral-800 p-1">
+          {tabs.map((one) => (
+            <span
+              key={one.key}
+              className={`flex shrink-0 items-center gap-1 rounded px-2 py-1 text-sm ${
+                one.key === tab?.key ? "bg-neutral-800" : "hover:bg-neutral-900"
+              }`}
+            >
+              <button type="button" onClick={() => setActive(one.key)} data-tab={one.key} className="max-w-48 truncate">
+                {one.title}
+              </button>
+              <button
+                type="button"
+                onClick={() => closeTab(one.key)}
+                data-close-tab={one.key}
+                aria-label={`Cerrar ${one.title}`}
+                className="text-xs opacity-40 hover:opacity-100"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </nav>
+
+        {tab?.kind === "memoria" ? (
           <div className="flex-1 overflow-y-auto p-4">
             <div className="mx-auto flex max-w-3xl flex-col gap-4">
               <h2 className="text-sm font-semibold">Skills instaladas</h2>
@@ -579,7 +733,7 @@ export function Chat() {
                   </li>
                 ))}
               </ul>
-              <h2 className="text-sm font-semibold">Memoria de {panel.project.name}</h2>
+              <h2 className="text-sm font-semibold">Memoria de {panel?.name}</h2>
               {facts.length === 0 ? <p className="text-sm opacity-60">No hay hechos.</p> : null}
               {facts.map((fact) => (
                 <article key={fact.key} className="rounded border border-neutral-800 p-2 text-sm" data-fact={fact.key}>
@@ -591,10 +745,10 @@ export function Chat() {
               ))}
             </div>
           </div>
-        ) : panel?.view === "agenda" ? (
+        ) : tab?.kind === "agenda" ? (
           <div className="flex-1 overflow-y-auto p-4">
             <div className="mx-auto flex max-w-3xl flex-col gap-3">
-              <h2 className="text-sm font-semibold">Agenda de {panel.project.name}</h2>
+              <h2 className="text-sm font-semibold">Agenda de {panel?.name}</h2>
               {tasks.length === 0 ? <p className="text-sm opacity-60">No hay tareas en este proyecto.</p> : null}
               {tasks.map((task) => (
                 <Task key={task.name} task={task} running={running} removing={removingTask}
@@ -617,7 +771,7 @@ export function Chat() {
 
         {error ? <p className="border-t border-red-900 px-4 py-2 text-sm text-red-400">{error}</p> : null}
 
-        {panel ? null : (
+        {tab?.kind === "thread" ? (
         <form onSubmit={send} className="border-t border-neutral-800 p-3">
           <div className="mx-auto flex max-w-3xl flex-col gap-2">
             {attachments.length > 0 ? (
@@ -684,7 +838,7 @@ export function Chat() {
             </div>
           </div>
         </form>
-        )}
+        ) : null}
       </main>
     </div>
   );
@@ -877,13 +1031,4 @@ function Tool({ call, done, workspace }: { call: Event; done: boolean; workspace
       </pre>
     </details>
   );
-}
-
-function titleOf(projects: Project[], open: string) {
-  for (const project of projects) {
-    for (const line of project.conversations ?? []) {
-      if (line.id === open) return line.title;
-    }
-  }
-  return "Goddard";
 }
