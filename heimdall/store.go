@@ -81,7 +81,7 @@ type Store struct {
 	key Key
 }
 
-// NewStore takes the pool the service already has, the same one it migrates and
+// NewStore takes the pool the app already has, the same one it migrates and
 // the same one its other tables use.
 func NewStore(db *sql.DB, key Key) *Store {
 	return &Store{db: db, key: key}

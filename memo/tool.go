@@ -25,7 +25,7 @@ const toolSchema = `{
 
 // Tool is the memory for the agent harness: `add` writes a fact, `show` reads
 // one and `list` names the keys that exist, which is what jimmy had in its
-// command line. The store goes in when the service builds it, so the tool
+// command line. The store goes in when the app builds it, so the tool
 // travels inside the binary and needs nothing on the PATH.
 func Tool(store *PgStore) axe.Tool {
 	type args struct {
