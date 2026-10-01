@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/schedule"
+	"github.com/3-lines-studio/goddard/skill"
 	"github.com/3-lines-studio/goddard/web/app"
 	"github.com/3-lines-studio/goddard/web/app/api/conversations"
 	"github.com/3-lines-studio/goddard/web/app/api/events"
@@ -176,7 +178,7 @@ func TestATaskRunsInItsOwnThread(t *testing.T) {
 	conversation := apptest.Thread(t, service)
 	user := apptest.User(t, service)
 	task := schedule.Task{
-		UserID:  user.ID,
+		Owner:   schedule.Owner{Kind: schedule.KindUser, ID: user.ID},
 		Project: "goddard",
 		Name:    "recordatorio",
 		At:      "09:00",
@@ -185,7 +187,7 @@ func TestATaskRunsInItsOwnThread(t *testing.T) {
 	if err := service.Schedule.Add(t.Context(), task); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	run, err := service.Agenda.RunNow(t.Context(), user.ID, "goddard", "recordatorio")
+	run, err := service.Agenda.RunNow(t.Context(), service.AgendaOf(t.Context(), user), "goddard", "recordatorio")
 	if err != nil {
 		t.Fatalf("runNow: %v", err)
 	}
@@ -226,11 +228,11 @@ func TestATaskRunsInItsOwnThread(t *testing.T) {
 func TestATaskOfAMissingProjectLeavesTheErrorInItsRun(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t))
 	user := apptest.User(t, service)
-	task := schedule.Task{UserID: user.ID, Project: "no-existe", Name: "suelta", At: "09:00", Prompt: "hola"}
+	task := schedule.Task{Owner: schedule.Owner{Kind: schedule.KindUser, ID: user.ID}, Project: "no-existe", Name: "suelta", At: "09:00", Prompt: "hola"}
 	if err := service.Schedule.Add(t.Context(), task); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	run, err := service.Agenda.RunNow(t.Context(), user.ID, "no-existe", "suelta")
+	run, err := service.Agenda.RunNow(t.Context(), service.AgendaOf(t.Context(), user), "no-existe", "suelta")
 	if err != nil {
 		t.Fatalf("runNow: %v", err)
 	}
@@ -455,5 +457,78 @@ func TestAProjectOfAnOrganizationBelongsToItsMembers(t *testing.T) {
 	events.Get(recorder, apptest.Request(t, "GET", "/api/events?conversation="+thread.ID, nil, ana))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("un miembro de la org no pudo leer el hilo y contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+}
+
+// El turno de una tarea de la organización corre como la organización: ve las
+// skills del equipo y no las de la persona, y el prompt la nombra a ella.
+func TestATaskOfAnOrgRunsAsTheOrg(t *testing.T) {
+	served := make(chan string, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		served <- body.Messages[0].Content
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(apptest.SSE(
+			`{"choices":[{"delta":{"content":"listo"}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		)))
+	}))
+	t.Cleanup(server.Close)
+
+	service := apptest.Service(t, server)
+	user := apptest.User(t, service)
+	team := apptest.AnOrg(t, service, "Acme")
+	if _, err := service.Chat.CreateProject(t.Context(), "goddard", chat.Owner{Kind: chat.OwnerOrg, ID: team.ID}, user.ID); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	if err := service.Skill.Put(t.Context(), service.Viewer(t.Context(), user), skill.Skill{
+		Meta: skill.Meta{Owner: skill.Owner{Kind: skill.User, ID: user.ID}, Name: "mia", Description: "sólo mía"},
+		Body: "# mía",
+	}); err != nil {
+		t.Fatalf("no pude sembrar la skill de la persona: %v", err)
+	}
+	if err := service.Skill.Put(t.Context(), skill.Viewer{Orgs: []string{team.ID}, User: user.ID}, skill.Skill{
+		Meta: skill.Meta{Owner: skill.Owner{Kind: skill.Org, ID: team.ID}, Name: "del-equipo", Description: "del equipo"},
+		Body: "# del equipo",
+	}); err != nil {
+		t.Fatalf("no pude sembrar la skill de la org: %v", err)
+	}
+
+	task := schedule.Task{
+		Owner:   schedule.Owner{Kind: schedule.KindOrg, ID: team.ID},
+		Project: "goddard",
+		Name:    "reporte",
+		At:      "09:00",
+		Prompt:  "reportá",
+	}
+	if err := service.Schedule.Add(t.Context(), task); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	run, err := service.Agenda.RunNow(t.Context(), service.AgendaOf(t.Context(), user), "goddard", "reporte")
+	if err != nil {
+		t.Fatalf("runNow: %v", err)
+	}
+	if !run.OK {
+		t.Fatalf("la corrida quedó %+v", run)
+	}
+
+	select {
+	case system := <-served:
+		if !strings.Contains(system, "del-equipo") {
+			t.Fatalf("el prompt no trajo la skill de la org:\n%s", system)
+		}
+		if strings.Contains(system, "sólo mía") {
+			t.Fatalf("el prompt trajo la skill de la persona:\n%s", system)
+		}
+		if !strings.Contains(system, "Acme") {
+			t.Fatalf("el prompt no nombró a la organización:\n%s", system)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("el turno no llegó al modelo")
 	}
 }

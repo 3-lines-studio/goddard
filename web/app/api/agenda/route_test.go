@@ -1,18 +1,26 @@
 package agenda
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/schedule"
+	"github.com/3-lines-studio/goddard/web/app"
 	"github.com/3-lines-studio/goddard/web/app/api/agenda/read"
 	"github.com/3-lines-studio/goddard/web/app/apptest"
 )
 
-func aTask(userID, name string) schedule.Task {
-	return schedule.Task{UserID: userID, Project: "goddard", Name: name, Every: "6h", Prompt: "reportá"}
+func aTask(owner schedule.Owner, name string) schedule.Task {
+	return schedule.Task{Owner: owner, Project: "goddard", Name: name, Every: "6h", Prompt: "reportá"}
+}
+
+// de es la agenda de una persona: las tareas que ve quien pregunta.
+func de(service *app.Service, user auth.User) schedule.Viewer {
+	return service.AgendaOf(context.Background(), user)
 }
 
 func TestTheRoutesWantASession(t *testing.T) {
@@ -42,15 +50,15 @@ func TestTheListIsEveryTaskWithItsRuns(t *testing.T) {
 	user := apptest.User(t, service)
 	cookie := apptest.Session(t, service, "berti@ejemplo.com")
 	apptest.Thread(t, service)
-	if err := service.Schedule.Add(t.Context(), aTask(user.ID, "informe")); err != nil {
+	if err := service.Schedule.Add(t.Context(), aTask(schedule.Owner{Kind: schedule.KindUser, ID: user.ID}, "informe")); err != nil {
 		t.Fatalf("no pude sembrar la tarea: %v", err)
 	}
-	otra := aTask(user.ID, "limpieza")
+	otra := aTask(schedule.Owner{Kind: schedule.KindUser, ID: user.ID}, "limpieza")
 	otra.Project = "picsel"
 	if err := service.Schedule.Add(t.Context(), otra); err != nil {
 		t.Fatalf("no pude sembrar la otra tarea: %v", err)
 	}
-	if _, err := service.Agenda.RunNow(t.Context(), user.ID, "goddard", "informe"); err != nil {
+	if _, err := service.Agenda.RunNow(t.Context(), de(service, user), "goddard", "informe"); err != nil {
 		t.Fatalf("runNow: %v", err)
 	}
 
@@ -101,13 +109,13 @@ func TestReadingATaskAndReadingThemAll(t *testing.T) {
 	user := apptest.User(t, service)
 	cookie := apptest.Session(t, service, "berti@ejemplo.com")
 	apptest.Thread(t, service)
-	for _, task := range []schedule.Task{aTask(user.ID, "informe"), aTask(user.ID, "limpieza")} {
+	for _, task := range []schedule.Task{aTask(schedule.Owner{Kind: schedule.KindUser, ID: user.ID}, "informe"), aTask(schedule.Owner{Kind: schedule.KindUser, ID: user.ID}, "limpieza")} {
 		if err := service.Schedule.Add(t.Context(), task); err != nil {
 			t.Fatalf("no pude sembrar %q: %v", task.Name, err)
 		}
 		if _, err := service.DB.ExecContext(t.Context(),
-			`INSERT INTO schedule.runs (user_id, project, name, run_ts, run_date, ms, ok, body)
-			 VALUES ($1, 'goddard', $2, 100, '2026-10-01', 5, true, 'ok')`, user.ID, task.Name); err != nil {
+			`INSERT INTO schedule.runs (owner_kind, owner_id, project, name, run_ts, run_date, ms, ok, body)
+			 VALUES ('user', $1, 'goddard', $2, 100, '2026-10-01', 5, true, 'ok')`, user.ID, task.Name); err != nil {
 			t.Fatalf("no pude sembrar la corrida de %q: %v", task.Name, err)
 		}
 	}
@@ -119,10 +127,10 @@ func TestReadingATaskAndReadingThemAll(t *testing.T) {
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("leer una contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
 	}
-	if informe, _ := service.Schedule.Get(t.Context(), user.ID, "goddard", "informe"); informe.Unread != 0 {
+	if informe, _ := service.Schedule.Get(t.Context(), de(service, user), "goddard", "informe"); informe.Unread != 0 {
 		t.Fatalf("el informe quedó con %d sin leer", informe.Unread)
 	}
-	if limpieza, _ := service.Schedule.Get(t.Context(), user.ID, "goddard", "limpieza"); limpieza.Unread != 1 {
+	if limpieza, _ := service.Schedule.Get(t.Context(), de(service, user), "goddard", "limpieza"); limpieza.Unread != 1 {
 		t.Fatalf("la limpieza quedó con %d sin leer", limpieza.Unread)
 	}
 
@@ -131,7 +139,7 @@ func TestReadingATaskAndReadingThemAll(t *testing.T) {
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("leer todas contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
 	}
-	entries, err := service.Schedule.ListAll(t.Context(), user.ID)
+	entries, err := service.Schedule.ListAll(t.Context(), de(service, user))
 	if err != nil {
 		t.Fatalf("listar: %v", err)
 	}
@@ -155,7 +163,7 @@ func TestPauseAndDeleteAskForATaskThatIsThere(t *testing.T) {
 	user := apptest.User(t, service)
 	cookie := apptest.Session(t, service, "berti@ejemplo.com")
 	apptest.Thread(t, service)
-	if err := service.Schedule.Add(t.Context(), aTask(user.ID, "informe")); err != nil {
+	if err := service.Schedule.Add(t.Context(), aTask(schedule.Owner{Kind: schedule.KindUser, ID: user.ID}, "informe")); err != nil {
 		t.Fatalf("no pude sembrar la tarea: %v", err)
 	}
 
@@ -166,7 +174,7 @@ func TestPauseAndDeleteAskForATaskThatIsThere(t *testing.T) {
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("pausar contestó %d", recorder.Code)
 	}
-	entry, err := service.Schedule.Get(t.Context(), user.ID, "goddard", "informe")
+	entry, err := service.Schedule.Get(t.Context(), de(service, user), "goddard", "informe")
 	if err != nil || !entry.Task.Paused {
 		t.Fatalf("la tarea quedó %+v (%v)", entry.Task, err)
 	}
@@ -184,7 +192,7 @@ func TestPauseAndDeleteAskForATaskThatIsThere(t *testing.T) {
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("borrar contestó %d", recorder.Code)
 	}
-	if _, err := service.Schedule.Get(t.Context(), user.ID, "goddard", "informe"); err == nil {
+	if _, err := service.Schedule.Get(t.Context(), de(service, user), "goddard", "informe"); err == nil {
 		t.Fatal("la tarea siguió ahí")
 	}
 }

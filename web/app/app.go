@@ -114,7 +114,7 @@ func (s *Service) Yours(ctx context.Context, user auth.User, conversationID stri
 	if err != nil || !ok {
 		return chat.Conversation{}, false, err
 	}
-	if err := s.authorize(ctx, user, conversation); err != nil {
+	if err := s.authorize(ctx, s.Viewer(ctx, user), conversation); err != nil {
 		return chat.Conversation{}, false, nil
 	}
 	return conversation, true, nil

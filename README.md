@@ -95,17 +95,22 @@ below.
   replayed byte for byte.
 - `schedule` — the agenda: the tasks the app runs on their own, in the
   `schedule` schema of the same Postgres. Port of jimmy's `src/schedule.rs`,
-  with the directory of TOML files replaced by rows. A task belongs to a user
-  inside a project — an empty user is the project's own task, the one everybody
-  shares — and says when it runs in one of three ways: once, every day at an
-  hour, or every so often since its last run. The last twenty runs are kept,
-  and that log is also the state of the task: the last one is what the interval
-  measures from. What makes the agenda hold in the cloud is the claim: a pass
-  takes what is due with `FOR UPDATE SKIP LOCKED` and holds it with a lease
-  while it runs, so two instances never run the same task and one that dies
-  mid-run leaves its task for the next pass. `Runner` and `Notifier` are what
-  the app plugs in: how a prompt is answered, and where a copy goes when
-  the task names a target.
+  with the directory of TOML files replaced by rows. A task belongs to an owner
+  — the user or the organization that owns the project it lives in — and an
+  owner of nobody is the project's own task, the one everybody who sees the
+  project shares. What a viewer sees is their own tasks, the ones of their
+  organizations and the ones of nobody, which is the same list the web shows
+  and the tool hands the agent. A task says when it runs in one of three ways:
+  once, every day at an hour, or every so often since its last run. The last
+  twenty runs are kept, and that log is also the state of the task: the last
+  one is what the interval measures from. A run of a task of an organization
+  runs as the organization: the skills of the team, the memory of the project
+  and the name of the organization in the prompt. What makes the agenda hold in
+  the cloud is the claim: a pass takes what is due with
+  `FOR UPDATE SKIP LOCKED` and holds it with a lease while it runs, so two
+  instances never run the same task and one that dies mid-run leaves its task
+  for the next pass. `Runner` and `Notifier` are what the app plugs in: how a
+  prompt is answered, and where a copy goes when the task names a target.
 
 Four dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
 article extraction is the one layer of `axe` that is not byte-for-byte with the
@@ -237,7 +242,9 @@ same memory the prompt hands the model.
 
 The `agenda` button in the header of a project is that list: what
 each task is, when it runs, what it answered last, and the three buttons that
-run it now, pause it and take it out.
+run it now, pause it and take it out. A member of the organization sees the
+tasks of the projects of the team in the same list, and can pause or take out
+the ones of the team.
 
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a
