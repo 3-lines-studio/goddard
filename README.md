@@ -58,9 +58,11 @@ below.
   viewer sees the system's skills, its organization's and its own, and the
   closest owner wins when the name repeats: that is jimmy's
   local-shadows-builtin, through ownership instead of directory order. The
-  system's are read only and nobody installs them through this package. It is
-  the tool the harness gives the agent, with the store and the viewer already
-  in: `list` renders what that viewer can see and `load` reads one.
+  system's are read only and the package never writes them. It is the tool the
+  harness gives the agent, with the store and the viewer already in: `list`
+  renders what that viewer can see, `load` reads one, and `save` and `remove`
+  write and drop the ones of the viewer's own user — a skill the agent learned
+  is a skill the next turn's index already carries.
 - `memo` — the memory: the durable facts the agent keeps about itself and about
   the project it is working on, in the `memo` schema of the same Postgres. Port
   of jimmy's `src/memo.rs`, with the tree of files replaced by rows. A fact is a
