@@ -169,6 +169,7 @@ POST /api/conversations                 {project, title}
 PATCH  /api/conversations               {id, title}: renames it
 DELETE /api/conversations?id=           takes the thread out of the list
 POST /api/turns                         {conversation, text, uploads}: 202, and the turn runs
+POST /api/turns/stop                    {conversation}: cuts the turn short
 POST /api/uploads                       multipart {conversation, file}: one attachment
 GET  /api/uploads?id=                   the bytes of one, as they were sent
 GET  /api/events?conversation=&since=   the log of the thread
@@ -188,7 +189,12 @@ owns inside its project — made the first time the task fires and named after
 it. The run is written down either way, in `schedule.runs`, and its thread is
 where the answer is read: a task that runs alone leaves the same trail as one
 asked for by hand. The local hour is UTC plus `GODDARD_TZ_OFFSET` hours, zero
-by default. A message may carry files. They are kept in the database — any instance serves
+by default. A turn can be cut short: `POST /api/turns/stop` cancels the context the turn
+runs with, and the log gets a `stopped` and then its `done`. It stops between
+steps — the model's next token, the next tool — so a command already running
+finishes on its own, the way it does in axe.
+
+A message may carry files. They are kept in the database — any instance serves
 any conversation — and written into the workspace when the turn runs, under
 `files/<conversation>/`, because that is where the agent's tools look: what it
 reads is the same file the thread is showing. `POST /api/uploads` takes one and

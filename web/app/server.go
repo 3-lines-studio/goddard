@@ -108,6 +108,7 @@ func build(db *sql.DB) (*Service, error) {
 		Provider:  axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key),
 		Offset:    offset(),
 		Hub:       newHub(),
+		Stops:     newStops(),
 		Mail:      newMailer(),
 		Allowed:   emails(os.Getenv("GODDARD_ALLOWED_EMAILS")),
 		Model:     env("GODDARD_MODEL", "deepseek-flash"),

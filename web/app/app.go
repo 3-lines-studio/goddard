@@ -29,6 +29,7 @@ type Service struct {
 	Provider  axe.Provider
 	Offset    int64
 	Agenda    *schedule.Service
+	Stops     *stops
 	Hub       *hub
 	Mail      *mailer
 	Allowed   []string

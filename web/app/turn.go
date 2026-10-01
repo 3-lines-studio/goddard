@@ -73,8 +73,11 @@ func (s *Service) Say(ctx context.Context, conversationID, text string, uploads 
 	if conversation.Title == chat.NewTitle {
 		_ = s.Chat.RenameConversation(ctx, conversationID, titleOf(text+first(files)))
 	}
+	turn, cancel := context.WithCancel(context.Background())
+	s.Stops.add(conversationID, cancel)
 	go func() {
-		_, _ = s.answer(context.Background(), conversation, messageOf(text, files))
+		defer s.Stops.drop(conversationID)
+		_, _ = s.answer(turn, conversation, messageOf(text, files))
 	}()
 	return nil
 }
