@@ -147,7 +147,12 @@ applies the migrations and then serves. The page and the API routes live in
 make -C web install   # bun install
 make -C web build     # bifrost build, leaves .bifrost/bifrost-app
 make -C web serve     # runs it, DATABASE_URL in the environment
+make -C web test      # bun test: the frontend's own
 ```
+
+`web/app/_lib/` holds what the frontend does on its own: the markdown renderer
+and the line that describes a tool call, both ported from jimmy along with the
+tests that came with them.
 
 What the routes answer today:
 

@@ -1,1 +1,129 @@
 @import "tailwindcss";
+
+.md {
+  overflow-wrap: anywhere;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md :where(p, ul, ol, pre, blockquote, .table-wrap) {
+  margin: 0 0 0.75rem;
+}
+
+.md :where(h2, h3, h4) {
+  margin: 1rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.md ul,
+.md ol {
+  padding-left: 1.25rem;
+}
+
+.md ul {
+  list-style: disc;
+}
+
+.md ol {
+  list-style: decimal;
+}
+
+.md li {
+  margin-top: 0.25rem;
+}
+
+.md li::marker {
+  color: #737373;
+}
+
+.md a {
+  color: #93c5fd;
+}
+
+.md a:hover {
+  text-decoration: underline;
+}
+
+.md code {
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  background: #262626;
+  font-size: 0.8125rem;
+}
+
+.md pre {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #262626;
+  border-radius: 0.375rem;
+  background: #171717;
+  overflow-x: auto;
+}
+
+.md pre code {
+  padding: 0;
+  background: none;
+}
+
+.md blockquote {
+  padding-left: 0.75rem;
+  border-left: 2px solid #404040;
+  opacity: 0.8;
+}
+
+.md .table-wrap {
+  overflow-x: auto;
+}
+
+.md table {
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.md :where(th, td) {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #262626;
+  text-align: left;
+}
+
+.md .center {
+  text-align: center;
+}
+
+.md .right {
+  text-align: right;
+}
+
+.tok-comment {
+  color: #85858f;
+}
+
+.tok-string {
+  color: #9ccfa4;
+}
+
+.tok-keyword {
+  color: #c2a0e8;
+}
+
+.tok-number {
+  color: #d9a77a;
+}
+
+.tok-add {
+  color: #a9dcc4;
+}
+
+.tok-del {
+  color: #e0aaa6;
+}
+
+.tok-meta {
+  color: #8ab4ff;
+}

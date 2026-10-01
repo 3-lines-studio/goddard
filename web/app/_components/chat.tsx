@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { markdown } from "../_lib/markdown";
+import { describeTool } from "../_lib/tool";
+
 type Line = {
   id: string;
   title: string;
@@ -34,6 +37,7 @@ export function Chat() {
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
   const [user, setUser] = useState("");
+  const [workspace, setWorkspace] = useState("");
   const [needLogin, setNeedLogin] = useState(false);
   const [sent, setSent] = useState("");
   const [link, setLink] = useState("");
@@ -52,6 +56,7 @@ export function Chat() {
     const data = await response.json();
     setNeedLogin(false);
     setUser(data.user ?? "");
+    setWorkspace(data.workspace ?? "");
     setProjects(data.projects ?? []);
   }, []);
 
@@ -269,7 +274,7 @@ export function Chat() {
           {!open ? <p className="opacity-60">Elegí una conversación o creá una nueva.</p> : null}
           <div className="mx-auto flex max-w-3xl flex-col gap-3">
             {lines.map((line, index) => (
-              <Line key={index} line={line} />
+              <Line key={index} line={line} workspace={workspace} />
             ))}
             {partial ? <div className="text-sm whitespace-pre-wrap">{partial}</div> : null}
           </div>
@@ -310,34 +315,18 @@ export function Chat() {
   );
 }
 
-function Line({ line }: { line: Event }) {
+function Line({ line, workspace }: { line: Event; workspace: string }) {
   switch (line.event) {
     case "user":
       return (
         <div className="self-end rounded-lg bg-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap">{line.text}</div>
       );
     case "assistant":
-      return <div className="text-sm whitespace-pre-wrap">{line.text}</div>;
+      return <Assistant text={line.text ?? ""} />;
     case "tool_start":
-      return (
-        <details className="rounded border border-neutral-800 text-xs">
-          <summary className="cursor-pointer px-2 py-1">
-            {line.name}
-            <span className="ml-2 opacity-60">{summaryOf(line.args)}</span>
-          </summary>
-          <pre className="overflow-x-auto border-t border-neutral-800 px-2 py-1 opacity-80">{line.args}</pre>
-        </details>
-      );
+      return <Tool call={line} done={false} workspace={workspace} />;
     case "tool_result":
-      return (
-        <details className="rounded border border-neutral-800 text-xs">
-          <summary className="cursor-pointer px-2 py-1">
-            {line.name}
-            <span className="ml-2 opacity-60">ok · {line.ms} ms</span>
-          </summary>
-          <pre className="overflow-x-auto border-t border-neutral-800 px-2 py-1 opacity-80">{line.text}</pre>
-        </details>
-      );
+      return <Tool call={line} done={true} workspace={workspace} />;
     case "error":
       return <p className="rounded border border-red-900 px-3 py-2 text-sm text-red-400">{line.message}</p>;
     case "stopped":
@@ -347,9 +336,43 @@ function Line({ line }: { line: Event }) {
   }
 }
 
-function summaryOf(args?: string) {
-  if (!args) return "";
-  return args.length > 80 ? args.slice(0, 80) + "…" : args;
+function Assistant({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!text) return null;
+  return (
+    <div className="group relative self-stretch">
+      <div className="md text-sm" dangerouslySetInnerHTML={{ __html: markdown(text) }} />
+      <button
+        type="button"
+        data-copy=""
+        onClick={() => {
+          void navigator.clipboard.writeText(text).then(() => setCopied(true));
+        }}
+        className="absolute top-0 right-0 rounded border border-neutral-800 bg-neutral-900 px-1 text-xs opacity-0 group-hover:opacity-60 hover:opacity-100"
+      >
+        {copied ? "copiado" : "copiar"}
+      </button>
+    </div>
+  );
+}
+
+function Tool({ call, done, workspace }: { call: Event; done: boolean; workspace: string }) {
+  const what = describeTool(call.name ?? "", call.args ?? "", workspace);
+  return (
+    <details className="rounded border border-neutral-800 text-xs">
+      <summary className="cursor-pointer px-2 py-1">
+        {call.name}
+        <span className="ml-2 opacity-60">
+          {what.dir ? what.dir + " · " : ""}
+          {what.text}
+        </span>
+        {done ? <span className="ml-2 opacity-60">ok · {call.ms} ms</span> : null}
+      </summary>
+      <pre className="overflow-x-auto border-t border-neutral-800 px-2 py-1 opacity-80">
+        {done ? call.text : call.args}
+      </pre>
+    </details>
+  );
 }
 
 function titleOf(projects: Project[], open: string) {
