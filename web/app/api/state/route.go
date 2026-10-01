@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/machine"
 	"github.com/3-lines-studio/goddard/web/app"
 )
 
@@ -63,5 +64,6 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		"projects":  views,
 		"user":      user.Email,
 		"workspace": service.Workspace,
+		"machine":   machine.Usage(service.Workspace),
 	})
 }

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { machinePercent, machineRatio, machineSize } from "../_lib/machine";
 import { markdown } from "../_lib/markdown";
 import { describeTool } from "../_lib/tool";
+import { Avatar } from "./avatar";
 import { Icon } from "./icon";
 
 type Line = {
@@ -30,6 +32,12 @@ type Task = {
   target: string;
   unread: number;
   runs: { ts: number; date: string; ms: number; ok: boolean; text: string }[];
+};
+
+type Machine = {
+  memory: { used: number; total: number; anon: number; cache: number; kernel: number };
+  disk: { used: number; total: number };
+  processes: number;
 };
 
 type Fact = {
@@ -144,6 +152,7 @@ export function Chat() {
   const [menu, setMenu] = useState(false);
   const [user, setUser] = useState("");
   const [workspace, setWorkspace] = useState("");
+  const [machine, setMachine] = useState<Machine | null>(null);
   const [editing, setEditing] = useState("");
   const [removing, setRemoving] = useState("");
   const [facts, setFacts] = useState<Fact[]>([]);
@@ -193,6 +202,7 @@ export function Chat() {
     setNeedLogin(false);
     setUser(data.user ?? "");
     setWorkspace(data.workspace ?? "");
+    setMachine(data.machine ?? null);
     const projects: Project[] = data.projects ?? [];
     setProjects(projects);
     if (!restored.current) {
@@ -244,6 +254,12 @@ export function Chat() {
     const tick = setInterval(() => void loadTasks(), 3_000);
     return () => clearInterval(tick);
   }, [pending]);
+
+  useEffect(() => {
+    if (!user) return;
+    const tick = setInterval(() => void load(), 15_000);
+    return () => clearInterval(tick);
+  }, [user, load]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -445,6 +461,13 @@ export function Chat() {
     openTab("agenda");
   }
 
+  function avatarState(project: Project) {
+    if (collapsed.has(project.slug)) return "sleeping";
+    if ((project.conversations ?? []).some((line) => line.running)) return "working";
+    if (tab?.slug === project.slug && (tab?.kind === "thread" || tab?.kind === "memoria")) return "focused";
+    return "idle";
+  }
+
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -618,16 +641,8 @@ export function Chat() {
             const shown = more.has(project.slug) ? threads : threads.slice(0, VISIBLE);
             return (
               <div key={project.id} className="mb-3">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => toggleProject(project.slug)}
-                    data-toggle-project={project.id}
-                    aria-label={shut ? `Mostrar los hilos de ${project.name}` : `Ocultar los hilos de ${project.name}`}
-                    className="shrink-0 rounded p-1 opacity-60 hover:opacity-100"
-                  >
-                    <Icon name="down" size={14} className={`transition-transform ${shut ? "-rotate-90" : ""}`} />
-                  </button>
+                <div className="flex items-center gap-1.5">
+                  <Avatar name={project.slug} state={avatarState(project)} />
                   {editing === project.id ? (
                     <Name
                       value={project.name}
@@ -644,6 +659,15 @@ export function Chat() {
                       {project.name}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => toggleProject(project.slug)}
+                    data-toggle-project={project.id}
+                    aria-label={shut ? `Mostrar los hilos de ${project.name}` : `Ocultar los hilos de ${project.name}`}
+                    className="shrink-0 rounded p-1 opacity-60 hover:opacity-100"
+                  >
+                    <Icon name="down" size={14} className={`transition-transform ${shut ? "-rotate-90" : ""}`} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => setMenuProject(menuProject === project.slug ? "" : project.slug)}
@@ -781,6 +805,30 @@ export function Chat() {
             ) : null}
           </button>
         </div>
+        {machine ? (
+          <div className="flex items-center justify-between gap-2 border-t border-line px-2 py-1.5 text-xs" data-machine="">
+            <span
+              data-machine-memory=""
+              className="flex items-center gap-1"
+              title={`${machineRatio(machine.memory.used, machine.memory.total)} · la memoria del contenedor, cache y kernel incluidos (anónima ${machineSize(
+                machine.memory.anon,
+              )}, cache ${machineSize(machine.memory.cache)}, kernel ${machineSize(machine.memory.kernel)})`}
+            >
+              <Icon name="cpu" size={13} className="opacity-50" />
+              <span className="opacity-80">{machineSize(machine.memory.used)}</span>
+            </span>
+            {machine.disk.total > 0 ? (
+              <span
+                data-machine-disk=""
+                className="flex items-center gap-1"
+                title={`${machineRatio(machine.disk.used, machine.disk.total)} · el volumen ${workspace}`}
+              >
+                <Icon name="disk" size={13} className="opacity-50" />
+                <span className="opacity-80">{machinePercent(machine.disk.used, machine.disk.total)}</span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex items-center justify-between gap-2 border-t border-line p-2 text-xs">
           <span className="truncate opacity-60">{user}</span>
           <span className="flex shrink-0 items-center gap-1">

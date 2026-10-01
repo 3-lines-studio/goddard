@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./avatar.css";
 import "./style.css";
 
 export const metadata = {

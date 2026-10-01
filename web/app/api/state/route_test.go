@@ -63,7 +63,17 @@ func TestStateIsTheProjectsAndWhoIsAsking(t *testing.T) {
 	var body struct {
 		User      string `json:"user"`
 		Workspace string `json:"workspace"`
-		Projects  []struct {
+		Machine   struct {
+			Memory struct {
+				Used  uint64 `json:"used"`
+				Total uint64 `json:"total"`
+				Anon  uint64 `json:"anon"`
+			} `json:"memory"`
+			Disk struct {
+				Total uint64 `json:"total"`
+			} `json:"disk"`
+		} `json:"machine"`
+		Projects []struct {
 			Slug          string `json:"slug"`
 			Conversations []struct {
 				ID      string `json:"id"`
@@ -88,5 +98,11 @@ func TestStateIsTheProjectsAndWhoIsAsking(t *testing.T) {
 	}
 	if body.Projects[0].Conversations[0].Running {
 		t.Fatal("dijo que hay un turno corriendo y no hay ninguno")
+	}
+	if body.Machine.Memory.Used == 0 || body.Machine.Memory.Anon == 0 {
+		t.Fatalf("la memoria quedó %+v", body.Machine.Memory)
+	}
+	if body.Machine.Disk.Total == 0 {
+		t.Fatalf("el volumen quedó %+v", body.Machine.Disk)
 	}
 }
