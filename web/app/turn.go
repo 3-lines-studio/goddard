@@ -155,9 +155,15 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, te
 			log.Printf("goddard: no pude soltar %s: %v", conversation.ID, err)
 		}
 	}()
+	sink := &logSink{service: s, conversationID: conversation.ID}
 	store := axe.NewPgStore(s.DB, conversation.ID)
 	entries, err := store.Live(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			sink.write(map[string]any{"event": "stopped"})
+			sink.write(map[string]any{"event": "done"})
+			return "", err
+		}
 		s.failed(ctx, conversation.ID, err)
 		return "", err
 	}
@@ -165,7 +171,6 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, te
 	messages = append(messages, axe.Message{Role: "user", Content: text})
 	project := s.projectSlug(ctx, conversation)
 	tools := s.tools(project, conversation.ID)
-	sink := &logSink{service: s, conversationID: conversation.ID}
 	options := &axe.RunOptions{
 		Model:    s.Model,
 		System:   s.system(ctx, tools, conversation, project),
@@ -194,9 +199,12 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, te
 	return sink.reply, failure
 }
 
+// failed writes the error into the log. It writes it even when the turn was
+// cancelled: what the thread shows is the closing of the turn, and a turn that
+// dies without one leaves the thread waiting forever.
 func (s *Service) failed(ctx context.Context, conversationID string, cause error) {
 	log.Printf("goddard: %s: %v", conversationID, cause)
-	_, _ = s.write(ctx, conversationID, map[string]any{"event": "error", "message": cause.Error()})
+	_, _ = s.write(context.WithoutCancel(ctx), conversationID, map[string]any{"event": "error", "message": cause.Error()})
 }
 
 func (s *Service) write(ctx context.Context, conversationID string, event map[string]any) (chat.Event, error) {

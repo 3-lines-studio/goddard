@@ -54,7 +54,10 @@ func Current() *Service {
 	return service
 }
 
-func running(built *Service) {
+// Start hands the routes the app they answer with. Serve calls it, and a test
+// of one route calls it too, which is what makes a route reachable without the
+// binary around it.
+func Start(built *Service) {
 	serviceMu.Lock()
 	service = built
 	serviceMu.Unlock()

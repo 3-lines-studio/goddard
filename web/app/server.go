@@ -41,7 +41,7 @@ func Serve(ctx context.Context, handler http.Handler) error {
 	if err != nil {
 		return err
 	}
-	running(built)
+	Start(built)
 	go built.Agenda.Serve(ctx, func(err error) { log.Printf("goddard: agenda: %v", err) })
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/health", health(db))
@@ -98,6 +98,24 @@ func build(db *sql.DB) (*Service, error) {
 	if absolute, err := filepath.Abs(workspace); err == nil {
 		workspace = absolute
 	}
+	built := New(db, axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key), workspace)
+	built.Offset = offset()
+	built.Mail = newMailer()
+	built.Allowed = emails(os.Getenv("GODDARD_ALLOWED_EMAILS"))
+	built.Model = env("GODDARD_MODEL", "deepseek-flash")
+	built.Viewer = skill.Viewer{Org: env("GODDARD_ORG", "3-lines-studio"), User: env("GODDARD_USER", "berti")}
+	built.User = env("GODDARD_USER_NAME", "Don Berti")
+	built.Assistant = env("GODDARD_ASSISTANT", "Jimmy")
+	built.Language = env("GODDARD_LANGUAGE", prompt.DefaultLanguage)
+	built.Spec = env("GODDARD_PROMPT", prompt.Default)
+	built.Agenda = schedule.NewService(built.Schedule, built.runTask, built.Offset)
+	return built, nil
+}
+
+// New is the app over a database and a provider: the stores, the hub, the way
+// to stop a turn and the workspace. `build` is this with everything else read
+// from the environment, which is what a test of the app needs to skip.
+func New(db *sql.DB, provider axe.Provider, workspace string) *Service {
 	built := &Service{
 		DB:        db,
 		Chat:      chat.NewStore(db),
@@ -105,22 +123,13 @@ func build(db *sql.DB) (*Service, error) {
 		Memo:      memo.NewPgStore(db),
 		Skill:     skill.NewPgStore(db),
 		Schedule:  schedule.NewPgStore(db),
-		Provider:  axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key),
-		Offset:    offset(),
+		Provider:  provider,
 		Hub:       newHub(),
 		Stops:     newStops(),
-		Mail:      newMailer(),
-		Allowed:   emails(os.Getenv("GODDARD_ALLOWED_EMAILS")),
-		Model:     env("GODDARD_MODEL", "deepseek-flash"),
 		Workspace: workspace,
-		Viewer:    skill.Viewer{Org: env("GODDARD_ORG", "3-lines-studio"), User: env("GODDARD_USER", "berti")},
-		User:      env("GODDARD_USER_NAME", "Don Berti"),
-		Assistant: env("GODDARD_ASSISTANT", "Jimmy"),
-		Language:  env("GODDARD_LANGUAGE", prompt.DefaultLanguage),
-		Spec:      env("GODDARD_PROMPT", prompt.Default),
 	}
-	built.Agenda = schedule.NewService(built.Schedule, built.runTask, built.Offset)
-	return built, nil
+	built.Agenda = schedule.NewService(built.Schedule, built.runTask, 0)
+	return built
 }
 
 // emails is the comma separated list of who may ask for a link. Empty means
