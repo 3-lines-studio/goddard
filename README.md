@@ -121,16 +121,16 @@ project, a user — and two services over the same database and scope see the
 same history. There is no store on files: the port of the Rust `FsStore` is
 gone, because a cloud axe has no volume to mount.
 
-## Service
+## Web
 
-`service/` is the app: a bifrost tree whose `app/server.go` opens the database,
+`web/` is the app: a bifrost tree whose `app/server.go` opens the database,
 applies the migrations and then serves. The page and the API routes live in
-`service/app/`, and the frontend is built by Vite through bifrost.
+`web/app/`, and the frontend is built by Vite through bifrost.
 
 ```
-make -C service install   # bun install
-make -C service build     # bifrost build, leaves .bifrost/bifrost-app
-make -C service serve     # runs it, DATABASE_URL in the environment
+make -C web install   # bun install
+make -C web build     # bifrost build, leaves .bifrost/bifrost-app
+make -C web serve     # runs it, DATABASE_URL in the environment
 ```
 
 ## Migrate
