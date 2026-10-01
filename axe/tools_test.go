@@ -150,8 +150,8 @@ func TestSanitizeStripsControlCharacters(t *testing.T) {
 		{"emoji 🙈 ok", "emoji 🙈 ok"},
 	}
 	for _, test := range cases {
-		if got := sanitize(test.in); got != test.want {
-			t.Errorf("sanitize(%q) = %q, want %q", test.in, got, test.want)
+		if got := Sanitize(test.in); got != test.want {
+			t.Errorf("Sanitize(%q) = %q, want %q", test.in, got, test.want)
 		}
 	}
 }
