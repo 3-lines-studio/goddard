@@ -33,6 +33,14 @@ func (f *fakeMachine) Write(path string, bytes []byte) error {
 	return nil
 }
 
+func (f *fakeMachine) Stat(path string) (MachineEntry, error) {
+	data, ok := f.files[path]
+	if !ok {
+		return MachineEntry{}, os.ErrNotExist
+	}
+	return MachineEntry{Name: path, Size: uint64(len(data))}, nil
+}
+
 func (f *fakeMachine) List(string) ([]MachineEntry, error) {
 	return nil, nil
 }

@@ -127,6 +127,7 @@ func New(db *sql.DB, provider axe.Provider, workspace string) *Service {
 		Hub:       newHub(),
 		Stops:     newStops(),
 		Workspace: workspace,
+		Machine:   axe.NewLocal(workspace),
 	}
 	built.Agenda = schedule.NewService(built.Schedule, built.runTask, 0)
 	return built
