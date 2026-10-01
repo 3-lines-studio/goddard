@@ -53,7 +53,7 @@ func testDB(t *testing.T) *sql.DB {
 
 func testStore(t *testing.T) (*PgStore, Viewer) {
 	t.Helper()
-	return NewPgStore(testDB(t)), Viewer{Org: "o1", User: "u1", Role: "member"}
+	return NewPgStore(testDB(t)), Viewer{Orgs: []string{"o1"}, User: "u1", Role: "member"}
 }
 
 func put(t *testing.T, store *PgStore, viewer Viewer, skill Skill) {
@@ -135,7 +135,7 @@ func TestTheClosestOwnerWins(t *testing.T) {
 func TestTheSystemShowsForEveryoneButLosesToTheCloser(t *testing.T) {
 	store, viewer := testStore(t)
 	putSystem(t, store, "browse", "De fábrica", "el del sistema")
-	stranger := Viewer{Org: "o9", User: "u9"}
+	stranger := Viewer{Orgs: []string{"o9"}, User: "u9"}
 	metas, err := store.List(t.Context(), stranger)
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func putSystem(t *testing.T, store *PgStore, name, description, body string) {
 func TestAnotherOrganizationSeesNothing(t *testing.T) {
 	store, viewer := testStore(t)
 	put(t, store, viewer, Skill{Meta: Meta{Owner: Owner{Kind: Org, ID: "o1"}, Name: "browse", Description: "Navegar"}})
-	intruder := Viewer{Org: "o2", User: "u2"}
+	intruder := Viewer{Orgs: []string{"o2"}, User: "u2"}
 	metas, err := store.List(t.Context(), intruder)
 	if err != nil {
 		t.Fatal(err)
@@ -180,11 +180,34 @@ func TestAnotherOrganizationSeesNothing(t *testing.T) {
 	}
 }
 
+func TestSomebodyInTwoOrganizationsSeesBoth(t *testing.T) {
+	store, _ := testStore(t)
+	planter := Viewer{Orgs: []string{"o1", "o2"}, User: "u1"}
+	put(t, store, planter, Skill{Meta: Meta{Owner: Owner{Kind: Org, ID: "o1"}, Name: "browse", Description: "De la primera"}})
+	put(t, store, planter, Skill{Meta: Meta{Owner: Owner{Kind: Org, ID: "o2"}, Name: "deploy", Description: "De la segunda"}})
+	inTwo := Viewer{Orgs: []string{"o2", "o3"}, User: "u2"}
+	metas, err := store.List(t.Context(), inTwo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metas) != 1 || metas[0].Name != "deploy" {
+		t.Fatalf("sólo en la segunda vio %+v", metas)
+	}
+	inTwo.Orgs = []string{"o1", "o2"}
+	metas, err = store.List(t.Context(), inTwo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metas) != 2 {
+		t.Fatalf("en las dos vio %+v", metas)
+	}
+}
+
 func TestARoleLimitsWhoSeesIt(t *testing.T) {
 	store, admin := testStore(t)
 	admin.Role = "admin"
 	put(t, store, admin, Skill{Meta: Meta{Owner: Owner{Kind: Org, ID: "o1"}, Role: "admin", Name: "auditoria", Description: "Sólo admins"}})
-	member := Viewer{Org: "o1", User: "u2", Role: "member"}
+	member := Viewer{Orgs: []string{"o1"}, User: "u2", Role: "member"}
 	metas, err := store.List(t.Context(), member)
 	if err != nil {
 		t.Fatal(err)
