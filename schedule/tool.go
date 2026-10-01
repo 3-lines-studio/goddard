@@ -41,17 +41,19 @@ type toolArgs struct {
 }
 
 // Tool is the agenda for the agent harness: `add` writes a task, `list` shows
-// the ones of this owner, `show` reads one with its runs, `pause` stops it
+// the ones this viewer sees, `show` reads one with its runs, `pause` stops it
 // without losing it, `resume` puts it back and `remove` deletes it. Writing
 // again under the same name is how a task is edited, the way rewriting its
-// file was in jimmy. The store and the owner go in when the app builds
-// it, so the tool travels inside the binary and needs nothing on the PATH.
-func Tool(store *PgStore, userID, project string) axe.Tool {
+// file was in jimmy. The store, whose agenda it is and who is asking go in
+// when the app builds it, so the tool travels inside the binary and needs
+// nothing on the PATH. What `add` writes a task for is the owner of the
+// project, which is the person or the organization it belongs to.
+func Tool(store *PgStore, viewer Viewer, owner Owner, project string) axe.Tool {
 	return axe.NewTool("schedule",
 		"Schedule a task to run on its own, in a clean context, and read back what it answered.",
 		toolSchema,
 		func(in toolArgs) string {
-			text, err := run(context.Background(), store, userID, project, in)
+			text, err := run(context.Background(), store, viewer, owner, project, in)
 			if err != nil {
 				return "error: " + err.Error()
 			}
@@ -59,11 +61,11 @@ func Tool(store *PgStore, userID, project string) axe.Tool {
 		})
 }
 
-func run(ctx context.Context, store *PgStore, userID, project string, in toolArgs) (string, error) {
+func run(ctx context.Context, store *PgStore, viewer Viewer, owner Owner, project string, in toolArgs) (string, error) {
 	switch in.Action {
 	case "add":
 		task := Task{
-			UserID:  userID,
+			Owner:   owner,
 			Project: project,
 			Name:    in.Name,
 			When:    in.When,
@@ -79,7 +81,7 @@ func run(ctx context.Context, store *PgStore, userID, project string, in toolArg
 		}
 		return "guardada: " + head(task), nil
 	case "list":
-		entries, err := store.List(ctx, userID, project)
+		entries, err := store.List(ctx, viewer, project)
 		if err != nil {
 			return "", err
 		}
@@ -88,7 +90,7 @@ func run(ctx context.Context, store *PgStore, userID, project string, in toolArg
 		if in.Name == "" {
 			return "", errors.New("decime qué tarea mostrar")
 		}
-		entry, err := store.Get(ctx, userID, project, in.Name)
+		entry, err := store.Get(ctx, viewer, project, in.Name)
 		if err != nil {
 			return "", err
 		}
@@ -97,7 +99,7 @@ func run(ctx context.Context, store *PgStore, userID, project string, in toolArg
 		if in.Name == "" {
 			return "", errors.New("decime qué tarea pausar")
 		}
-		if err := store.Pause(ctx, userID, project, in.Name, true); err != nil {
+		if err := store.Pause(ctx, viewer, project, in.Name, true); err != nil {
 			return "", err
 		}
 		return "pausada: " + in.Name, nil
@@ -105,7 +107,7 @@ func run(ctx context.Context, store *PgStore, userID, project string, in toolArg
 		if in.Name == "" {
 			return "", errors.New("decime qué tarea despausar")
 		}
-		if err := store.Pause(ctx, userID, project, in.Name, false); err != nil {
+		if err := store.Pause(ctx, viewer, project, in.Name, false); err != nil {
 			return "", err
 		}
 		return "en marcha: " + in.Name, nil
@@ -113,7 +115,7 @@ func run(ctx context.Context, store *PgStore, userID, project string, in toolArg
 		if in.Name == "" {
 			return "", errors.New("decime qué tarea borrar")
 		}
-		if err := store.Remove(ctx, userID, project, in.Name); err != nil {
+		if err := store.Remove(ctx, viewer, project, in.Name); err != nil {
 			return "", err
 		}
 		return "borrada: " + in.Name, nil

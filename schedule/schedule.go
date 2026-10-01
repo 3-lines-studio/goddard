@@ -23,13 +23,35 @@ const (
 	Day  int64 = 86_400
 )
 
-// Task is one programmed task. It belongs to a user inside a project, and an
-// empty user is the project's own task, the one everybody shares. Target is
-// the chat a copy of the answer goes to, if any: the run is kept either way.
-// Seen is the moment its log was last read, which is what the runs newer than
-// it are counted against.
+// Owner is who a task belongs to: the person, or the organization that owns
+// the project it lives in. The empty owner is the project's own task, the one
+// everybody who sees the project sees.
+type Owner struct {
+	Kind string
+	ID   string
+}
+
+// The kinds of owner, the same two the rest of goddard knows.
+const (
+	KindUser = "user"
+	KindOrg  = "org"
+)
+
+// Viewer is who is asking for the agenda: the person and the organizations
+// they are in. The tasks of the project itself — the ones nobody owns — come
+// along, which is what the empty owner means.
+type Viewer struct {
+	User string
+	Orgs []string
+}
+
+// Task is one programmed task. It belongs to an owner inside a project, which
+// is the project's owner unless it is one of nobody. Target is the chat a copy
+// of the answer goes to, if any: the run is kept either way. Seen is the moment
+// its log was last read, which is what the runs newer than it are counted
+// against.
 type Task struct {
-	UserID  string
+	Owner   Owner
 	Project string
 	Name    string
 	When    string

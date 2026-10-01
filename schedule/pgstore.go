@@ -28,16 +28,24 @@ func NewPgStore(db *sql.DB) *PgStore {
 	return &PgStore{db: db}
 }
 
-const taskColumns = `user_id, project, name, once_at, daily_at, every, target, prompt, silent, paused`
+const taskColumns = `owner_kind, owner_id, project, name, once_at, daily_at, every, target, prompt, silent, paused`
 
 const taskSeen = taskColumns + `, seen_ts`
+
+// visible is the agenda of a viewer: their own tasks, the ones of the
+// organizations they are in, and the ones of the project nobody owns. The three
+// are the first arguments of every read, so what follows goes from $4 on.
+const visible = `((owner_kind = '' AND owner_id = '') OR (owner_kind = 'user' AND owner_id = $1) OR (owner_kind = 'org' AND owner_id = ANY($2)))`
+
+const taskOf = `schedule.tasks.owner_kind = $1 AND schedule.tasks.owner_id = $2 AND schedule.tasks.project = $3 AND schedule.tasks.name = $4`
 
 // markRead is the one statement of reading a task: what its log has up to now
 // stops counting as new. It runs over the runs of that task alone, and a task
 // without runs goes back to zero.
 const markRead = `UPDATE schedule.tasks SET seen_ts = COALESCE((
     SELECT max(run_ts) FROM schedule.runs
-    WHERE runs.user_id = schedule.tasks.user_id
+    WHERE runs.owner_kind = schedule.tasks.owner_kind
+      AND runs.owner_id = schedule.tasks.owner_id
       AND runs.project = schedule.tasks.project
       AND runs.name = schedule.tasks.name
 ), 0)`
@@ -51,7 +59,7 @@ type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// Add writes a task, replacing the one with the same name of that user and
+// Add writes a task, replacing the one with the same name of that owner and
 // project: editing a task and creating it are one gesture, the way writing the
 // file was in jimmy.
 func (s *PgStore) Add(ctx context.Context, task Task) error {
@@ -60,8 +68,8 @@ func (s *PgStore) Add(ctx context.Context, task Task) error {
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO schedule.tasks (`+taskColumns+`, claimed_until)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL)
-		 ON CONFLICT (user_id, project, name) DO UPDATE SET
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL)
+		 ON CONFLICT (owner_kind, owner_id, project, name) DO UPDATE SET
 		     once_at = EXCLUDED.once_at,
 		     daily_at = EXCLUDED.daily_at,
 		     every = EXCLUDED.every,
@@ -70,7 +78,7 @@ func (s *PgStore) Add(ctx context.Context, task Task) error {
 		     silent = EXCLUDED.silent,
 		     paused = EXCLUDED.paused,
 		     claimed_until = NULL`,
-		task.UserID, task.Project, task.Name, task.When, task.At, task.Every,
+		task.Owner.Kind, task.Owner.ID, task.Project, task.Name, task.When, task.At, task.Every,
 		task.Target, task.Prompt, task.Silent, task.Paused)
 	if err != nil {
 		return fmt.Errorf("no pude guardar la tarea %q: %w", task.Name, err)
@@ -78,24 +86,24 @@ func (s *PgStore) Add(ctx context.Context, task Task) error {
 	return nil
 }
 
-// List is the tasks of that user in that project, by name, each one with its
-// runs.
-func (s *PgStore) List(ctx context.Context, userID, project string) ([]Entry, error) {
+// List is the tasks this viewer sees in that project, by name, each one with
+// its runs.
+func (s *PgStore) List(ctx context.Context, viewer Viewer, project string) ([]Entry, error) {
 	tasks, err := tasksOf(ctx, s.db,
-		`SELECT `+taskSeen+` FROM schedule.tasks WHERE user_id = $1 AND project = $2 ORDER BY name`,
-		userID, project)
+		`SELECT `+taskSeen+` FROM schedule.tasks WHERE `+visible+` AND project = $3 ORDER BY name`,
+		viewer.User, viewer.Orgs, project)
 	if err != nil {
 		return nil, err
 	}
 	return s.entries(ctx, s.db, tasks)
 }
 
-// ListAll is every task of that user, in every project, by project and name:
-// the agenda is one list and not one per project.
-func (s *PgStore) ListAll(ctx context.Context, userID string) ([]Entry, error) {
+// ListAll is every task this viewer sees, in every project, by project and
+// name: the agenda is one list and not one per project.
+func (s *PgStore) ListAll(ctx context.Context, viewer Viewer) ([]Entry, error) {
 	tasks, err := tasksOf(ctx, s.db,
-		`SELECT `+taskSeen+` FROM schedule.tasks WHERE user_id = $1 ORDER BY project, name`,
-		userID)
+		`SELECT `+taskSeen+` FROM schedule.tasks WHERE `+visible+` ORDER BY project, name`,
+		viewer.User, viewer.Orgs)
 	if err != nil {
 		return nil, err
 	}
@@ -116,10 +124,10 @@ func (s *PgStore) entries(ctx context.Context, from querier, tasks []Task) ([]En
 }
 
 // Get is one task with its runs.
-func (s *PgStore) Get(ctx context.Context, userID, project, name string) (Entry, error) {
+func (s *PgStore) Get(ctx context.Context, viewer Viewer, project, name string) (Entry, error) {
 	tasks, err := tasksOf(ctx, s.db,
-		`SELECT `+taskSeen+` FROM schedule.tasks WHERE user_id = $1 AND project = $2 AND name = $3`,
-		userID, project, name)
+		`SELECT `+taskSeen+` FROM schedule.tasks WHERE `+visible+` AND project = $3 AND name = $4`,
+		viewer.User, viewer.Orgs, project, name)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -134,34 +142,35 @@ func (s *PgStore) Get(ctx context.Context, userID, project, name string) (Entry,
 }
 
 // Pause stops a task from running without losing it.
-func (s *PgStore) Pause(ctx context.Context, userID, project, name string, paused bool) error {
+func (s *PgStore) Pause(ctx context.Context, viewer Viewer, project, name string, paused bool) error {
 	result, err := s.db.ExecContext(ctx,
-		`UPDATE schedule.tasks SET paused = $4 WHERE user_id = $1 AND project = $2 AND name = $3`,
-		userID, project, name, paused)
+		`UPDATE schedule.tasks SET paused = $4 WHERE `+visible+` AND project = $3 AND name = $5`,
+		viewer.User, viewer.Orgs, project, paused, name)
 	return touched(result, err, name)
 }
 
 // MarkRead is reading a task to the end, so what it answered up to now stops
 // being new. Reading one that never ran leaves it where it was.
-func (s *PgStore) MarkRead(ctx context.Context, userID, project, name string) error {
+func (s *PgStore) MarkRead(ctx context.Context, viewer Viewer, project, name string) error {
 	result, err := s.db.ExecContext(ctx,
-		markRead+` WHERE user_id = $1 AND project = $2 AND name = $3`, userID, project, name)
+		markRead+` WHERE `+visible+` AND project = $3 AND name = $4`,
+		viewer.User, viewer.Orgs, project, name)
 	return touched(result, err, name)
 }
 
-// MarkAllRead is the same for every task of that user.
-func (s *PgStore) MarkAllRead(ctx context.Context, userID string) error {
-	if _, err := s.db.ExecContext(ctx, markRead+` WHERE user_id = $1`, userID); err != nil {
+// MarkAllRead is the same for every task this viewer sees.
+func (s *PgStore) MarkAllRead(ctx context.Context, viewer Viewer) error {
+	if _, err := s.db.ExecContext(ctx, markRead+` WHERE `+visible, viewer.User, viewer.Orgs); err != nil {
 		return fmt.Errorf("no pude marcar las tareas: %w", err)
 	}
 	return nil
 }
 
 // Remove is how a task stops existing.
-func (s *PgStore) Remove(ctx context.Context, userID, project, name string) error {
+func (s *PgStore) Remove(ctx context.Context, viewer Viewer, project, name string) error {
 	result, err := s.db.ExecContext(ctx,
-		`DELETE FROM schedule.tasks WHERE user_id = $1 AND project = $2 AND name = $3`,
-		userID, project, name)
+		`DELETE FROM schedule.tasks WHERE `+visible+` AND project = $3 AND name = $4`,
+		viewer.User, viewer.Orgs, project, name)
 	return touched(result, err, name)
 }
 
@@ -180,7 +189,7 @@ func (s *PgStore) Claim(ctx context.Context, clock Clock, lease int64, limit int
 	tasks, err := tasksOf(ctx, tx,
 		`SELECT `+taskSeen+` FROM schedule.tasks
 		 WHERE NOT paused AND (claimed_until IS NULL OR claimed_until < $1)
-		 ORDER BY user_id, project, name
+		 ORDER BY owner_kind, owner_id, project, name
 		 LIMIT $2
 		 FOR UPDATE SKIP LOCKED`,
 		clock.Now, limit)
@@ -201,8 +210,8 @@ func (s *PgStore) Claim(ctx context.Context, clock Clock, lease int64, limit int
 			continue
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE schedule.tasks SET claimed_until = $4 WHERE user_id = $1 AND project = $2 AND name = $3`,
-			task.UserID, task.Project, task.Name, clock.Now+lease); err != nil {
+			`UPDATE schedule.tasks SET claimed_until = $5 WHERE `+taskOf,
+			task.Owner.Kind, task.Owner.ID, task.Project, task.Name, clock.Now+lease); err != nil {
 			return nil, fmt.Errorf("no pude reclamar la tarea %q: %w", task.Name, err)
 		}
 		due = append(due, Entry{Task: task, Runs: runs})
@@ -225,8 +234,8 @@ func (s *PgStore) Finish(ctx context.Context, task Task, run Run) error {
 	defer tx.Rollback()
 
 	result, err := tx.ExecContext(ctx,
-		`UPDATE schedule.tasks SET claimed_until = NULL WHERE user_id = $1 AND project = $2 AND name = $3`,
-		task.UserID, task.Project, task.Name)
+		`UPDATE schedule.tasks SET claimed_until = NULL WHERE `+taskOf,
+		task.Owner.Kind, task.Owner.ID, task.Project, task.Name)
 	if err != nil {
 		return fmt.Errorf("no pude liberar la tarea %q: %w", task.Name, err)
 	}
@@ -235,21 +244,21 @@ func (s *PgStore) Finish(ctx context.Context, task Task, run Run) error {
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO schedule.runs (user_id, project, name, `+runColumns+`)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		task.UserID, task.Project, task.Name, run.TS, run.Date, run.MS, run.OK, run.Text); err != nil {
+		`INSERT INTO schedule.runs (owner_kind, owner_id, project, name, `+runColumns+`)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		task.Owner.Kind, task.Owner.ID, task.Project, task.Name, run.TS, run.Date, run.MS, run.OK, run.Text); err != nil {
 		return fmt.Errorf("no pude guardar la corrida de %q: %w", task.Name, err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM schedule.runs
-		 WHERE user_id = $1 AND project = $2 AND name = $3
+		 WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND name = $4
 		   AND id NOT IN (
 		       SELECT id FROM schedule.runs
-		       WHERE user_id = $1 AND project = $2 AND name = $3
-		       ORDER BY seq DESC LIMIT $4
+		       WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND name = $4
+		       ORDER BY seq DESC LIMIT $5
 		   )`,
-		task.UserID, task.Project, task.Name, Keep); err != nil {
+		task.Owner.Kind, task.Owner.ID, task.Project, task.Name, Keep); err != nil {
 		return fmt.Errorf("no pude podar las corridas de %q: %w", task.Name, err)
 	}
 
@@ -313,7 +322,7 @@ func tasksOf(ctx context.Context, from querier, query string, args ...any) ([]Ta
 	tasks := []Task{}
 	for rows.Next() {
 		var task Task
-		if err := rows.Scan(&task.UserID, &task.Project, &task.Name, &task.When, &task.At, &task.Every,
+		if err := rows.Scan(&task.Owner.Kind, &task.Owner.ID, &task.Project, &task.Name, &task.When, &task.At, &task.Every,
 			&task.Target, &task.Prompt, &task.Silent, &task.Paused, &task.Seen); err != nil {
 			return nil, fmt.Errorf("no pude leer una tarea: %w", err)
 		}
@@ -330,9 +339,9 @@ func tasksOf(ctx context.Context, from querier, query string, args ...any) ([]Ta
 func runsOf(ctx context.Context, from querier, task Task) ([]Run, error) {
 	rows, err := from.QueryContext(ctx,
 		`SELECT `+runColumns+` FROM schedule.runs
-		 WHERE user_id = $1 AND project = $2 AND name = $3
-		 ORDER BY seq DESC LIMIT $4`,
-		task.UserID, task.Project, task.Name, Keep)
+		 WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND name = $4
+		 ORDER BY seq DESC LIMIT $5`,
+		task.Owner.Kind, task.Owner.ID, task.Project, task.Name, Keep)
 	if err != nil {
 		return nil, fmt.Errorf("no pude leer las corridas de %q: %w", task.Name, err)
 	}

@@ -46,7 +46,7 @@ func TestOnceCorreLoQueEstaDue(t *testing.T) {
 	if *llamadas != 1 {
 		t.Fatalf("corrió %d veces", *llamadas)
 	}
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestUnaCorridaQueFallaQuedaEnElLog(t *testing.T) {
 	if err := service.Once(ctx, reloj()); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,13 +114,13 @@ func TestRunNowNoEsperaAlTick(t *testing.T) {
 	run, llamadas := runnerDe("a pedido", nil)
 	service := NewService(store, run, 0)
 
-	if _, err := service.RunNow(ctx, "berti", "goddard", "mas-tarde"); err != nil {
+	if _, err := service.RunNow(ctx, deBerti(), "goddard", "mas-tarde"); err != nil {
 		t.Fatal(err)
 	}
 	if *llamadas != 1 {
 		t.Fatalf("corrió %d veces", *llamadas)
 	}
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestRunNowNoEsperaAlTick(t *testing.T) {
 		t.Fatalf("la corrida quedó %+v", entries[0].Runs)
 	}
 
-	if _, err := service.RunNow(ctx, "berti", "goddard", "no-existe"); err == nil {
+	if _, err := service.RunNow(ctx, deBerti(), "goddard", "no-existe"); err == nil {
 		t.Fatal("correr lo que no existe no falló")
 	}
 }
@@ -170,7 +170,7 @@ func TestUnTargetQueNoSaleNoSeLlevaLaCorrida(t *testing.T) {
 	if err := service.Once(ctx, reloj()); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func TestSinConQueAvisarElHistorialLoSabe(t *testing.T) {
 	if err := NewService(store, run, 0).Once(ctx, reloj()); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := store.List(ctx, "berti", "goddard")
+	entries, err := store.List(ctx, deBerti(), "goddard")
 	if err != nil {
 		t.Fatal(err)
 	}
