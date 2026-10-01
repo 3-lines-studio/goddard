@@ -69,3 +69,58 @@ func TestCreateRenameAndDelete(t *testing.T) {
 		t.Fatalf("quedaron %d proyectos (%v)", len(projects), err)
 	}
 }
+
+// El proyecto ajeno es invisible: renombrarlo o borrarlo contesta 404 y no
+// toca nada.
+func TestChangingAProjectThatIsNotYours(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t))
+	ana := apptest.Session(t, service, "ana@ejemplo.com")
+	berti := apptest.User(t, service)
+	project, err := service.Chat.CreateProject(t.Context(), "de-berti", chat.Owner{Kind: chat.OwnerUser, ID: berti.ID}, berti.ID)
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	Patch(recorder, apptest.Request(t, "PATCH", "/api/projects", map[string]string{
+		"id": project.ID, "name": "mío ahora",
+	}, ana))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("renombrarlo contestó %d", recorder.Code)
+	}
+	recorder = httptest.NewRecorder()
+	Delete(recorder, apptest.Request(t, "DELETE", "/api/projects?id="+project.ID, nil, ana))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("borrarlo contestó %d", recorder.Code)
+	}
+	found, ok, err := service.Chat.Project(t.Context(), project.ID)
+	if err != nil || !ok || found.Name != "de-berti" {
+		t.Fatalf("el proyecto quedó %+v (%v, %v)", found, ok, err)
+	}
+
+	member := apptest.Session(t, service, "luz@ejemplo.com")
+	luz := apptest.User(t, service)
+	team := apptest.AnOrg(t, service, "La casa")
+	if err := service.Orgs.Add(t.Context(), team.ID, "luz@ejemplo.com", "member", berti.ID); err != nil {
+		t.Fatalf("no pude meter a luz: %v", err)
+	}
+	shared, err := service.Chat.CreateProject(t.Context(), "de-la-org", chat.Owner{Kind: chat.OwnerOrg, ID: team.ID}, berti.ID)
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	recorder = httptest.NewRecorder()
+	Patch(recorder, apptest.Request(t, "PATCH", "/api/projects", map[string]string{
+		"id": shared.ID, "name": "de todos",
+	}, member))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("un miembro de la org contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	found, _, err = service.Chat.Project(t.Context(), shared.ID)
+	if err != nil || found.Name != "de todos" {
+		t.Fatalf("el de la org quedó %+v (%v)", found, err)
+	}
+	if luz.ID == "" {
+		t.Fatal("luz no existe")
+	}
+}

@@ -161,6 +161,36 @@ func TestADeletedProjectLeavesTheList(t *testing.T) {
 	}
 }
 
+func TestDeletingTheProjectsOfAnOwner(t *testing.T) {
+	store := testStore(t)
+	org := Owner{Kind: OwnerOrg, ID: "acme"}
+	mine, err := store.CreateProject(t.Context(), "de-la-org", org, "berti")
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	other, err := store.CreateProject(t.Context(), "de-otra-org", Owner{Kind: OwnerOrg, ID: "otra"}, "berti")
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	mineToo := project(t, store, "mio")
+
+	if err := store.DeleteProjects(t.Context(), org); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, ok, err := store.Project(t.Context(), mine.ID); err != nil || ok {
+		t.Fatalf("el de la org siguió ahí (%v, %v)", ok, err)
+	}
+	if _, ok, err := store.Project(t.Context(), other.ID); err != nil || !ok {
+		t.Fatalf("se llevó el de otra org (%v, %v)", ok, err)
+	}
+	if _, ok, err := store.Project(t.Context(), mineToo.ID); err != nil || !ok {
+		t.Fatalf("se llevó el propio (%v, %v)", ok, err)
+	}
+	if err := store.DeleteProjects(t.Context(), Owner{Kind: OwnerOrg, ID: "vacia"}); err != nil {
+		t.Fatalf("borrar los de una org sin proyectos contestó %v", err)
+	}
+}
+
 func TestTheSlugStaysTakenAfterDeleting(t *testing.T) {
 	store := testStore(t)
 	created := project(t, store, "ken")

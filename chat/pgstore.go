@@ -106,6 +106,16 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 	return err
 }
 
+// DeleteProjects takes out every project of an owner. It is what deleting an
+// organization does: the projects of a gone organization are nobody's, and
+// nobody could reach them again. Marked, not dropped, like one project is.
+func (s *Store) DeleteProjects(ctx context.Context, owner Owner) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE chat.projects SET deleted_at = goddard.now(), updated_at = goddard.now() "+
+			"WHERE owner_kind = $1 AND owner_id = $2 AND deleted_at IS NULL", owner.Kind, owner.ID)
+	return err
+}
+
 const conversationColumns = "id, project_id, title, source, created_by, COALESCE(claimed_until, 0), updated_at"
 
 func scanConversation(row interface{ Scan(...any) error }) (Conversation, error) {

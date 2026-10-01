@@ -68,7 +68,8 @@ func Patch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	var body rename
@@ -78,6 +79,13 @@ func Patch(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Name == "" {
 		http.Error(w, "sin nombre", http.StatusBadRequest)
+		return
+	}
+	if _, mine, err := service.Mine(r.Context(), user, body.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if !mine {
+		http.Error(w, "ese proyecto no es tuyo", http.StatusNotFound)
 		return
 	}
 	if err := service.Chat.RenameProject(r.Context(), body.ID, body.Name); err != nil {
@@ -93,10 +101,19 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
-	if err := service.Chat.DeleteProject(r.Context(), r.URL.Query().Get("id")); err != nil {
+	id := r.URL.Query().Get("id")
+	if _, mine, err := service.Mine(r.Context(), user, id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if !mine {
+		http.Error(w, "ese proyecto no es tuyo", http.StatusNotFound)
+		return
+	}
+	if err := service.Chat.DeleteProject(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

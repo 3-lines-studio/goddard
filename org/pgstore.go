@@ -218,6 +218,32 @@ func (s *PgStore) SetRole(ctx context.Context, orgID, userID, role, actorID stri
 	})
 }
 
+// Delete takes the organization out, with the memberships. Only an owner asks
+// for it. It is marked, not dropped, the way a project is: what happened keeps
+// pointing at it. The projects are not this store's to take: they belong to
+// chat and go before this, so a failure here leaves an organization nobody can
+// see instead of projects nobody can reach.
+func (s *PgStore) Delete(ctx context.Context, orgID, actorID string) error {
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		role, err := member(ctx, tx, orgID, actorID, true)
+		if err != nil {
+			return err
+		}
+		if role != RoleOwner {
+			return ErrForbidden
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE org.members SET deleted_at = goddard.now(), updated_at = goddard.now() "+
+				"WHERE org_id = $1 AND deleted_at IS NULL", orgID); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx,
+			"UPDATE org.orgs SET deleted_at = goddard.now(), updated_at = goddard.now() "+
+				"WHERE id = $1 AND deleted_at IS NULL", orgID)
+		return err
+	})
+}
+
 // lastOwner refuses when this is the only owner left, so an organization never
 // ends up with nobody who can bring people in.
 func (s *PgStore) lastOwner(ctx context.Context, tx *sql.Tx, orgID string) error {
