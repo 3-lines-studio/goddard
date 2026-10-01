@@ -3,6 +3,7 @@ module github.com/3-lines-studio/goddard
 go 1.27
 
 require (
+	github.com/3-lines-studio/bifrost v1.3.11
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/zeebo/blake3 v0.2.4
 	golang.org/x/crypto v0.57.0
@@ -11,6 +12,8 @@ require (
 )
 
 require (
+	github.com/JohannesKaufmann/dom v0.3.1 // indirect
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
