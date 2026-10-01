@@ -106,6 +106,7 @@ func testService(t *testing.T, server *httptest.Server) *Service {
 		Schedule:  schedule.NewPgStore(db),
 		Provider:  axe.NewOpenAI(server.URL, "k1"),
 		Hub:       newHub(),
+		Stops:     newStops(),
 		Model:     "m1",
 		Workspace: t.TempDir(),
 		Viewer:    skill.Viewer{Org: "o1", User: "u1"},

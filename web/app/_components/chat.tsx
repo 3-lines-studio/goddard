@@ -135,6 +135,19 @@ export function Chat() {
     setAttachments([]);
   }
 
+  async function stop() {
+    const response = await fetch("/api/turns/stop", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ conversation: open }),
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    load();
+  }
+
   async function attach(chosen: FileList | null) {
     if (!chosen || !open) return;
     for (const file of Array.from(chosen)) {
@@ -313,6 +326,9 @@ export function Chat() {
     setOpen(line.id);
     setMenu(false);
   }
+
+  const working =
+    open !== "" && lines.length > 0 && !["done", "error", "stopped"].includes(lines[lines.length - 1].event);
 
   if (needLogin) {
     return (
@@ -564,11 +580,21 @@ export function Chat() {
             <button
               type="submit"
               data-send=""
-              disabled={!open || busy || (!text.trim() && attachments.length === 0)}
+              disabled={!open || busy || working || (!text.trim() && attachments.length === 0)}
               className="self-end rounded border border-neutral-700 px-3 py-2 text-sm disabled:opacity-40"
             >
               Enviar
             </button>
+            {working ? (
+              <button
+                type="button"
+                data-stop=""
+                onClick={() => void stop()}
+                className="self-end rounded border border-neutral-700 px-3 py-2 text-sm"
+              >
+                detener
+              </button>
+            ) : null}
             </div>
           </div>
         </form>
