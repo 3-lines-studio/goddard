@@ -27,6 +27,7 @@ type Service struct {
 	Skill     *skill.PgStore
 	Schedule  *schedule.PgStore
 	Provider  axe.Provider
+	Hub       *hub
 	Mail      *mailer
 	Allowed   []string
 	Model     string
@@ -78,4 +79,10 @@ func Session(service *Service, w http.ResponseWriter, r *http.Request) (auth.Use
 		http.Error(w, "no hay sesión", http.StatusUnauthorized)
 	}
 	return user, ok
+}
+
+// Live is what a conversation is saying while a turn is still running, and the
+// way to stop listening.
+func (s *Service) Live(conversation string) (chan []byte, func()) {
+	return s.Hub.listen(conversation)
 }

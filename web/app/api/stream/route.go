@@ -46,6 +46,8 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	if err := out.Flush(); err != nil {
 		return
 	}
+	live, leaving := service.Live(conversation)
+	defer leaving()
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
@@ -68,6 +70,13 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
+		case body := <-live:
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", body); err != nil {
+				return
+			}
+			if err := out.Flush(); err != nil {
+				return
+			}
 		}
 	}
 }

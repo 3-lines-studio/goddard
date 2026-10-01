@@ -28,6 +28,7 @@ export function Chat() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [open, setOpen] = useState("");
   const [lines, setLines] = useState<Event[]>([]);
+  const [partial, setPartial] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -61,9 +62,15 @@ export function Chat() {
   useEffect(() => {
     if (!open) return;
     setLines([]);
+    setPartial("");
     const stream = new EventSource(`/api/stream?conversation=${encodeURIComponent(open)}`);
     stream.onmessage = (message) => {
       const line: Event = JSON.parse(message.data);
+      if (line.event === "delta") {
+        setPartial((current) => current + (line.text ?? ""));
+        return;
+      }
+      if (line.event === "assistant") setPartial("");
       setLines((current) => [...current, line]);
       if (line.event === "done" || line.event === "error") load();
     };
@@ -72,7 +79,7 @@ export function Chat() {
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
-  }, [lines]);
+  }, [lines, partial]);
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
@@ -264,6 +271,7 @@ export function Chat() {
             {lines.map((line, index) => (
               <Line key={index} line={line} />
             ))}
+            {partial ? <div className="text-sm whitespace-pre-wrap">{partial}</div> : null}
           </div>
           <div ref={bottom} />
         </div>
