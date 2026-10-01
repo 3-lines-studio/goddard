@@ -5,11 +5,31 @@ export type Line = {
   running: boolean;
 };
 
+export type Owner = {
+  kind: string;
+  id: string;
+};
+
 export type Project = {
   id: string;
   slug: string;
   name: string;
+  owner: Owner;
   conversations: Line[];
+};
+
+export type Org = {
+  id: string;
+  slug: string;
+  name: string;
+  role: string;
+};
+
+export type Member = {
+  user_id: string;
+  email: string;
+  name: string;
+  role: string;
 };
 
 export type Task = {
@@ -50,7 +70,7 @@ export type Skill = {
 
 export type Tab = {
   key: string;
-  kind: "thread" | "agenda" | "memoria";
+  kind: "thread" | "agenda" | "memoria" | "orgs";
   title: string;
   slug: string;
 };

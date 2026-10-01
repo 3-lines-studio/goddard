@@ -120,6 +120,25 @@ func (s *Service) Yours(ctx context.Context, user auth.User, conversationID stri
 	return conversation, true, nil
 }
 
+// Mine is the project this user may change, or nothing: their own, or the one
+// of an organization they are in. A project of somebody else is invisible
+// here too, which is why the routes answer 404 and not 403: the name of a
+// project somebody else has is not something to confirm.
+func (s *Service) Mine(ctx context.Context, user auth.User, projectID string) (chat.Project, bool, error) {
+	project, ok, err := s.Chat.Project(ctx, projectID)
+	if err != nil || !ok {
+		return chat.Project{}, false, err
+	}
+	if project.Owner.Kind == chat.OwnerUser {
+		return project, project.Owner.ID == user.ID, nil
+	}
+	_, in, err := s.Orgs.Role(ctx, project.Owner.ID, user.ID)
+	if err != nil {
+		return chat.Project{}, false, err
+	}
+	return project, in, nil
+}
+
 // Live is what a conversation is saying while a turn is still running, and the
 // way to stop listening.
 func (s *Service) Live(conversation string) (chan []byte, func()) {

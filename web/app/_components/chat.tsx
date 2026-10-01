@@ -10,9 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Agenda, keyOf } from "./agenda";
 import { Login } from "./login";
 import { Memory } from "./memory";
+import { Orgs } from "./orgs";
 import { Rail } from "./rail";
 import { Composer, Thread } from "./thread";
-import type { Event, Fact, Machine, Project, Skill, Tab, Task, Upload } from "./types";
+import type { Event, Fact, Machine, Member, Org, Project, Skill, Tab, Task, Upload } from "./types";
 
 const TABS_KEY = "goddard-tabs";
 const OPEN_KEY = "goddard-open-projects";
@@ -45,6 +46,7 @@ function rememberTheme(name: string) {
 
 function tabFromKey(key: string, projects: Project[]): Tab | null {
   if (key === "agenda") return { key, kind: "agenda", title: "Agenda", slug: "" };
+  if (key === "orgs") return { key, kind: "orgs", title: "Organizaciones", slug: "" };
   const memory = key.match(/^memoria:(.+)$/);
   if (memory) {
     const project = projects.find((one) => one.slug === memory[1]);
@@ -60,6 +62,8 @@ function tabFromKey(key: string, projects: Project[]): Tab | null {
 
 export function Chat() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [orgs, setOrgs] = useState<Org[]>([]);
+  const [members, setMembers] = useState<Record<string, Member[]>>({});
   const [keys, setKeys] = useState<string[]>([]);
   const [active, setActive] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -122,6 +126,7 @@ export function Chat() {
     setMachine(data.machine ?? null);
     const projects: Project[] = data.projects ?? [];
     setProjects(projects);
+    setOrgs(data.orgs ?? []);
     if (!restored.current) {
       restored.current = true;
       setCollapsed(new Set(readList(OPEN_KEY)));
@@ -131,9 +136,26 @@ export function Chat() {
     }
   }, []);
 
+  const loadMembers = useCallback(async (org: string) => {
+    const response = await fetch(`/api/orgs/members?org=${encodeURIComponent(org)}`);
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    const data = await response.json();
+    setMembers((current) => ({ ...current, [org]: data.members ?? [] }));
+  }, []);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (tab?.kind !== "orgs") return;
+    for (const org of orgs) {
+      if (!(org.id in members)) void loadMembers(org.id);
+    }
+  }, [tab?.kind, orgs, members, loadMembers]);
 
   useEffect(() => {
     if (!open) return;
@@ -260,9 +282,29 @@ export function Chat() {
   async function newProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const name = new FormData(form).get("name");
+    const fields = new FormData(form);
+    const name = fields.get("name");
+    const org = fields.get("org");
     if (typeof name !== "string" || !name.trim()) return;
     const response = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, org: typeof org === "string" ? org : "" }),
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    form.reset();
+    load();
+  }
+
+  async function newOrg(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const name = new FormData(form).get("name");
+    if (typeof name !== "string" || !name.trim()) return;
+    const response = await fetch("/api/orgs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name }),
@@ -272,7 +314,51 @@ export function Chat() {
       return;
     }
     form.reset();
-    load();
+    await load();
+  }
+
+  async function invite(org: string, event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const body = new FormData(form);
+    const email = body.get("email");
+    if (typeof email !== "string" || !email.trim()) return;
+    const response = await fetch("/api/orgs/members", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ org, email, role: String(body.get("role") ?? "member") }),
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    form.reset();
+    await loadMembers(org);
+  }
+
+  async function setRole(org: string, person: string, role: string) {
+    const response = await fetch("/api/orgs/members", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ org, user: person, role }),
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadMembers(org);
+  }
+
+  async function removeMember(org: string, person: string) {
+    const response = await fetch(
+      `/api/orgs/members?org=${encodeURIComponent(org)}&user=${encodeURIComponent(person)}`,
+      { method: "DELETE" },
+    );
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadMembers(org);
   }
 
   async function rename(path: string, body: Record<string, string>) {
@@ -492,6 +578,7 @@ export function Chat() {
     <SidebarProvider className="h-dvh">
       <Rail
         projects={projects}
+        orgs={orgs}
         tab={tab}
         unread={unread}
         user={user}
@@ -514,6 +601,7 @@ export function Chat() {
         onRename={rename}
         onOpenTab={openTab}
         onOpenAgenda={() => openTab("agenda")}
+        onOpenOrgs={() => openTab("orgs")}
         onToggleTheme={toggleTheme}
         onLogout={logout}
       />
@@ -557,6 +645,19 @@ export function Chat() {
               {tab.kind === "memoria" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   <Memory facts={facts} skills={skills} />
+                </div>
+              ) : tab.kind === "orgs" ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <Orgs
+                    orgs={orgs}
+                    members={members}
+                    removing={removing}
+                    onNew={newOrg}
+                    onInvite={(org, event) => void invite(org, event)}
+                    onRole={(org, person, role) => void setRole(org, person, role)}
+                    onRemove={(org, person) => void removeMember(org, person)}
+                    onAsk={ask}
+                  />
                 </div>
               ) : tab.kind === "agenda" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">

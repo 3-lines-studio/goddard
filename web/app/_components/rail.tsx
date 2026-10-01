@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   BrainIcon,
   CalendarClockIcon,
@@ -13,6 +13,7 @@ import {
   PlusIcon,
   SunIcon,
   TrashIcon,
+  UsersIcon,
   XIcon,
 } from "lucide-react";
 
@@ -33,6 +34,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuAction,
@@ -44,11 +46,12 @@ import { cn } from "@/lib/utils";
 
 import { machinePercent, machineRatio, machineSize } from "../_lib/machine";
 import { Avatar } from "./avatar";
-import type { Machine, Project, Tab } from "./types";
+import type { Machine, Org, Project, Tab } from "./types";
 import { VISIBLE } from "./types";
 
 export function Rail({
   projects,
+  orgs,
   tab,
   unread,
   user,
@@ -71,10 +74,12 @@ export function Rail({
   onRename,
   onOpenTab,
   onOpenAgenda,
+  onOpenOrgs,
   onToggleTheme,
   onLogout,
 }: {
   projects: Project[];
+  orgs: Org[];
   tab: Tab | null;
   unread: number;
   user: string;
@@ -97,14 +102,39 @@ export function Rail({
   onRename: (path: string, body: Record<string, string>) => void;
   onOpenTab: (key: string) => void;
   onOpenAgenda: () => void;
+  onOpenOrgs: () => void;
   onToggleTheme: () => void;
   onLogout: () => void;
 }) {
+  const groups = [
+    { id: "", name: "Personal", projects: projects.filter((one) => one.owner.kind !== "org") },
+    ...orgs.map((org) => ({
+      id: org.id,
+      name: org.name,
+      projects: projects.filter((one) => one.owner.kind === "org" && one.owner.id === org.id),
+    })),
+  ].filter((group) => group.projects.length > 0);
+
   return (
     <Sidebar>
       <SidebarHeader>
         <form onSubmit={onNewProject} className="flex gap-1.5">
           <Input name="name" data-new-project="" placeholder="Nuevo proyecto" className="h-8" />
+          <select
+            name="org"
+            data-new-project-org=""
+            aria-label="De quién es el proyecto"
+            className="h-8 max-w-24 rounded-md border bg-transparent px-1 text-xs"
+          >
+            <option value="">Personal</option>
+            {orgs
+              .filter((org) => org.role === "owner")
+              .map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
+                </option>
+              ))}
+          </select>
           <Button type="submit" variant="outline" size="icon" aria-label="Agregar proyecto">
             <PlusIcon />
           </Button>
@@ -112,7 +142,10 @@ export function Rail({
       </SidebarHeader>
 
       <SidebarContent>
-        {projects.map((project) => {
+        {groups.map((group) => (
+          <Fragment key={group.id || "personal"}>
+            <SidebarGroupLabel data-owner={group.id}>{group.name}</SidebarGroupLabel>
+            {group.projects.map((project) => {
           const threads = project.conversations ?? [];
           const shut = collapsed.has(project.slug);
           const shown = more.has(project.slug) ? threads : threads.slice(0, VISIBLE);
@@ -262,8 +295,10 @@ export function Rail({
                 </SidebarGroupContent>
               )}
             </SidebarGroup>
-          );
-        })}
+            );
+          })}
+          </Fragment>
+        ))}
         {projects.length === 0 ? (
           <p className="px-3 py-2 text-sm text-muted-foreground">Todavía no hay proyectos.</p>
         ) : null}
@@ -277,6 +312,12 @@ export function Rail({
               <span>Agenda</span>
             </SidebarMenuButton>
             {unread > 0 ? <SidebarMenuBadge data-agenda-badge="">{unread}</SidebarMenuBadge> : null}
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={tab?.kind === "orgs"} onClick={onOpenOrgs} data-orgs="" tooltip="Organizaciones">
+              <UsersIcon />
+              <span>Organizaciones</span>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
 
