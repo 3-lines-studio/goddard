@@ -98,7 +98,7 @@ func TestUploadRejectsWhatItCannot(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	Post(recorder, fileRequest(t, "no-existe", "nota.txt", []byte("hola"), cookie))
-	if recorder.Code != http.StatusBadRequest {
+	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("sin conversación contestó %d", recorder.Code)
 	}
 

@@ -21,7 +21,8 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, MaxBytes)
@@ -30,8 +31,8 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conversation := r.FormValue("conversation")
-	if _, ok, err := service.Chat.Conversation(r.Context(), conversation); err != nil || !ok {
-		http.Error(w, "esa conversación no existe", http.StatusBadRequest)
+	if _, allowed, err := service.Yours(r.Context(), user, conversation); err != nil || !allowed {
+		http.Error(w, "esa conversación no es tuya", http.StatusForbidden)
 		return
 	}
 	file, header, err := r.FormFile("file")

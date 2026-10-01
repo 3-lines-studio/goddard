@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,8 +10,14 @@ import (
 	"testing"
 
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/web/app"
+	"github.com/3-lines-studio/goddard/web/app/api/conversations"
+	"github.com/3-lines-studio/goddard/web/app/api/events"
+	"github.com/3-lines-studio/goddard/web/app/api/projects"
+	"github.com/3-lines-studio/goddard/web/app/api/state"
+	"github.com/3-lines-studio/goddard/web/app/api/turns"
 	"github.com/3-lines-studio/goddard/web/app/apptest"
 )
 
@@ -101,12 +108,12 @@ func TestTheSecondTurnWaitsForTheFirst(t *testing.T) {
 
 func TestAConversationFromATransportIsReadOnly(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t))
-	project, err := service.Chat.CreateProject(t.Context(), "goddard", "u1")
+	project, err := service.Chat.CreateProject(t.Context(), "goddard", chat.Owner{Kind: chat.OwnerUser, ID: apptest.User(t, service).ID}, apptest.User(t, service).ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
 	from := "telegram"
-	if _, err := service.Chat.CreateConversation(t.Context(), project.ID, "desde el bot", from, "u1"); err != nil {
+	if _, err := service.Chat.CreateConversation(t.Context(), project.ID, "desde el bot", from, apptest.User(t, service).ID); err != nil {
 		t.Fatalf("conversation: %v", err)
 	}
 	conversations, err := service.Chat.Conversations(t.Context(), project.ID)
@@ -335,5 +342,114 @@ func TestTheAgentCannotShowWhatIsNotThere(t *testing.T) {
 		if event := apptest.Event(t, body); event["event"] == "file" {
 			t.Fatalf("igual mandó %s", body)
 		}
+	}
+}
+
+func TestSomebodyElseSeesNeitherTheProjectNorTheThread(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t, []string{
+		`{"choices":[{"delta":{"content":"lista"}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+	}))
+	cookie := apptest.Session(t, service, apptest.TestEmail)
+	thread := apptest.Thread(t, service)
+	apptest.Say(t, service, thread.ID, "lista", nil)
+
+	otro := apptest.Session(t, service, "ana@ejemplo.com")
+	recorder := httptest.NewRecorder()
+	state.Get(recorder, apptest.Request(t, "GET", "/api/state", nil, otro))
+	var body struct {
+		Projects []struct {
+			ID string `json:"id"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("no pude leer el estado: %v", err)
+	}
+	if len(body.Projects) != 0 {
+		t.Fatalf("ana ve %d proyectos ajenos", len(body.Projects))
+	}
+
+	recorder = httptest.NewRecorder()
+	events.Get(recorder, apptest.Request(t, "GET", "/api/events?conversation="+thread.ID, nil, otro))
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("el hilo ajeno contestó %d", recorder.Code)
+	}
+
+	recorder = httptest.NewRecorder()
+	turns.Post(recorder, apptest.Request(t, "POST", "/api/turns", map[string]any{"conversation": thread.ID, "text": "hola"}, otro))
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("escribir en un hilo ajeno contestó %d", recorder.Code)
+	}
+
+	// y el dueño sigue viendo el hilo por la misma ruta:
+	recorder = httptest.NewRecorder()
+	events.Get(recorder, apptest.Request(t, "GET", "/api/events?conversation="+thread.ID, nil, cookie))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("el dueño leyó el hilo y contestó %d", recorder.Code)
+	}
+}
+
+func TestAProjectOfAnOrganizationBelongsToItsMembers(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t, []string{
+		`{"choices":[{"delta":{"content":"hola"}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+	}))
+	cookie := apptest.Session(t, service, apptest.TestEmail)
+	created := apptest.AnOrg(t, service, "La casa")
+	ana := apptest.Session(t, service, "ana@ejemplo.com")
+	if err := service.Orgs.Add(t.Context(), created.ID, "ana@ejemplo.com", org.RoleMember, apptest.User(t, service).ID); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	projects.Post(recorder, apptest.Request(t, "POST", "/api/projects", map[string]string{"name": "Compartido", "org": created.ID}, cookie))
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("crear en la org contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	var project struct {
+		ID    string `json:"id"`
+		Owner struct {
+			Kind string `json:"kind"`
+			ID   string `json:"id"`
+		} `json:"owner"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &project); err != nil {
+		t.Fatal(err)
+	}
+	if project.Owner.Kind != "org" || project.Owner.ID != created.ID {
+		t.Fatalf("el dueño quedó %+v", project.Owner)
+	}
+
+	// el proyecto es del usuario que lo creó en su propia lista:
+	recorder = httptest.NewRecorder()
+	state.Get(recorder, apptest.Request(t, "GET", "/api/state", nil, cookie))
+	var own struct {
+		Projects []struct {
+			ID string `json:"id"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &own); err != nil {
+		t.Fatal(err)
+	}
+	if len(own.Projects) != 1 {
+		t.Fatalf("el dueño ve %+v", own.Projects)
+	}
+
+	// y no en la lista del miembro, porque su dueño es la org y el miembro entra por el hilo:
+	recorder = httptest.NewRecorder()
+	conversations.Post(recorder, apptest.Request(t, "POST", "/api/conversations", map[string]string{"project": project.ID}, cookie))
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("el hilo de la org contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	var thread struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &thread); err != nil {
+		t.Fatal(err)
+	}
+	recorder = httptest.NewRecorder()
+	events.Get(recorder, apptest.Request(t, "GET", "/api/events?conversation="+thread.ID, nil, ana))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("un miembro de la org no pudo leer el hilo y contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
 	}
 }

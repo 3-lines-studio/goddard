@@ -31,6 +31,7 @@ var (
 	ErrReadOnly       = errors.New("esa conversación no se escribe desde acá")
 	ErrBusy           = errors.New("ya hay un turno corriendo en esa conversación")
 	ErrEmpty          = errors.New("el mensaje está vacío")
+	ErrNotYours       = errors.New("esa conversación no es tuya")
 )
 
 // Say writes the message and sends the agent after it. It returns as soon as
@@ -47,6 +48,9 @@ func (s *Service) Say(ctx context.Context, conversationID string, user auth.User
 	}
 	if !ok {
 		return ErrNoConversation
+	}
+	if err := s.authorize(ctx, user, conversation); err != nil {
+		return err
 	}
 	if conversation.Source != chat.SourceWeb {
 		return ErrReadOnly
@@ -82,6 +86,71 @@ func (s *Service) Say(ctx context.Context, conversationID string, user auth.User
 		_, _ = s.answer(turn, conversation, user, messageOf(text, files))
 	}()
 	return nil
+}
+
+// chatOwner is the owner of a project the turn runs under. A task of nobody is
+// a project of nobody: it comes out with an owner of nothing, which is what the
+// list answers when there is nothing to see.
+func (s *Service) chatOwner(userID string) chat.Owner {
+	if userID == "" {
+		return chat.Owner{Kind: "", ID: ""}
+	}
+	return chat.Owner{Kind: chat.OwnerUser, ID: userID}
+}
+
+// viewerOrgs is the ids of the organizations the user is in, for the lookup of
+// what they can see.
+func (s *Service) viewerOrgs(ctx context.Context, userID string) []string {
+	if userID == "" {
+		return nil
+	}
+	ids, err := s.OrgsOf(ctx, userID)
+	if err != nil {
+		log.Printf("goddard: no pude leer las organizaciones de %s: %v", userID, err)
+		return nil
+	}
+	return ids
+}
+
+// OrgsOf is the ids of the organizations this user is in, or nothing when it
+// goes wrong: a project of an organization nobody can read is worse than an
+// empty list.
+func (s *Service) OrgsOf(ctx context.Context, userID string) ([]string, error) {
+	orgs, err := s.Orgs.Orgs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(orgs))
+	for _, one := range orgs {
+		ids = append(ids, one.ID)
+	}
+	return ids, nil
+}
+
+// authorize is who may use a conversation: whoever created it, or anybody in
+// the organization its project belongs to. It runs before anything is written,
+// so what it refuses never reaches the log.
+func (s *Service) authorize(ctx context.Context, user auth.User, conversation chat.Conversation) error {
+	if conversation.CreatedBy == user.ID {
+		return nil
+	}
+	project, ok, err := s.Chat.Project(ctx, conversation.ProjectID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotYours
+	}
+	if project.Owner.Kind == chat.OwnerOrg {
+		_, in, err := s.Orgs.Role(ctx, project.Owner.ID, user.ID)
+		if err != nil {
+			return err
+		}
+		if in {
+			return nil
+		}
+	}
+	return ErrNotYours
 }
 
 // attached is a file of the message, already where the agent can read it.

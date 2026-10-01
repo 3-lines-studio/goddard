@@ -107,6 +107,20 @@ func Session(service *Service, w http.ResponseWriter, r *http.Request) (auth.Use
 	return user, ok
 }
 
+// Yours is the conversation this user may read, or nothing: whoever created it,
+// or anybody in the organization it belongs to. It is what every route that
+// answers with the content of a thread asks for first.
+func (s *Service) Yours(ctx context.Context, user auth.User, conversationID string) (chat.Conversation, bool, error) {
+	conversation, ok, err := s.Chat.Conversation(ctx, conversationID)
+	if err != nil || !ok {
+		return chat.Conversation{}, false, err
+	}
+	if err := s.authorize(ctx, user, conversation); err != nil {
+		return chat.Conversation{}, false, nil
+	}
+	return conversation, true, nil
+}
+
 // Live is what a conversation is saying while a turn is still running, and the
 // way to stop listening.
 func (s *Service) Live(conversation string) (chan []byte, func()) {

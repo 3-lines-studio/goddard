@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/web/app/apptest"
 )
 
@@ -32,7 +33,8 @@ func TestCreateRenameAndDelete(t *testing.T) {
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("crear contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
 	}
-	projects, err := service.Chat.Projects(t.Context())
+	user := apptest.User(t, service)
+	projects, err := service.Chat.Projects(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, nil)
 	if err != nil || len(projects) != 1 {
 		t.Fatalf("quedaron %d proyectos (%v)", len(projects), err)
 	}
@@ -63,7 +65,7 @@ func TestCreateRenameAndDelete(t *testing.T) {
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("borrar contestó %d", recorder.Code)
 	}
-	if projects, err := service.Chat.Projects(t.Context()); err != nil || len(projects) != 0 {
+	if projects, err := service.Chat.Projects(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: apptest.User(t, service).ID}, nil); err != nil || len(projects) != 0 {
 		t.Fatalf("quedaron %d proyectos (%v)", len(projects), err)
 	}
 }

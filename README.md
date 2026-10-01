@@ -41,9 +41,10 @@ below.
   organizations share it, because both of them name a directory of the
   workspace.
 - `chat` — the projects and the conversations, in the `chat` schema of the
-  same Postgres. A project is a place where work lives and its slug is the
-  string the rest of goddard already keeps in its own tables: memo, schedule
-  and heimdall name the project that way. A conversation is a thread inside it,
+  same Postgres. A project belongs to a user or to an organization, and the
+  organizations' are what several people share. Its slug is the string the rest
+  of goddard already keeps in its own tables: memo, schedule and heimdall name
+  the project that way. A conversation is a thread inside it,
   and its id is the scope an axe session uses, so the history of the thread is
   the history of that session and nobody keeps the two in step. The log of the
   thread (`events`) is what the stream reads with `since`, and the attachments
@@ -174,7 +175,7 @@ What the routes answer today:
 ```
 GET  /api/health                        the database answers
 GET  /api/state                         the projects and their conversations
-POST /api/projects                      {name}
+POST /api/projects                      {name, org}: opens one for whoever asks, or for their organization
 PATCH  /api/projects                    {id, name}: renames it, slug untouched
 DELETE /api/projects?id=                takes it out of the list
 POST /api/conversations                 {project, title}

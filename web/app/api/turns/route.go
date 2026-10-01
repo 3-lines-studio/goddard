@@ -37,6 +37,8 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, app.ErrNoConversation), errors.Is(err, app.ErrReadOnly), errors.Is(err, app.ErrEmpty):
 		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, app.ErrNotYours):
+		http.Error(w, err.Error(), http.StatusForbidden)
 	default:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

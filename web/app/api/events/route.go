@@ -20,12 +20,20 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	conversation := r.URL.Query().Get("conversation")
 	if conversation == "" {
 		http.Error(w, "falta conversation", http.StatusBadRequest)
+		return
+	}
+	if _, allowed, err := service.Yours(r.Context(), user, conversation); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if !allowed {
+		http.Error(w, "esa conversación no es tuya", http.StatusForbidden)
 		return
 	}
 	since, err := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
