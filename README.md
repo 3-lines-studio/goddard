@@ -16,7 +16,7 @@ below.
   each one is a markdown file with `{{variables}}`, and the language picks
   which file answers. Port of jimmy's assembler with the languages in it: a
   fragment is `<language>/<name>.md` inside every `fs.FS`, in order, so a
-  directory the embedder puts first overrides the one that ships with the
+  directory the service puts first overrides the one that ships with the
   binary, and a fragment a language does not have falls back to the default
   one, `es-AR`. The fragments we ship are jimmy's, adapted as the port
   reaches them, and travel embedded in the binary as the default language. The
@@ -68,7 +68,7 @@ below.
   takes what is due with `FOR UPDATE SKIP LOCKED` and holds it with a lease
   while it runs, so two instances never run the same task and one that dies
   mid-run leaves its task for the next pass. `Runner` and `Notifier` are what
-  the embedder plugs in: how a prompt is answered, and where a copy goes when
+  the service plugs in: how a prompt is answered, and where a copy goes when
   the task names a target.
 
 Five dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
@@ -116,7 +116,7 @@ for _, message := range end.Messages {
 store.Append(ctx, entries)
 ```
 
-The scope is whatever the embedder says a conversation set is — a chat, a
+The scope is whatever the service says a conversation set is — a chat, a
 project, a user — and two services over the same database and scope see the
 same history. There is no store on files: the port of the Rust `FsStore` is
 gone, because a cloud axe has no volume to mount.
