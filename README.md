@@ -1,6 +1,7 @@
 # Goddard
 
-Jimmy as a service: the agent, in Go, so bifrost can embed it.
+Jimmy as a service: the agent, in Go, as a bifrost app over the packages
+below.
 
 ## Packages
 
