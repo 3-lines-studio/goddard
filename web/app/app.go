@@ -38,7 +38,6 @@ type Service struct {
 	Allowed   []string
 	Model     string
 	Workspace string
-	Machine   axe.Machine
 	Orgs      *org.PgStore
 	Assistant string
 	Language  string

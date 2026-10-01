@@ -28,7 +28,8 @@ func (s *Service) runTask(ctx context.Context, task schedule.Task) (string, erro
 	if _, err := s.write(ctx, conversation.ID, map[string]any{"event": "user", "text": task.Prompt}); err != nil {
 		return "", err
 	}
-	return s.answer(ctx, conversation, user, task.Prompt)
+	project, _ := s.projectOf(ctx, conversation)
+	return s.answer(ctx, conversation, project, user, task.Prompt)
 }
 
 // taskUser is who a task belongs to, and the turn runs as that person. A task

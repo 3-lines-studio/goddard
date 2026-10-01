@@ -267,7 +267,7 @@ func TestAnAttachmentGoesToTheLogAndToTheWorkspace(t *testing.T) {
 	if file["id"] != upload.ID {
 		t.Fatalf("el archivo del log no es el que subí: %s", got[1])
 	}
-	written, err := os.ReadFile(filepath.Join(service.Workspace, "files", conversation.ID, "nota.txt"))
+	written, err := os.ReadFile(filepath.Join(service.Workspace, apptest.User(t, service).ID, "goddard", "files", conversation.ID, "nota.txt"))
 	if err != nil {
 		t.Fatalf("no encontré el archivo en el workspace: %v", err)
 	}
@@ -296,7 +296,11 @@ func TestTheAgentShowsAFileInTheThread(t *testing.T) {
 		}))
 	conversation := apptest.Thread(t, service)
 	image := append([]byte("\x89PNG\r\n\x1a\n"), []byte("lo que sea el resto")...)
-	if err := os.WriteFile(filepath.Join(service.Workspace, "grafico.png"), image, 0o644); err != nil {
+	dir := filepath.Join(service.Workspace, apptest.User(t, service).ID, "goddard")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("no pude armar el workspace: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "grafico.png"), image, 0o644); err != nil {
 		t.Fatalf("no pude escribir el archivo: %v", err)
 	}
 	if err := service.Say(t.Context(), conversation.ID, apptest.User(t, service), "mostrame el gráfico", nil); err != nil {
