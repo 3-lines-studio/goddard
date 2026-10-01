@@ -45,7 +45,7 @@ func BuildToolsOn(machine Machine) []Tool {
 	}
 }
 
-func sanitize(s string) string {
+func Sanitize(s string) string {
 	var builder strings.Builder
 	builder.Grow(len(s))
 	for _, r := range s {
@@ -157,7 +157,7 @@ func RunShell(dir, command string, timeout uint64, progress Progress) string {
 			running = false
 		case <-ticker.C:
 			if tail := readFileTail(outPath); tail != "" {
-				progress.Report(sanitize(tail))
+				progress.Report(Sanitize(tail))
 			}
 		case <-deadline.C:
 			syscall.Kill(-pgid, syscall.SIGKILL)
@@ -175,7 +175,7 @@ func RunShell(dir, command string, timeout uint64, progress Progress) string {
 	} else if data, err := os.ReadFile(outPath); err == nil {
 		output = string(data)
 	}
-	display := sanitize(output)
+	display := Sanitize(output)
 	if truncated {
 		display += fmt.Sprintf("\n\n[Output truncated to the last 16KB. Full output: %s]", outPath)
 	} else {
@@ -344,7 +344,7 @@ func readText(args readArgs, data []byte) string {
 		if shown >= limit || overflow {
 			break
 		}
-		text := sanitize(lines[index])
+		text := Sanitize(lines[index])
 		if shown == 0 && len(text) > maxOutput {
 			oversizedLine, oversizedBytes = index+1, uint64(len(text))
 			overflow = true
