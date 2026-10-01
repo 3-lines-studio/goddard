@@ -27,6 +27,14 @@ below.
   not heimdall's: the vault keeps the tokens of the machines that ask it for
   secrets, and this keeps the people. A link and a session are stored as their
   hash and nothing else, and an expired one is dropped, not marked.
+- `chat` — the projects and the conversations, in the `chat` schema of the
+  same Postgres. A project is a place where work lives and its slug is the
+  string the rest of goddard already keeps in its own tables: memo, schedule
+  and heimdall name the project that way. A conversation is a thread inside it,
+  and its id is the scope an axe session uses, so the history of the thread is
+  the history of that session and nobody keeps the two in step. Renaming a
+  project keeps its slug, and both are marked as gone instead of dropped: what
+  happened keeps pointing at them.
 - `heimdall` — the secrets store: projects, environments and tokens scoped to
   one environment and, if you want, to a list of key names, so an agent gets
   test credentials with no path to production. Port of
