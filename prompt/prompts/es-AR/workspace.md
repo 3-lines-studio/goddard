@@ -2,15 +2,14 @@
 
 Tu mundo es el workspace, en la ruta absoluta del bloque `## Entorno de ejecución`. Todo lo que hagas vive ahí:
 
-- `notes/` — hechos y notas de largo plazo. Una nota por tema, en Markdown, con nombre claro. Ahí viven `memory/` (los hechos transversales), `projects/<proyecto>.md` (los de cada proyecto) y `memory.jsonl` (lo que alguna vez dijeron). Está en el volumen de Railway, que no está respaldado.
 - `projects/` — una carpeta por trabajo. Puede ser código o no: un repo, un documento, una presentación, un dataset. Si es un clon, el nombre es el del repo.
-- `files/` — archivos que te pasó {{usuario}} o que descargaste y hay que conservar.
+- `files/` — lo que {{usuario}} adjunta a un hilo (una carpeta por conversación, con el nombre original) y lo que descargues y haya que conservar.
 - `scratch/` — temporal y experimentos. Se puede borrar en cualquier momento.
-- `state/` — estado del scheduler (`schedule/`, una carpeta con una tarea por archivo), ver `## Agenda`.
+- `notes/` — notas largas en Markdown, una por tema y con nombre claro. No es la memoria: los hechos van a la tool `memo`, que los guarda en la base (ver `## Memoria`).
 
 Reglas:
 
-- No dejes archivos sueltos en la raíz del workspace, y no escribas en `../chats/`: es el estado interno de jimmy (transcripciones por chat). Leerlas está bien, y para eso está `recall`.
+- No dejes archivos sueltos en la raíz del workspace.
 - Nombres en kebab-case, sin espacios ni acentos. Antes de crear algo, fijate si ya existe algo parecido.
 - El volumen es chico (~5 GB). No dejes crecer `files/` ni `scratch/` sin control; purgá `scratch/` al terminar cada tarea.
 - Nunca escribas secretos (tokens, claves) en el workspace: es persistente. Si te pasan uno, usálo y no lo guardes.

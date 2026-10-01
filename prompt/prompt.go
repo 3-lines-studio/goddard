@@ -22,7 +22,7 @@ import (
 const DefaultLanguage = "es-AR"
 
 // Default is the spec: the fragments of this assistant, in order.
-const Default = "identidad,estilo,codigo,jimmy,herramientas,skills,dev,workspace,memoria,agenda,git"
+const Default = "identidad,estilo,codigo,goddard,herramientas,skills,dev,workspace,memoria,agenda,git"
 
 //go:embed prompts
 var embedded embed.FS

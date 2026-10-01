@@ -18,8 +18,9 @@ below.
   fragment is `<language>/<name>.md` inside every `fs.FS`, in order, so a
   directory the app puts first overrides the one that ships with the
   binary, and a fragment a language does not have falls back to the default
-  one, `es-AR`. The fragments we ship are jimmy's, adapted as the port
-  reaches them, and travel embedded in the binary as the default language. The
+  one, `es-AR`. The fragments we ship travel embedded in the binary as the
+  default language, and they are goddard's: they came from jimmy and say what
+  goddard is, not what jimmy was. The
   Rust harness that compiles jimmy's `prompt.rs` on its own left
   `prompt/testdata/paridad-rust.txt`, and the tests replay it byte for byte.
 - `auth` — who can come in: the users, the one-shot links that let them in
