@@ -5,6 +5,20 @@ export const metadata = {
   title: "Goddard",
 };
 
+const BOOT = `(() => {
+  let saved = null;
+  try {
+    saved = localStorage.getItem("goddard-theme");
+  } catch {}
+  const light = matchMedia("(prefers-color-scheme: light)").matches;
+  document.documentElement.dataset.theme = saved || (light ? "light" : "dark");
+})();`;
+
 export function Layout({ children }: { children: ReactNode }) {
-  return <div className="bg-neutral-950 text-neutral-100">{children}</div>;
+  return (
+    <div className="bg-bg text-text">
+      <script dangerouslySetInnerHTML={{ __html: BOOT }} />
+      {children}
+    </div>
+  );
 }
