@@ -213,3 +213,31 @@ func TestShowDeUnHechoVivo(t *testing.T) {
 		t.Fatalf("quedó %q\nel Rust dio %q", got, dump["show_vivo"])
 	}
 }
+
+func TestFactsTraeLoDelProyectoYLoGeneral(t *testing.T) {
+	store, db := testStore(t)
+	for _, fact := range todo(t) {
+		seed(t, db, fact)
+	}
+	facts, err := store.Facts(t.Context(), "jimmy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	otros := map[string]bool{}
+	for _, fact := range facts {
+		seen[fact.Project] = true
+		if fact.Project != "" && fact.Project != "jimmy" {
+			otros[fact.Project] = true
+		}
+	}
+	if !seen[""] {
+		t.Fatal("no trajo los hechos generales")
+	}
+	if !seen["jimmy"] {
+		t.Fatal("no trajo los del proyecto")
+	}
+	if len(otros) > 0 {
+		t.Fatalf("se colaron hechos de otros proyectos: %v", otros)
+	}
+}

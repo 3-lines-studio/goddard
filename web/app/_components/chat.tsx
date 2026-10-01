@@ -29,6 +29,27 @@ type Task = {
   last: { ts: number; ms: number; ok: boolean; text: string } | null;
 };
 
+type Fact = {
+  key: string;
+  kind: string;
+  body: string;
+  project: string;
+  date: number;
+};
+
+type Skill = {
+  name: string;
+  description: string;
+  owner: string;
+  role: string;
+  updated: number;
+};
+
+type Panel = {
+  project: Project;
+  view: "agenda" | "memoria";
+};
+
 type Event = {
   event: string;
   text?: string;
@@ -54,7 +75,9 @@ export function Chat() {
   const [workspace, setWorkspace] = useState("");
   const [editing, setEditing] = useState("");
   const [removing, setRemoving] = useState("");
-  const [agenda, setAgenda] = useState<Project | null>(null);
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const [facts, setFacts] = useState<Fact[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [removingTask, setRemovingTask] = useState("");
   const [running, setRunning] = useState("");
@@ -86,7 +109,7 @@ export function Chat() {
         ? current
         : "",
     );
-    setAgenda((current) => (projects.some((project) => project.id === current?.id) ? current : null));
+    setPanel((current) => (projects.some((project) => project.id === current?.project.id) ? current : null));
   }, []);
 
   useEffect(() => {
@@ -255,39 +278,56 @@ export function Chat() {
   }
 
   async function openAgenda(project: Project) {
-    setAgenda(project);
+    setPanel({ project, view: "agenda" });
     setMenu(false);
     await loadAgenda(project.slug);
   }
 
+  async function openMemory(project: Project) {
+    setPanel({ project, view: "memoria" });
+    setMenu(false);
+    const memory = await fetch(`/api/memo?project=${encodeURIComponent(project.slug)}`);
+    if (!memory.ok) {
+      setError(await memory.text());
+      return;
+    }
+    setFacts((await memory.json()).facts ?? []);
+    const installed = await fetch("/api/skills");
+    if (!installed.ok) {
+      setError(await installed.text());
+      return;
+    }
+    setSkills((await installed.json()).skills ?? []);
+  }
+
   async function runTask(task: Task) {
-    if (!agenda) return;
+    if (!panel) return;
     setRunning(task.name);
     const response = await fetch("/api/agenda/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ project: agenda.slug, name: task.name }),
+      body: JSON.stringify({ project: panel.project.slug, name: task.name }),
     });
     setRunning("");
     if (!response.ok) {
       setError(await response.text());
       return;
     }
-    await loadAgenda(agenda.slug);
+    await loadAgenda(panel.project.slug);
   }
 
   async function pauseTask(task: Task) {
-    if (!agenda) return;
+    if (!panel) return;
     const response = await fetch("/api/agenda", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ project: agenda.slug, name: task.name, paused: !task.paused }),
+      body: JSON.stringify({ project: panel.project.slug, name: task.name, paused: !task.paused }),
     });
     if (!response.ok) {
       setError(await response.text());
       return;
     }
-    await loadAgenda(agenda.slug);
+    await loadAgenda(panel.project.slug);
   }
 
   function askTask(task: Task) {
@@ -299,15 +339,15 @@ export function Chat() {
   }
 
   async function removeTask(task: Task) {
-    if (!agenda) return;
+    if (!panel) return;
     setRemovingTask("");
-    const query = `project=${encodeURIComponent(agenda.slug)}&name=${encodeURIComponent(task.name)}`;
+    const query = `project=${encodeURIComponent(panel.project.slug)}&name=${encodeURIComponent(task.name)}`;
     const response = await fetch(`/api/agenda?${query}`, { method: "DELETE" });
     if (!response.ok) {
       setError(await response.text());
       return;
     }
-    await loadAgenda(agenda.slug);
+    await loadAgenda(panel.project.slug);
   }
 
   async function newConversation(project: string) {
@@ -322,7 +362,7 @@ export function Chat() {
     }
     const line: Line = await response.json();
     await load();
-    setAgenda(null);
+    setPanel(null);
     setOpen(line.id);
     setMenu(false);
   }
@@ -428,10 +468,25 @@ export function Chat() {
                     data-agenda={project.id}
                     aria-label={`Agenda de ${project.name}`}
                     className={`rounded border px-1 text-xs ${
-                      agenda?.id === project.id ? "border-neutral-500" : "border-neutral-800 opacity-60"
+                      panel?.view === "agenda" && panel.project.id === project.id
+                        ? "border-neutral-500"
+                        : "border-neutral-800 opacity-60"
                     }`}
                   >
                     agenda
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void openMemory(project)}
+                    data-memory={project.id}
+                    aria-label={`Lo que sabe de ${project.name}`}
+                    className={`rounded border px-1 text-xs ${
+                      panel?.view === "memoria" && panel.project.id === project.id
+                        ? "border-neutral-500"
+                        : "border-neutral-800 opacity-60"
+                    }`}
+                  >
+                    memoria
                   </button>
                 </span>
               </div>
@@ -448,7 +503,7 @@ export function Chat() {
                       <button
                         type="button"
                         onClick={() => {
-                          setAgenda(null);
+                          setPanel(null);
                           setOpen(line.id);
                           setMenu(false);
                         }}
@@ -502,13 +557,44 @@ export function Chat() {
           <button type="button" onClick={() => setMenu(!menu)} className="rounded border border-neutral-700 px-2 text-sm">
             proyectos
           </button>
-          <span className="truncate text-sm">{agenda ? `Agenda de ${agenda.name}` : titleOf(projects, open)}</span>
+          <span className="truncate text-sm">
+            {panel ? `${panel.view === "agenda" ? "Agenda" : "Memoria"} de ${panel.project.name}` : titleOf(projects, open)}
+          </span>
         </header>
 
-        {agenda ? (
+        {panel?.view === "memoria" ? (
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="mx-auto flex max-w-3xl flex-col gap-4">
+              <h2 className="text-sm font-semibold">Skills instaladas</h2>
+              {skills.length === 0 ? <p className="text-sm opacity-60">No hay ninguna instalada.</p> : null}
+              <ul className="flex flex-col gap-2">
+                {skills.map((skill) => (
+                  <li key={skill.name} className="rounded border border-neutral-800 p-2 text-sm">
+                    <span className="font-semibold">{skill.name}</span>
+                    <span className="ml-2 text-xs opacity-60">
+                      {skill.owner}
+                      {skill.role ? ` · ${skill.role}` : ""}
+                    </span>
+                    <p className="mt-1 text-xs opacity-70">{skill.description}</p>
+                  </li>
+                ))}
+              </ul>
+              <h2 className="text-sm font-semibold">Memoria de {panel.project.name}</h2>
+              {facts.length === 0 ? <p className="text-sm opacity-60">No hay hechos.</p> : null}
+              {facts.map((fact) => (
+                <article key={fact.key} className="rounded border border-neutral-800 p-2 text-sm" data-fact={fact.key}>
+                  <p className="text-xs opacity-60">
+                    {fact.key} · {fact.kind} · {day(fact.date)}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap">{fact.body}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : panel?.view === "agenda" ? (
           <div className="flex-1 overflow-y-auto p-4">
             <div className="mx-auto flex max-w-3xl flex-col gap-3">
-              <h2 className="text-sm font-semibold">Agenda de {agenda.name}</h2>
+              <h2 className="text-sm font-semibold">Agenda de {panel.project.name}</h2>
               {tasks.length === 0 ? <p className="text-sm opacity-60">No hay tareas en este proyecto.</p> : null}
               {tasks.map((task) => (
                 <Task key={task.name} task={task} running={running} removing={removingTask}
@@ -531,7 +617,7 @@ export function Chat() {
 
         {error ? <p className="border-t border-red-900 px-4 py-2 text-sm text-red-400">{error}</p> : null}
 
-        {agenda ? null : (
+        {panel ? null : (
         <form onSubmit={send} className="border-t border-neutral-800 p-3">
           <div className="mx-auto flex max-w-3xl flex-col gap-2">
             {attachments.length > 0 ? (
@@ -715,6 +801,10 @@ function Task({
       )}
     </div>
   );
+}
+
+function day(days: number) {
+  return new Date(days * 86400000).toISOString().slice(0, 10);
 }
 
 function whenOf(task: Task) {

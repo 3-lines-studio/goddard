@@ -203,6 +203,10 @@ event so the thread shows it. The way in is not only the web: the agent has a
 `send` tool that takes a file from the workspace and does the same three
 things, which is how a screenshot it took ends up in the thread.
 
+The `memoria` button next to it is what the agent knows: the skills this
+viewer can see and the facts about the project, which is the same index and the
+same memory the prompt hands the model.
+
 The `agenda` button in the header of a project is that list: what
 each task is, when it runs, what it answered last, and the three buttons that
 run it now, pause it and take it out.
