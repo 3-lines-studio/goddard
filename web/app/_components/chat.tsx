@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { markdown } from "../_lib/markdown";
 import { describeTool } from "../_lib/tool";
+import { Icon } from "./icon";
 
 type Line = {
   id: string;
@@ -68,7 +69,18 @@ type Event = {
 
 const TABS_KEY = "goddard-tabs";
 const OPEN_KEY = "goddard-open-projects";
+const THEME_KEY = "goddard-theme";
 const VISIBLE = 10;
+
+const TOOL_ICON: Record<string, string> = {
+  read: "file",
+  write: "file-plus",
+  edit: "pencil",
+  bash: "terminal",
+  search: "search",
+  fetch: "download",
+  browse: "globe",
+};
 
 function readList(key: string): string[] {
   try {
@@ -82,6 +94,14 @@ function readList(key: string): string[] {
 function writeList(key: string, values: string[]) {
   try {
     localStorage.setItem(key, JSON.stringify(values));
+  } catch {
+    return;
+  }
+}
+
+function rememberTheme(name: string) {
+  try {
+    localStorage.setItem(THEME_KEY, name);
   } catch {
     return;
   }
@@ -134,6 +154,7 @@ export function Chat() {
   const [pending, setPending] = useState<{ key: string; ts: number } | null>(null);
   const [attachments, setAttachments] = useState<{ id: string; name: string; mime: string }[]>([]);
   const files = useRef<HTMLInputElement>(null);
+  const [theme, setTheme] = useState("dark");
   const [needLogin, setNeedLogin] = useState(false);
   const [sent, setSent] = useState("");
   const [link, setLink] = useState("");
@@ -145,6 +166,10 @@ export function Chat() {
   const panel = projects.find((one) => one.slug === tab?.slug) ?? null;
   const open = tab?.kind === "thread" ? tab.key : "";
   const unread = tasks.reduce((total, task) => total + task.unread, 0);
+
+  useEffect(() => {
+    setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+  }, []);
 
   useEffect(() => {
     if (restored.current) writeList(TABS_KEY, keys);
@@ -420,6 +445,13 @@ export function Chat() {
     openTab("agenda");
   }
 
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    rememberTheme(next);
+  }
+
   function openMemory(project: Project) {
     openTab(`memoria:${project.slug}`);
   }
@@ -549,30 +581,34 @@ export function Chat() {
               type="email"
               data-login-email=""
               placeholder="tu@mail"
-              className="rounded border border-neutral-700 bg-transparent px-3 py-2 text-sm"
+              className="rounded border border-line bg-transparent px-3 py-2 text-sm"
             />
-            <button type="submit" data-login-send="" className="rounded border border-neutral-700 px-3 py-2 text-sm">
+            <button type="submit" data-login-send="" className="rounded border border-line px-3 py-2 text-sm">
               Mandame el link
             </button>
           </form>
         )}
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        {error ? <p className="text-sm text-err">{error}</p> : null}
       </div>
     );
   }
 
   return (
     <div className="flex h-dvh">
-      <aside className={`${menu ? "flex" : "hidden"} w-72 shrink-0 flex-col border-r border-neutral-800 md:flex`}>
-        <form onSubmit={newProject} className="flex gap-2 border-b border-neutral-800 p-3">
+      <aside className={`${menu ? "flex" : "hidden"} w-72 shrink-0 flex-col border-r border-line bg-panel md:flex`}>
+        <form onSubmit={newProject} className="flex gap-2 border-b border-line p-3">
           <input
             name="name"
             data-new-project=""
             placeholder="Nuevo proyecto"
-            className="w-full rounded border border-neutral-700 bg-transparent px-2 py-1 text-sm"
+            className="w-full rounded border border-line bg-transparent px-2 py-1 text-sm"
           />
-          <button type="submit" aria-label="Agregar proyecto" className="rounded border border-neutral-700 px-2 text-sm">
-            +
+          <button
+            type="submit"
+            aria-label="Agregar proyecto"
+            className="rounded border border-line px-1.5 py-1 opacity-70 hover:opacity-100"
+          >
+            <Icon name="plus" />
           </button>
         </form>
         <nav className="flex-1 overflow-y-auto p-2">
@@ -588,9 +624,9 @@ export function Chat() {
                     onClick={() => toggleProject(project.slug)}
                     data-toggle-project={project.id}
                     aria-label={shut ? `Mostrar los hilos de ${project.name}` : `Ocultar los hilos de ${project.name}`}
-                    className="w-4 shrink-0 rounded text-xs opacity-60 hover:opacity-100"
+                    className="shrink-0 rounded p-1 opacity-60 hover:opacity-100"
                   >
-                    {shut ? "▸" : "▾"}
+                    <Icon name="down" size={14} className={`transition-transform ${shut ? "-rotate-90" : ""}`} />
                   </button>
                   {editing === project.id ? (
                     <Name
@@ -603,7 +639,7 @@ export function Chat() {
                       type="button"
                       onClick={() => openProject(project)}
                       data-project={project.id}
-                      className="min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-sm font-semibold hover:bg-neutral-900"
+                      className="min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-sm font-semibold hover:bg-hover"
                     >
                       {project.name}
                     </button>
@@ -613,18 +649,20 @@ export function Chat() {
                     onClick={() => setMenuProject(menuProject === project.slug ? "" : project.slug)}
                     data-project-menu={project.id}
                     aria-label={`Opciones de ${project.name}`}
-                    className="shrink-0 rounded px-1 text-xs opacity-60 hover:opacity-100"
+                    className={`shrink-0 rounded p-1 ${
+                      menuProject === project.slug ? "bg-hover" : "opacity-60 hover:opacity-100"
+                    }`}
                   >
-                    ⋮
+                    <Icon name="dots" size={14} />
                   </button>
                 </div>
                 {menuProject === project.slug ? (
-                  <div className="my-1 flex flex-col rounded border border-neutral-800 p-1 text-sm">
+                  <div className="my-1 flex flex-col rounded border border-line p-1 text-sm">
                     <button
                       type="button"
                       onClick={() => newConversation(project.id)}
                       data-new-conversation={project.id}
-                      className="rounded px-2 py-1 text-left hover:bg-neutral-900"
+                      className="rounded px-2 py-1 text-left hover:bg-hover"
                     >
                       nueva conversación
                     </button>
@@ -632,7 +670,7 @@ export function Chat() {
                       type="button"
                       onClick={() => openMemory(project)}
                       data-memory={project.id}
-                      className="rounded px-2 py-1 text-left hover:bg-neutral-900"
+                      className="rounded px-2 py-1 text-left hover:bg-hover"
                     >
                       memoria
                     </button>
@@ -643,7 +681,7 @@ export function Chat() {
                         setEditing(project.id);
                       }}
                       data-rename-project={project.id}
-                      className="rounded px-2 py-1 text-left hover:bg-neutral-900"
+                      className="rounded px-2 py-1 text-left hover:bg-hover"
                     >
                       renombrar
                     </button>
@@ -652,8 +690,8 @@ export function Chat() {
                       onClick={() => ask("/api/projects", project.id)}
                       data-delete-project={project.id}
                       title={removing === project.id ? "otra vez para borrar" : `Borrar ${project.name}`}
-                      className={`rounded px-2 py-1 text-left hover:bg-neutral-900 ${
-                        removing === project.id ? "bg-red-900 text-red-100" : "text-red-400"
+                      className={`rounded px-2 py-1 text-left hover:bg-hover ${
+                        removing === project.id ? "bg-err text-bg" : "text-err"
                       }`}
                     >
                       {removing === project.id ? "otra vez para borrar" : "quitar"}
@@ -676,7 +714,7 @@ export function Chat() {
                             onClick={() => openTab(line.id)}
                             data-conversation={line.id}
                             className={`min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-sm ${
-                              tab?.key === line.id ? "bg-neutral-800" : "hover:bg-neutral-900"
+                              tab?.key === line.id ? "bg-raised" : "hover:bg-hover"
                             }`}
                           >
                             {line.title}
@@ -688,9 +726,9 @@ export function Chat() {
                           onClick={() => setEditing(line.id)}
                           data-rename-conversation={line.id}
                           aria-label={`Renombrar ${line.title}`}
-                          className="text-xs opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
+                          className="rounded p-1 opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
                         >
-                          ✎
+                          <Icon name="pencil" size={13} />
                         </button>
                         <button
                           type="button"
@@ -698,11 +736,13 @@ export function Chat() {
                           data-delete-conversation={line.id}
                           aria-label={`Borrar ${line.title}`}
                           title={removing === line.id ? "otra vez para borrar" : `Borrar ${line.title}`}
-                          className={`shrink-0 rounded px-1 text-xs ${
-                            removing === line.id ? "bg-red-900 text-red-100" : "opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
+                          className={`shrink-0 rounded ${
+                            removing === line.id
+                              ? "bg-err px-1 text-xs text-bg"
+                              : "p-1 opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
                           }`}
                         >
-                          {removing === line.id ? "borrar" : "✕"}
+                          {removing === line.id ? "borrar" : <Icon name="close" size={13} />}
                         </button>
                       </li>
                     ))}
@@ -723,45 +763,63 @@ export function Chat() {
           })}
           {projects.length === 0 ? <p className="p-2 text-sm opacity-60">Todavía no hay proyectos.</p> : null}
         </nav>
-        <div className="border-t border-neutral-800 p-2">
+        <div className="border-t border-line p-2">
           <button
             type="button"
             onClick={openAgenda}
             data-agenda=""
             className={`flex w-full items-center gap-2 rounded px-2 py-1 text-sm ${
-              tab?.kind === "agenda" ? "bg-neutral-800" : "hover:bg-neutral-900"
+              tab?.kind === "agenda" ? "bg-raised" : "hover:bg-hover"
             }`}
           >
+            <Icon name="clock" size={15} />
             Agenda
             {unread > 0 ? (
-              <span data-agenda-badge="" className="rounded bg-neutral-700 px-1 text-xs">
+              <span data-agenda-badge="" className="rounded bg-raised px-1 text-xs">
                 {unread}
               </span>
             ) : null}
           </button>
         </div>
-        <div className="flex items-center justify-between border-t border-neutral-800 p-3 text-xs">
+        <div className="flex items-center justify-between gap-2 border-t border-line p-2 text-xs">
           <span className="truncate opacity-60">{user}</span>
-          <button type="button" onClick={logout} data-logout="" className="rounded border border-neutral-700 px-2 py-1">
-            salir
-          </button>
+          <span className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              data-theme-toggle=""
+              aria-label={theme === "dark" ? "Tema claro" : "Tema oscuro"}
+              className="rounded p-1 opacity-60 hover:opacity-100"
+            >
+              <Icon name={theme === "dark" ? "sun" : "moon"} />
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              data-logout=""
+              aria-label="Salir"
+              className="rounded p-1 opacity-60 hover:opacity-100"
+            >
+              <Icon name="logout" />
+            </button>
+          </span>
         </div>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b border-neutral-800 p-2 md:hidden">
-          <button type="button" onClick={() => setMenu(!menu)} className="rounded border border-neutral-700 px-2 text-sm">
+        <header className="flex items-center gap-2 border-b border-line p-2 md:hidden">
+          <button type="button" onClick={() => setMenu(!menu)} className="rounded border border-line px-2 text-sm">
             proyectos
           </button>
           <span className="truncate text-sm">{tab ? tab.title : "Goddard"}</span>
         </header>
 
-        <nav className="flex items-center gap-1 overflow-x-auto border-b border-neutral-800 p-1">
+        <nav className="flex items-center gap-1 overflow-x-auto border-b border-line p-1">
           {tabs.map((one) => (
             <span
               key={one.key}
               className={`flex shrink-0 items-center gap-1 rounded px-2 py-1 text-sm ${
-                one.key === tab?.key ? "bg-neutral-800" : "hover:bg-neutral-900"
+                one.key === tab?.key ? "bg-raised" : "hover:bg-hover"
               }`}
             >
               <button type="button" onClick={() => setActive(one.key)} data-tab={one.key} className="max-w-48 truncate">
@@ -772,9 +830,9 @@ export function Chat() {
                 onClick={() => closeTab(one.key)}
                 data-close-tab={one.key}
                 aria-label={`Cerrar ${one.title}`}
-                className="text-xs opacity-40 hover:opacity-100"
+                className="rounded p-0.5 opacity-40 hover:opacity-100"
               >
-                ✕
+                <Icon name="close" size={12} />
               </button>
             </span>
           ))}
@@ -787,7 +845,7 @@ export function Chat() {
               {skills.length === 0 ? <p className="text-sm opacity-60">No hay ninguna instalada.</p> : null}
               <ul className="flex flex-col gap-2">
                 {skills.map((skill) => (
-                  <li key={skill.name} className="rounded border border-neutral-800 p-2 text-sm">
+                  <li key={skill.name} className="rounded border border-line p-2 text-sm">
                     <span className="font-semibold">{skill.name}</span>
                     <span className="ml-2 text-xs opacity-60">
                       {skill.owner}
@@ -800,7 +858,7 @@ export function Chat() {
               <h2 className="text-sm font-semibold">Memoria de {panel?.name}</h2>
               {facts.length === 0 ? <p className="text-sm opacity-60">No hay hechos.</p> : null}
               {facts.map((fact) => (
-                <article key={fact.key} className="rounded border border-neutral-800 p-2 text-sm" data-fact={fact.key}>
+                <article key={fact.key} className="rounded border border-line p-2 text-sm" data-fact={fact.key}>
                   <p className="text-xs opacity-60">
                     {fact.key} · {fact.kind} · {day(fact.date)}
                   </p>
@@ -832,7 +890,7 @@ export function Chat() {
                   type="button"
                   onClick={readAll}
                   data-read-all=""
-                  className="self-start rounded border border-neutral-700 px-2 py-1 text-xs"
+                  className="self-start rounded border border-line px-2 py-1 text-xs"
                 >
                   marcar todo leído
                 </button>
@@ -852,23 +910,23 @@ export function Chat() {
         </div>
         )}
 
-        {error ? <p className="border-t border-red-900 px-4 py-2 text-sm text-red-400">{error}</p> : null}
+        {error ? <p className="border-t border-err px-4 py-2 text-sm text-err">{error}</p> : null}
 
         {tab?.kind === "thread" ? (
-        <form onSubmit={send} className="border-t border-neutral-800 p-3">
+        <form onSubmit={send} className="border-t border-line p-3">
           <div className="mx-auto flex max-w-3xl flex-col gap-2">
             {attachments.length > 0 ? (
               <div className="flex flex-wrap gap-2 text-xs">
                 {attachments.map((one) => (
-                  <span key={one.id} className="flex items-center gap-1 rounded border border-neutral-800 px-2 py-1">
+                  <span key={one.id} className="flex items-center gap-1 rounded border border-line px-2 py-1">
                     {one.name}
                     <button
                       type="button"
                       data-detach={one.id}
                       onClick={() => setAttachments((current) => current.filter((other) => other.id !== one.id))}
-                      className="opacity-60 hover:opacity-100"
+                      className="rounded p-0.5 opacity-60 hover:opacity-100"
                     >
-                      ✕
+                      <Icon name="close" size={12} />
                     </button>
                   </span>
                 ))}
@@ -881,7 +939,7 @@ export function Chat() {
               data-attach=""
               onClick={() => files.current?.click()}
               disabled={!open}
-              className="self-end rounded border border-neutral-700 px-3 py-2 text-sm disabled:opacity-40"
+              className="self-end rounded border border-line px-3 py-2 text-sm disabled:opacity-40"
             >
               adjuntar
             </button>
@@ -898,13 +956,13 @@ export function Chat() {
               rows={2}
               placeholder={open ? "Escribí un mensaje…" : "Elegí una conversación primero"}
               disabled={!open}
-              className="w-full resize-none rounded border border-neutral-700 bg-transparent p-2 text-sm"
+              className="w-full resize-none rounded border border-line bg-transparent p-2 text-sm"
             />
             <button
               type="submit"
               data-send=""
               disabled={!open || busy || working || (!text.trim() && attachments.length === 0)}
-              className="self-end rounded border border-neutral-700 px-3 py-2 text-sm disabled:opacity-40"
+              className="self-end rounded border border-line px-3 py-2 text-sm disabled:opacity-40"
             >
               Enviar
             </button>
@@ -913,7 +971,7 @@ export function Chat() {
                 type="button"
                 data-stop=""
                 onClick={() => void stop()}
-                className="self-end rounded border border-neutral-700 px-3 py-2 text-sm"
+                className="self-end rounded border border-line px-3 py-2 text-sm"
               >
                 detener
               </button>
@@ -933,7 +991,7 @@ function Line({ line, workspace }: { line: Event; workspace: string }) {
       return <File line={line} />;
     case "user":
       return (
-        <div className="self-end rounded-lg bg-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap">{line.text}</div>
+        <div className="self-end rounded-lg bg-raised px-3 py-2 text-sm whitespace-pre-wrap">{line.text}</div>
       );
     case "assistant":
       return <Assistant text={line.text ?? ""} />;
@@ -942,7 +1000,7 @@ function Line({ line, workspace }: { line: Event; workspace: string }) {
     case "tool_result":
       return <Tool call={line} done={true} workspace={workspace} />;
     case "error":
-      return <p className="rounded border border-red-900 px-3 py-2 text-sm text-red-400">{line.message}</p>;
+      return <p className="rounded border border-err px-3 py-2 text-sm text-err">{line.message}</p>;
     case "stopped":
       return <p className="text-xs opacity-60">frenado</p>;
     default:
@@ -957,7 +1015,7 @@ function File({ line }: { line: Event }) {
     return (
       <figure className="self-start">
         <a href={href} target="_blank">
-          <img src={href} alt={line.name ?? ""} className="max-h-72 rounded border border-neutral-800" />
+          <img src={href} alt={line.name ?? ""} className="max-h-72 rounded border border-line" />
         </a>
         {caption}
       </figure>
@@ -969,7 +1027,7 @@ function File({ line }: { line: Event }) {
         href={href}
         target="_blank"
         data-file={line.id}
-        className="inline-block rounded border border-neutral-800 px-3 py-2 text-sm underline"
+        className="inline-block rounded border border-line px-3 py-2 text-sm underline"
       >
         {line.name}
       </a>
@@ -1003,7 +1061,7 @@ function Task({
   const last = task.runs[0];
   const state = running ? "running" : !last ? "" : last.ok ? "done" : "error";
   return (
-    <article className="rounded border border-neutral-800 text-sm" data-task={key}>
+    <article className="rounded border border-line text-sm" data-task={key}>
       <div className="flex items-center gap-2 p-2">
         <button
           type="button"
@@ -1015,12 +1073,12 @@ function Task({
             data-task-state={state}
             className={`h-2 w-2 shrink-0 rounded-full ${
               state === "running"
-                ? "bg-neutral-100"
+                ? "bg-text"
                 : state === "done"
-                  ? "bg-emerald-500"
+                  ? "bg-ok"
                   : state === "error"
-                    ? "bg-red-500"
-                    : "border border-neutral-600"
+                    ? "bg-err"
+                    : "border border-strong"
             }`}
           />
           <span className="font-semibold">{task.name}</span>
@@ -1030,15 +1088,15 @@ function Task({
             {whenOf(task)}
           </span>
           {task.unread > 0 ? (
-            <span data-task-unread={key} className="rounded bg-neutral-700 px-1 text-xs">
+            <span data-task-unread={key} className="rounded bg-raised px-1 text-xs">
               {task.unread}
             </span>
           ) : null}
           {task.paused ? (
-            <span className="rounded border border-neutral-700 px-1 text-xs opacity-60">pausada</span>
+            <span className="rounded border border-line px-1 text-xs opacity-60">pausada</span>
           ) : null}
           {task.silent ? (
-            <span className="rounded border border-neutral-700 px-1 text-xs opacity-60">callada</span>
+            <span className="rounded border border-line px-1 text-xs opacity-60">callada</span>
           ) : null}
         </button>
         <span className="flex shrink-0 items-center gap-1 text-xs">
@@ -1047,18 +1105,18 @@ function Task({
             onClick={run}
             disabled={running}
             data-run-task={key}
-            className="rounded border border-neutral-700 px-2 py-0.5 disabled:opacity-40"
+            className="rounded border border-line px-2 py-0.5 disabled:opacity-40"
           >
             {running ? "corriendo…" : "correr"}
           </button>
-          <button type="button" onClick={pause} data-pause-task={key} className="rounded border border-neutral-700 px-2 py-0.5">
+          <button type="button" onClick={pause} data-pause-task={key} className="rounded border border-line px-2 py-0.5">
             {task.paused ? "seguir" : "pausar"}
           </button>
           <button
             type="button"
             onClick={ask}
             data-remove-task={key}
-            className={`rounded px-2 py-0.5 ${removing ? "bg-red-900 text-red-100" : "border border-neutral-700 opacity-60"}`}
+            className={`rounded px-2 py-0.5 ${removing ? "bg-err text-bg" : "border border-line opacity-60"}`}
           >
             {removing ? "borrar" : "✕"}
           </button>
@@ -1066,7 +1124,7 @@ function Task({
       </div>
       <p className="px-2 pb-2 text-xs whitespace-pre-wrap opacity-60">{task.prompt}</p>
       {open ? (
-        <div className="border-t border-neutral-800 p-2">
+        <div className="border-t border-line p-2">
           {task.runs.length === 0 ? <p className="text-xs opacity-60">Todavía no corrió.</p> : null}
           {task.runs.map((one) => (
             <div key={one.ts} className="mt-1 first:mt-0">
@@ -1075,7 +1133,7 @@ function Task({
                 {one.ok ? "" : " · con error"}
               </span>
               <div
-                className={`md text-sm ${one.ok ? "opacity-80" : "text-red-400"}`}
+                className={`md text-sm ${one.ok ? "opacity-80" : "text-err"}`}
                 dangerouslySetInnerHTML={{ __html: markdown(one.text.trim() || "sin novedades") }}
               />
             </div>
@@ -1133,7 +1191,7 @@ function Name({ value, save, cancel }: { value: string; save: (text: string) => 
         if (event.key === "Escape") cancel();
       }}
       onBlur={() => (draft.trim() && draft.trim() !== value ? save(draft.trim()) : cancel())}
-      className="min-w-0 flex-1 rounded border border-neutral-700 bg-transparent px-1 text-sm"
+      className="min-w-0 flex-1 rounded border border-line bg-transparent px-1 text-sm"
     />
   );
 }
@@ -1147,12 +1205,13 @@ function Assistant({ text }: { text: string }) {
       <button
         type="button"
         data-copy=""
+        aria-label={copied ? "copiado" : "copiar"}
         onClick={() => {
           void navigator.clipboard.writeText(text).then(() => setCopied(true));
         }}
-        className="absolute top-0 right-0 rounded border border-neutral-800 bg-neutral-900 px-1 text-xs opacity-0 group-hover:opacity-60 hover:opacity-100"
+        className="absolute top-0 right-0 rounded border border-line bg-panel p-1 opacity-0 group-hover:opacity-60 hover:opacity-100"
       >
-        {copied ? "copiado" : "copiar"}
+        <Icon name={copied ? "check" : "copy"} size={13} />
       </button>
     </div>
   );
@@ -1161,8 +1220,9 @@ function Assistant({ text }: { text: string }) {
 function Tool({ call, done, workspace }: { call: Event; done: boolean; workspace: string }) {
   const what = describeTool(call.name ?? "", call.args ?? "", workspace);
   return (
-    <details className="rounded border border-neutral-800 text-xs">
-      <summary className="cursor-pointer px-2 py-1">
+    <details className="rounded border border-line text-xs">
+      <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1">
+        <Icon name={TOOL_ICON[call.name ?? ""] ?? "dot"} size={13} />
         {call.name}
         <span className="ml-2 opacity-60">
           {what.dir ? what.dir + " · " : ""}
@@ -1170,7 +1230,7 @@ function Tool({ call, done, workspace }: { call: Event; done: boolean; workspace
         </span>
         {done ? <span className="ml-2 opacity-60">ok · {call.ms} ms</span> : null}
       </summary>
-      <pre className="overflow-x-auto border-t border-neutral-800 px-2 py-1 opacity-80">
+      <pre className="overflow-x-auto border-t border-line px-2 py-1 opacity-80">
         {done ? call.text : call.args}
       </pre>
     </details>
