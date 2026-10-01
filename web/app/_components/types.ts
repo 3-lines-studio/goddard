@@ -46,12 +46,6 @@ export type Task = {
   runs: { ts: number; date: string; ms: number; ok: boolean; text: string }[];
 };
 
-export type Machine = {
-  memory: { used: number; total: number; anon: number; cache: number; kernel: number };
-  disk: { used: number; total: number };
-  processes: number;
-};
-
 export type Fact = {
   key: string;
   kind: string;
