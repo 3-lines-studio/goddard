@@ -193,7 +193,9 @@ any conversation — and written into the workspace when the turn runs, under
 `files/<conversation>/`, because that is where the agent's tools look: what it
 reads is the same file the thread is showing. `POST /api/uploads` takes one and
 names it, `POST /api/turns` puts it in the message, and the log keeps a `file`
-event so the thread shows it.
+event so the thread shows it. The way in is not only the web: the agent has a
+`send` tool that takes a file from the workspace and does the same three
+things, which is how a screenshot it took ends up in the thread.
 
 The `agenda` button in the header of a project is that list: what
 each task is, when it runs, what it answered last, and the three buttons that

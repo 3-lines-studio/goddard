@@ -34,6 +34,7 @@ type Event = {
   text?: string;
   name?: string;
   mime?: string;
+  caption?: string;
   args?: string;
   id?: string;
   ms?: number;
@@ -602,22 +603,29 @@ function Line({ line, workspace }: { line: Event; workspace: string }) {
 
 function File({ line }: { line: Event }) {
   const href = `/api/uploads?id=${line.id}`;
+  const caption = line.caption ? <p className="mt-1 text-xs opacity-60">{line.caption}</p> : null;
   if ((line.mime ?? "").startsWith("image/")) {
     return (
-      <a href={href} target="_blank" className="self-start">
-        <img src={href} alt={line.name ?? ""} className="max-h-72 rounded border border-neutral-800" />
-      </a>
+      <figure className="self-start">
+        <a href={href} target="_blank">
+          <img src={href} alt={line.name ?? ""} className="max-h-72 rounded border border-neutral-800" />
+        </a>
+        {caption}
+      </figure>
     );
   }
   return (
-    <a
-      href={href}
-      target="_blank"
-      data-file={line.id}
-      className="self-start rounded border border-neutral-800 px-3 py-2 text-sm underline"
-    >
-      {line.name}
-    </a>
+    <div className="self-start">
+      <a
+        href={href}
+        target="_blank"
+        data-file={line.id}
+        className="inline-block rounded border border-neutral-800 px-3 py-2 text-sm underline"
+      >
+        {line.name}
+      </a>
+      {caption}
+    </div>
   );
 }
 
