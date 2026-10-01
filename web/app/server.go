@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +87,12 @@ func addr() string {
 	return ":8080"
 }
 
+// Workspaces is where the projects live while the sandbox is this host: the
+// workspace is the owner's — a user or an organization, one of each — and the
+// project is a directory inside it. When the sandbox is somebody else's, its
+// machine says where the projects of that owner start and this is not read.
+const Workspaces = "/data/workspaces"
+
 // build opens every part of goddard over the same database and the same model
 // of it: the stores, the agent, and who the app is being for.
 func build(db *sql.DB) (*Service, error) {
@@ -95,11 +100,10 @@ func build(db *sql.DB) (*Service, error) {
 	if key == "" {
 		return nil, errors.New("goddard: OPENAI_API_KEY is not set")
 	}
-	workspace := env("GODDARD_WORKSPACE", ".")
-	if absolute, err := filepath.Abs(workspace); err == nil {
-		workspace = absolute
+	if err := os.MkdirAll(Workspaces, 0o755); err != nil {
+		return nil, err
 	}
-	built := New(db, axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key), workspace)
+	built := New(db, axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key), Workspaces)
 	built.Offset = offset()
 	built.Mail = newMailer()
 	built.Allowed = emails(os.Getenv("GODDARD_ALLOWED_EMAILS"))
