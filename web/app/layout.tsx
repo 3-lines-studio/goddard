@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./avatar.css";
 import "./style.css";
 
@@ -12,14 +13,15 @@ const BOOT = `(() => {
     saved = localStorage.getItem("goddard-theme");
   } catch {}
   const light = matchMedia("(prefers-color-scheme: light)").matches;
-  document.documentElement.dataset.theme = saved || (light ? "light" : "dark");
+  const theme = saved || (light ? "light" : "dark");
+  document.documentElement.classList.toggle("dark", theme === "dark");
 })();`;
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-bg text-text">
+    <div className="bg-background text-foreground">
       <script dangerouslySetInnerHTML={{ __html: BOOT }} />
-      {children}
+      <TooltipProvider>{children}</TooltipProvider>
     </div>
   );
 }
