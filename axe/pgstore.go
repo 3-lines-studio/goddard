@@ -13,7 +13,7 @@ import (
 //
 // A session is a row of axe.sessions and each entry is a row of axe.entries,
 // so appending is an INSERT and the order is the seq. The live session is the
-// one with archived_at NULL, at most one per scope, and archiving it is an
+// one with deleted_at NULL, at most one per scope, and archiving it is an
 // UPDATE. A scope is whatever the app says it is — a chat, a project, a
 // user — and two stores over the same database and scope see the same history.
 //
@@ -169,7 +169,7 @@ func (s *PgStore) ContinueArchivedLive(ctx context.Context, id string) (bool, er
 func (s *PgStore) Discard(ctx context.Context) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			"DELETE FROM axe.sessions WHERE scope = $1 AND archived_at IS NULL", s.scope); err != nil {
+			"DELETE FROM axe.sessions WHERE scope = $1 AND deleted_at IS NULL", s.scope); err != nil {
 			return err
 		}
 		return clearResume(ctx, tx, s.scope)
@@ -179,7 +179,7 @@ func (s *PgStore) Discard(ctx context.Context) error {
 func (s *PgStore) List(ctx context.Context) ([]SessionMeta, error) {
 	rows, err := s.db.QueryContext(ctx,
 		"SELECT id, title, updated_at, turns FROM axe.sessions "+
-			"WHERE scope = $1 AND archived_at IS NOT NULL ORDER BY updated_at DESC, seq DESC", s.scope)
+			"WHERE scope = $1 AND deleted_at IS NOT NULL ORDER BY updated_at DESC, seq DESC", s.scope)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (s *PgStore) Load(ctx context.Context, id string) ([]Entry, bool, error) {
 	}
 	var archived bool
 	err := s.db.QueryRowContext(ctx,
-		"SELECT archived_at IS NOT NULL FROM axe.sessions WHERE scope = $1 AND id = $2", s.scope, id).
+		"SELECT deleted_at IS NOT NULL FROM axe.sessions WHERE scope = $1 AND id = $2", s.scope, id).
 		Scan(&archived)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
@@ -265,7 +265,7 @@ type querier interface {
 func liveIn(ctx context.Context, db querier, scope string) (*liveRow, error) {
 	var row liveRow
 	err := db.QueryRowContext(ctx,
-		"SELECT id, title, turns FROM axe.sessions WHERE scope = $1 AND archived_at IS NULL", scope).
+		"SELECT id, title, turns FROM axe.sessions WHERE scope = $1 AND deleted_at IS NULL", scope).
 		Scan(&row.id, &row.title, &row.turns)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -282,26 +282,14 @@ func ensureLive(ctx context.Context, tx *sql.Tx, scope string) (*liveRow, error)
 		return row, err
 	}
 	base := NowMs()
-	for suffix := 0; suffix < 1000; suffix++ {
-		id := fmt.Sprintf("%d", base)
-		if suffix > 0 {
-			id = fmt.Sprintf("%d-%d", base, suffix)
-		}
-		result, err := tx.ExecContext(ctx,
-			"INSERT INTO axe.sessions (id, scope, title, turns, updated_at) VALUES ($1, $2, $3, 0, $4) "+
-				"ON CONFLICT (id) DO NOTHING", id, scope, untitled, base)
-		if err != nil {
-			return nil, err
-		}
-		created, err := result.RowsAffected()
-		if err != nil {
-			return nil, err
-		}
-		if created == 1 {
-			return &liveRow{id: id, title: untitled}, nil
-		}
+	var id string
+	err = tx.QueryRowContext(ctx,
+		"INSERT INTO axe.sessions (scope, title, turns, updated_at) VALUES ($1, $2, 0, $3) RETURNING id",
+		scope, untitled, base).Scan(&id)
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("axe: no pude acuñar una sesión para el scope %q", scope)
+	return &liveRow{id: id, title: untitled}, nil
 }
 
 func resumeIn(ctx context.Context, db querier, scope string) (string, bool, error) {
@@ -404,7 +392,7 @@ func putArchived(ctx context.Context, tx *sql.Tx, scope, id, title string, turns
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		_, err := tx.ExecContext(ctx,
-			"INSERT INTO axe.sessions (id, scope, title, turns, updated_at, archived_at) VALUES ($1, $2, $3, $4, $5, $5)",
+			"INSERT INTO axe.sessions (id, scope, title, turns, updated_at, deleted_at) VALUES ($1, $2, $3, $4, $5, $5)",
 			id, scope, title, turns, NowMs())
 		return err
 	}
@@ -416,7 +404,7 @@ func putArchived(ctx context.Context, tx *sql.Tx, scope, id, title string, turns
 
 func dropLive(ctx context.Context, tx *sql.Tx, scope, keep string) error {
 	_, err := tx.ExecContext(ctx,
-		"DELETE FROM axe.sessions WHERE scope = $1 AND archived_at IS NULL AND id <> $2", scope, keep)
+		"DELETE FROM axe.sessions WHERE scope = $1 AND deleted_at IS NULL AND id <> $2", scope, keep)
 	return err
 }
 
@@ -429,7 +417,7 @@ func touch(ctx context.Context, tx *sql.Tx, id, title string, turns int) error {
 
 func markArchived(ctx context.Context, tx *sql.Tx, id, title string, turns int) error {
 	_, err := tx.ExecContext(ctx,
-		"UPDATE axe.sessions SET title = $2, turns = $3, updated_at = $4, archived_at = $4 WHERE id = $1",
+		"UPDATE axe.sessions SET title = $2, turns = $3, updated_at = $4, deleted_at = $4 WHERE id = $1",
 		id, title, turns, NowMs())
 	return err
 }

@@ -491,7 +491,7 @@ func (s *Store) Audit(ctx context.Context, actor, action, project, env string, n
 
 func (s *Store) AuditLog(ctx context.Context, limit int) ([]AuditRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT at, actor, action, project, env, name FROM heimdall.audit ORDER BY at DESC, id DESC LIMIT $1", limit)
+		"SELECT at, actor, action, project, env, name FROM heimdall.audit ORDER BY seq DESC LIMIT $1", limit)
 	if err != nil {
 		return nil, internal(err.Error())
 	}

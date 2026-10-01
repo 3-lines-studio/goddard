@@ -202,7 +202,7 @@ func (s *PgStore) Finish(ctx context.Context, task Task, run Run) error {
 		   AND id NOT IN (
 		       SELECT id FROM schedule.runs
 		       WHERE user_id = $1 AND project = $2 AND name = $3
-		       ORDER BY id DESC LIMIT $4
+		       ORDER BY seq DESC LIMIT $4
 		   )`,
 		task.UserID, task.Project, task.Name, Keep); err != nil {
 		return fmt.Errorf("no pude podar las corridas de %q: %w", task.Name, err)
@@ -286,7 +286,7 @@ func runsOf(ctx context.Context, from querier, task Task) ([]Run, error) {
 	rows, err := from.QueryContext(ctx,
 		`SELECT `+runColumns+` FROM schedule.runs
 		 WHERE user_id = $1 AND project = $2 AND name = $3
-		 ORDER BY id DESC LIMIT $4`,
+		 ORDER BY seq DESC LIMIT $4`,
 		task.UserID, task.Project, task.Name, Keep)
 	if err != nil {
 		return nil, fmt.Errorf("no pude leer las corridas de %q: %w", task.Name, err)

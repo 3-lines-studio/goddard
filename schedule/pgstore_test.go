@@ -40,7 +40,7 @@ func testDB(t *testing.T) *sql.DB {
 	if _, err := lock.ExecContext(t.Context(), "SELECT pg_advisory_lock($1)", testLock); err != nil {
 		t.Fatalf("no pude tomar el candado: %v", err)
 	}
-	if _, err := db.ExecContext(t.Context(), "DROP SCHEMA IF EXISTS schedule CASCADE; DROP TABLE IF EXISTS public.schema_migrations"); err != nil {
+	if _, err := db.ExecContext(t.Context(), "DROP SCHEMA IF EXISTS goddard, auth, chat, heimdall, axe, skill, memo, schedule CASCADE; DROP TABLE IF EXISTS public.schema_migrations"); err != nil {
 		t.Fatalf("no pude limpiar: %v", err)
 	}
 	if _, err := migrations.Apply(t.Context(), db); err != nil {

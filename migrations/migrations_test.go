@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -47,7 +49,7 @@ func testDB(t *testing.T) *sql.DB {
 
 func reset(t *testing.T, db *sql.DB) {
 	t.Helper()
-	_, err := db.Exec("DROP SCHEMA IF EXISTS heimdall CASCADE; DROP TABLE IF EXISTS public.schema_migrations")
+	_, err := db.Exec("DROP SCHEMA IF EXISTS goddard, auth, chat, heimdall, axe, skill, memo, schedule CASCADE; DROP TABLE IF EXISTS public.schema_migrations")
 	if err != nil {
 		t.Fatalf("no pude limpiar: %v", err)
 	}
@@ -104,11 +106,11 @@ func TestAplicaElEsquemaDeHeimdall(t *testing.T) {
 	if got != strings.Join(want, ",") {
 		t.Fatalf("las tablas quedaron %s", got)
 	}
-	wanted := "project:text,env:text,name:text,value:bytea,updated_at:bigint"
+	wanted := "project:text,env:text,name:text,value:bytea,updated_at:bigint,id:text,created_at:bigint,deleted_at:bigint"
 	if got := columnsOf(t, db, "heimdall", "secrets"); strings.Join(got, ",") != wanted {
 		t.Fatalf("heimdall.secrets quedó %v", got)
 	}
-	wantedTokens := "id:text,name:text,project:text,env:text,keys:jsonb,hash:text,role:text,created_at:bigint,expires_at:bigint,last_used:bigint"
+	wantedTokens := "id:text,name:text,project:text,env:text,keys:jsonb,hash:text,role:text,created_at:bigint,expires_at:bigint,last_used:bigint,updated_at:bigint,deleted_at:bigint"
 	if got := columnsOf(t, db, "heimdall", "tokens"); strings.Join(got, ",") != wantedTokens {
 		t.Fatalf("heimdall.tokens quedó %v", got)
 	}
@@ -124,11 +126,11 @@ func TestAplicaElEsquemaDeAxe(t *testing.T) {
 	if got != strings.Join(want, ",") {
 		t.Fatalf("las tablas quedaron %s", got)
 	}
-	wantedSessions := "id:text,scope:text,title:text,turns:integer,updated_at:bigint,archived_at:bigint,seq:bigint"
+	wantedSessions := "id:text,scope:text,title:text,turns:integer,updated_at:bigint,deleted_at:bigint,seq:bigint,created_at:bigint"
 	if got := columnsOf(t, db, "axe", "sessions"); strings.Join(got, ",") != wantedSessions {
 		t.Fatalf("axe.sessions quedó %v", got)
 	}
-	wantedEntries := "session_id:text,seq:bigint,entry:jsonb"
+	wantedEntries := "session_id:text,seq:bigint,entry:jsonb,id:text,created_at:bigint,updated_at:bigint,deleted_at:bigint"
 	if got := columnsOf(t, db, "axe", "entries"); strings.Join(got, ",") != wantedEntries {
 		t.Fatalf("axe.entries quedó %v", got)
 	}
@@ -408,5 +410,86 @@ func TestStatusDiceQueCorrioYCuando(t *testing.T) {
 		if !second[index].AppliedAt.Equal(first[index].AppliedAt) {
 			t.Fatalf("%04d_%s cambió de fecha", first[index].Version, first[index].Name)
 		}
+	}
+}
+
+func TestTodaTablaSigueLaConvencion(t *testing.T) {
+	db := testDB(t)
+	if _, err := Apply(context.Background(), db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	want := []string{"created_at", "deleted_at", "id", "updated_at"}
+	rows, err := db.Query(
+		`SELECT table_schema, table_name FROM information_schema.tables
+         WHERE table_schema NOT IN ('pg_catalog', 'information_schema', 'public')
+           AND table_type = 'BASE TABLE'
+         ORDER BY table_schema, table_name`)
+	if err != nil {
+		t.Fatalf("no pude leer las tablas: %v", err)
+	}
+	defer rows.Close()
+	seen := 0
+	for rows.Next() {
+		var schema, table string
+		if err := rows.Scan(&schema, &table); err != nil {
+			t.Fatalf("no pude leer la tabla: %v", err)
+		}
+		seen++
+		names := []string{}
+		for _, column := range columnsOf(t, db, schema, table) {
+			names = append(names, strings.SplitN(column, ":", 2)[0])
+		}
+		for _, needed := range want {
+			if !slices.Contains(names, needed) {
+				t.Fatalf("%s.%s no tiene %s: %v", schema, table, needed, names)
+			}
+		}
+	}
+	if seen < len(pending(t)) {
+		t.Fatalf("vi %d tablas, menos que migraciones", seen)
+	}
+}
+
+func TestElIdEsUnUlid(t *testing.T) {
+	db := testDB(t)
+	if _, err := Apply(context.Background(), db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	var ids []string
+	rows, err := db.Query("SELECT goddard.ulid() FROM generate_series(1, 1000)")
+	if err != nil {
+		t.Fatalf("no pude pedir ids: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("no pude leer el id: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
+		if len(id) != 26 {
+			t.Fatalf("el id %q mide %d", id, len(id))
+		}
+		for _, char := range id {
+			if !strings.ContainsRune("0123456789ABCDEFGHJKMNPQRSTVWXYZ", char) {
+				t.Fatalf("el id %q tiene %q", id, char)
+			}
+		}
+	}
+	if len(slices.Compact(slices.Sorted(slices.Values(ids)))) != len(ids) {
+		t.Fatal("mil ids y alguno se repitió")
+	}
+	var first, second string
+	if err := db.QueryRow("SELECT goddard.ulid()").Scan(&first); err != nil {
+		t.Fatalf("no pude pedir un id: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if err := db.QueryRow("SELECT goddard.ulid()").Scan(&second); err != nil {
+		t.Fatalf("no pude pedir otro id: %v", err)
+	}
+	if !(first < second) {
+		t.Fatalf("%q no es menor que %q", first, second)
 	}
 }
