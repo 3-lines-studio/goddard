@@ -12,6 +12,11 @@ type request struct {
 	Title   string `json:"title"`
 }
 
+type rename struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
 func Post(w http.ResponseWriter, r *http.Request) {
 	service := app.Current()
 	if service == nil {
@@ -39,4 +44,45 @@ func Post(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(conversation)
+}
+
+func Patch(w http.ResponseWriter, r *http.Request) {
+	service := app.Current()
+	if service == nil {
+		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
+		return
+	}
+	if _, ok := app.Session(service, w, r); !ok {
+		return
+	}
+	var body rename
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "no pude leer el título", http.StatusBadRequest)
+		return
+	}
+	if body.Title == "" {
+		http.Error(w, "sin título", http.StatusBadRequest)
+		return
+	}
+	if err := service.Chat.RenameConversation(r.Context(), body.ID, body.Title); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func Delete(w http.ResponseWriter, r *http.Request) {
+	service := app.Current()
+	if service == nil {
+		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
+		return
+	}
+	if _, ok := app.Session(service, w, r); !ok {
+		return
+	}
+	if err := service.Chat.DeleteConversation(r.Context(), r.URL.Query().Get("id")); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

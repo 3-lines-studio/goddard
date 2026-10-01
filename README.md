@@ -160,7 +160,11 @@ What the routes answer today:
 GET  /api/health                        the database answers
 GET  /api/state                         the projects and their conversations
 POST /api/projects                      {name}
+PATCH  /api/projects                    {id, name}: renames it, slug untouched
+DELETE /api/projects?id=                takes it out of the list
 POST /api/conversations                 {project, title}
+PATCH  /api/conversations               {id, title}: renames it
+DELETE /api/conversations?id=           takes the thread out of the list
 POST /api/turns                         {conversation, text}: 202, and the turn runs
 GET  /api/events?conversation=&since=   the log of the thread
 GET  /api/stream?conversation=&since=   the same log, live: text/event-stream

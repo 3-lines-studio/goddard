@@ -38,6 +38,8 @@ export function Chat() {
   const [menu, setMenu] = useState(false);
   const [user, setUser] = useState("");
   const [workspace, setWorkspace] = useState("");
+  const [editing, setEditing] = useState("");
+  const [removing, setRemoving] = useState("");
   const [needLogin, setNeedLogin] = useState(false);
   const [sent, setSent] = useState("");
   const [link, setLink] = useState("");
@@ -57,7 +59,13 @@ export function Chat() {
     setNeedLogin(false);
     setUser(data.user ?? "");
     setWorkspace(data.workspace ?? "");
-    setProjects(data.projects ?? []);
+    const projects: Project[] = data.projects ?? [];
+    setProjects(projects);
+    setOpen((current) =>
+      projects.some((project) => (project.conversations ?? []).some((line) => line.id === current))
+        ? current
+        : "",
+    );
   }, []);
 
   useEffect(() => {
@@ -151,6 +159,38 @@ export function Chat() {
     load();
   }
 
+  async function rename(path: string, body: Record<string, string>) {
+    const response = await fetch(path, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setEditing("");
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    load();
+  }
+
+  function ask(path: string, id: string) {
+    if (removing !== id) {
+      setRemoving(id);
+      return;
+    }
+    void remove(path, id);
+  }
+
+  async function remove(path: string, id: string) {
+    setRemoving("");
+    const response = await fetch(`${path}?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    load();
+  }
+
   async function newConversation(project: string) {
     const response = await fetch("/api/conversations", {
       method: "POST",
@@ -218,34 +258,94 @@ export function Chat() {
         <nav className="flex-1 overflow-y-auto p-3">
           {projects.map((project) => (
             <div key={project.id} className="mb-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold">{project.name}</span>
-                <button
-                  type="button"
-                  onClick={() => newConversation(project.id)}
-                  data-new-conversation={project.id}
-                  className="rounded border border-neutral-700 px-1 text-xs"
-                  aria-label={`Nueva conversación en ${project.name}`}
-                >
-                  nueva
-                </button>
+              <div className="flex items-center justify-between gap-1">
+                {editing === project.id ? (
+                  <Name
+                    value={project.name}
+                    save={(name) => rename("/api/projects", { id: project.id, name })}
+                    cancel={() => setEditing("")}
+                  />
+                ) : (
+                  <span className="truncate text-sm font-semibold">{project.name}</span>
+                )}
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(project.id)}
+                    data-rename-project={project.id}
+                    aria-label={`Renombrar ${project.name}`}
+                    className="text-xs opacity-40 hover:opacity-100"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => ask("/api/projects", project.id)}
+                    data-delete-project={project.id}
+                    aria-label={`Borrar ${project.name}`}
+                    title={removing === project.id ? "otra vez para borrar" : `Borrar ${project.name}`}
+                    className={`rounded px-1 text-xs ${
+                      removing === project.id ? "bg-red-900 text-red-100" : "opacity-40 hover:opacity-100"
+                    }`}
+                  >
+                    {removing === project.id ? "borrar" : "✕"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => newConversation(project.id)}
+                    data-new-conversation={project.id}
+                    className="rounded border border-neutral-700 px-1 text-xs"
+                    aria-label={`Nueva conversación en ${project.name}`}
+                  >
+                    nueva
+                  </button>
+                </span>
               </div>
               <ul className="mt-1">
                 {(project.conversations ?? []).map((line) => (
-                  <li key={line.id}>
+                  <li key={line.id} className="group flex items-center gap-1">
+                    {editing === line.id ? (
+                      <Name
+                        value={line.title}
+                        save={(title) => rename("/api/conversations", { id: line.id, title })}
+                        cancel={() => setEditing("")}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(line.id);
+                          setMenu(false);
+                        }}
+                        data-conversation={line.id}
+                        className={`min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-sm ${
+                          open === line.id ? "bg-neutral-800" : "hover:bg-neutral-900"
+                        }`}
+                      >
+                        {line.title}
+                        {line.running ? <span className="ml-1 text-xs opacity-60">·</span> : null}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => {
-                        setOpen(line.id);
-                        setMenu(false);
-                      }}
-                      data-conversation={line.id}
-                      className={`w-full truncate rounded px-2 py-1 text-left text-sm ${
-                        open === line.id ? "bg-neutral-800" : "hover:bg-neutral-900"
+                      onClick={() => setEditing(line.id)}
+                      data-rename-conversation={line.id}
+                      aria-label={`Renombrar ${line.title}`}
+                      className="text-xs opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => ask("/api/conversations", line.id)}
+                      data-delete-conversation={line.id}
+                      aria-label={`Borrar ${line.title}`}
+                      title={removing === line.id ? "otra vez para borrar" : `Borrar ${line.title}`}
+                      className={`shrink-0 rounded px-1 text-xs ${
+                        removing === line.id ? "bg-red-900 text-red-100" : "opacity-40 md:opacity-0 md:group-hover:opacity-40 hover:opacity-100"
                       }`}
                     >
-                      {line.title}
-                      {line.running ? <span className="ml-1 text-xs opacity-60">·</span> : null}
+                      {removing === line.id ? "borrar" : "✕"}
                     </button>
                   </li>
                 ))}
@@ -334,6 +434,24 @@ function Line({ line, workspace }: { line: Event; workspace: string }) {
     default:
       return null;
   }
+}
+
+function Name({ value, save, cancel }: { value: string; save: (text: string) => void; cancel: () => void }) {
+  const [draft, setDraft] = useState(value);
+  return (
+    <input
+      autoFocus
+      value={draft}
+      data-name=""
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && draft.trim()) save(draft.trim());
+        if (event.key === "Escape") cancel();
+      }}
+      onBlur={() => (draft.trim() && draft.trim() !== value ? save(draft.trim()) : cancel())}
+      className="min-w-0 flex-1 rounded border border-neutral-700 bg-transparent px-1 text-sm"
+    />
+  );
 }
 
 function Assistant({ text }: { text: string }) {
