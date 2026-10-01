@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"log"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,8 +35,10 @@ var (
 
 // Say writes the message and sends the agent after it. It returns as soon as
 // the turn is claimed: what the agent answers shows up in the log, and the web
-// reads it from there.
-func (s *Service) Say(ctx context.Context, conversationID, text string) error {
+// reads it from there. The uploads are the attachments of this message, by id:
+// they are written to the workspace so the agent can read them, and into the
+// log so the thread shows them.
+func (s *Service) Say(ctx context.Context, conversationID, text string, uploads []string) error {
 	conversation, ok, err := s.Chat.Conversation(ctx, conversationID)
 	if err != nil {
 		return err
@@ -45,7 +49,7 @@ func (s *Service) Say(ctx context.Context, conversationID, text string) error {
 	if conversation.Source != chat.SourceWeb {
 		return ErrReadOnly
 	}
-	if strings.TrimSpace(text) == "" {
+	if strings.TrimSpace(text) == "" && len(uploads) == 0 {
 		return ErrEmpty
 	}
 	taken, err := s.Chat.Claim(ctx, conversationID, TurnLease)
@@ -55,17 +59,88 @@ func (s *Service) Say(ctx context.Context, conversationID, text string) error {
 	if !taken {
 		return ErrBusy
 	}
-	if _, err := s.write(ctx, conversationID, map[string]any{"event": "user", "text": text}); err != nil {
+	if strings.TrimSpace(text) != "" {
+		if _, err := s.write(ctx, conversationID, map[string]any{"event": "user", "text": text}); err != nil {
+			_ = s.Chat.Release(ctx, conversationID)
+			return err
+		}
+	}
+	files, err := s.attach(ctx, conversation, uploads)
+	if err != nil {
 		_ = s.Chat.Release(ctx, conversationID)
 		return err
 	}
 	if conversation.Title == chat.NewTitle {
-		_ = s.Chat.RenameConversation(ctx, conversationID, titleOf(text))
+		_ = s.Chat.RenameConversation(ctx, conversationID, titleOf(text+first(files)))
 	}
 	go func() {
-		_, _ = s.answer(context.Background(), conversation, text)
+		_, _ = s.answer(context.Background(), conversation, messageOf(text, files))
 	}()
 	return nil
+}
+
+// attached is a file of the message, already where the agent can read it.
+type attached struct {
+	Path string
+	Mime string
+}
+
+// attach writes the files of a message into the workspace of the app, under
+// the conversation they belong to, and leaves them in the log. The bytes live
+// in the database, which is what any instance can serve; the workspace is
+// where the agent reads them, which is where its tools look.
+func (s *Service) attach(ctx context.Context, conversation chat.Conversation, uploads []string) ([]attached, error) {
+	files := []attached{}
+	for _, id := range uploads {
+		upload, ok, err := s.Chat.Upload(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, fmt.Errorf("ese archivo no existe")
+		}
+		name := filepath.Base(upload.Name)
+		path := filepath.Join("files", conversation.ID, name)
+		absolute := filepath.Join(s.Workspace, path)
+		if err := os.MkdirAll(filepath.Dir(absolute), 0o755); err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(absolute, upload.Bytes, 0o644); err != nil {
+			return nil, err
+		}
+		if _, err := s.write(ctx, conversation.ID, map[string]any{
+			"event": "file", "id": upload.ID, "name": name, "mime": upload.Mime,
+		}); err != nil {
+			return nil, err
+		}
+		files = append(files, attached{Path: path, Mime: upload.Mime})
+	}
+	return files, nil
+}
+
+// messageOf is what the agent reads: the message, and where the files of the
+// message are.
+func messageOf(text string, files []attached) string {
+	if len(files) == 0 {
+		return text
+	}
+	out := text
+	if strings.TrimSpace(out) != "" {
+		out += "\n\n"
+	}
+	out += "Archivos adjuntos:\n"
+	for _, file := range files {
+		out += fmt.Sprintf("- %s (%s)\n", file.Path, file.Mime)
+	}
+	return out
+}
+
+// first gives a message with no words something to be named after.
+func first(files []attached) string {
+	if len(files) == 0 {
+		return ""
+	}
+	return filepath.Base(files[0].Path)
 }
 
 // answer runs one turn and leaves it written in the log. It returns what the

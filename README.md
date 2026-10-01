@@ -165,7 +165,9 @@ DELETE /api/projects?id=                takes it out of the list
 POST /api/conversations                 {project, title}
 PATCH  /api/conversations               {id, title}: renames it
 DELETE /api/conversations?id=           takes the thread out of the list
-POST /api/turns                         {conversation, text}: 202, and the turn runs
+POST /api/turns                         {conversation, text, uploads}: 202, and the turn runs
+POST /api/uploads                       multipart {conversation, file}: one attachment
+GET  /api/uploads?id=                   the bytes of one, as they were sent
 GET  /api/events?conversation=&since=   the log of the thread
 GET  /api/stream?conversation=&since=   the same log, live: text/event-stream
 GET    /api/agenda?project=             the tasks of that project, with their last run
@@ -183,7 +185,14 @@ owns inside its project — made the first time the task fires and named after
 it. The run is written down either way, in `schedule.runs`, and its thread is
 where the answer is read: a task that runs alone leaves the same trail as one
 asked for by hand. The local hour is UTC plus `GODDARD_TZ_OFFSET` hours, zero
-by default. The `agenda` button in the header of a project is that list: what
+by default. A message may carry files. They are kept in the database — any instance serves
+any conversation — and written into the workspace when the turn runs, under
+`files/<conversation>/`, because that is where the agent's tools look: what it
+reads is the same file the thread is showing. `POST /api/uploads` takes one and
+names it, `POST /api/turns` puts it in the message, and the log keeps a `file`
+event so the thread shows it.
+
+The `agenda` button in the header of a project is that list: what
 each task is, when it runs, what it answered last, and the three buttons that
 run it now, pause it and take it out.
 
