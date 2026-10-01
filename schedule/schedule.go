@@ -89,7 +89,7 @@ func Due(task Task, runs []Run, now int64, date, time string) bool {
 		if !ok {
 			return false
 		}
-		last := lastRun(runs)
+		last := lastRunOf(runs)
 		return last == 0 || now-last >= period
 	}
 	return false
@@ -172,7 +172,84 @@ func CivilFromDays(days int64) (int64, int64, int64) {
 	return year, month, day
 }
 
-func lastRun(runs []Run) int64 {
+// Render is the agenda as the model reads it: one line per task with its
+// schedule, and under it the last run, which is what says whether it is
+// working.
+func Render(entries []Entry) string {
+	if len(entries) == 0 {
+		return "no hay tareas"
+	}
+	lines := make([]string, 0, 2*len(entries))
+	for _, entry := range entries {
+		lines = append(lines, head(entry.Task), "  "+lastRun(entry.Runs))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Show is one task as the model reads it: what it says, when it runs and what
+// its last runs answered.
+func Show(entry Entry) string {
+	lines := []string{head(entry.Task), "prompt: " + entry.Task.Prompt}
+	if len(entry.Runs) == 0 {
+		return strings.Join(append(lines, "todavía no corrió"), "\n")
+	}
+	lines = append(lines, "corridas:")
+	for _, run := range entry.Runs {
+		lines = append(lines, fmt.Sprintf(" %s · %s · %d ms\n %s", run.Date, verdict(run.OK), run.MS, run.Text))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func head(task Task) string {
+	parts := []string{task.Name, scheduleOf(task)}
+	if task.Target != "" {
+		parts = append(parts, "avisa a "+task.Target)
+	}
+	if task.Paused {
+		parts = append(parts, "pausada")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func scheduleOf(task Task) string {
+	switch {
+	case task.When != "":
+		return "una vez " + task.When
+	case task.At != "":
+		return "todos los días " + task.At
+	case task.Every != "":
+		return "cada " + task.Every
+	}
+	return "sin horario"
+}
+
+func lastRun(runs []Run) string {
+	if len(runs) == 0 {
+		return "todavía no corrió"
+	}
+	run := runs[len(runs)-1]
+	return fmt.Sprintf("última %s · %s · %s", run.Date, verdict(run.OK), firstLine(run.Text))
+}
+
+func verdict(ok bool) string {
+	if ok {
+		return "ok"
+	}
+	return "falló"
+}
+
+// firstLine is what one run said, cut down: the list is an index, and a run
+// that answered with an essay would push the rest of the agenda out of sight.
+func firstLine(text string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	runes := []rune(line)
+	if len(runes) > 200 {
+		return string(runes[:200]) + "…"
+	}
+	return line
+}
+
+func lastRunOf(runs []Run) int64 {
 	if len(runs) == 0 {
 		return 0
 	}
