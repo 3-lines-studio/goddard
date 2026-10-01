@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/web/app/apptest"
 )
 
@@ -15,6 +16,37 @@ func TestStateWantsASession(t *testing.T) {
 	Get(recorder, apptest.Request(t, "GET", "/api/state", nil, nil))
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("sin sesión contestó %d", recorder.Code)
+	}
+}
+
+func TestStateLeavesTheAgendaThreadsOut(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t))
+	cookie := apptest.Session(t, service, "berti@ejemplo.com")
+	thread := apptest.Thread(t, service)
+	if _, err := service.Chat.CreateConversation(t.Context(), thread.ProjectID, "memoria", chat.SourceSchedule, "u1"); err != nil {
+		t.Fatalf("la conversación de la agenda: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	Get(recorder, apptest.Request(t, "GET", "/api/state", nil, cookie))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	var body struct {
+		Projects []struct {
+			Conversations []struct {
+				ID string `json:"id"`
+			} `json:"conversations"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("no pude leer la respuesta: %v", err)
+	}
+	if len(body.Projects) != 1 || len(body.Projects[0].Conversations) != 1 {
+		t.Fatalf("el sidebar quedó con %+v", body.Projects)
+	}
+	if body.Projects[0].Conversations[0].ID != thread.ID {
+		t.Fatalf("quedó la conversación %q", body.Projects[0].Conversations[0].ID)
 	}
 }
 
