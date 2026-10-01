@@ -44,7 +44,7 @@ type toolArgs struct {
 // the ones of this owner, `show` reads one with its runs, `pause` stops it
 // without losing it, `resume` puts it back and `remove` deletes it. Writing
 // again under the same name is how a task is edited, the way rewriting its
-// file was in jimmy. The store and the owner go in when the embedder builds
+// file was in jimmy. The store and the owner go in when the service builds
 // it, so the tool travels inside the binary and needs nothing on the PATH.
 func Tool(store *PgStore, userID, project string) axe.Tool {
 	return axe.NewTool("schedule",

@@ -4,7 +4,7 @@
 // languages in it.
 //
 // Inside every fs.FS a fragment is `<language>/<name>.md`, and the fs.FS values
-// go in order: the first one that has it wins, so a directory the embedder puts
+// go in order: the first one that has it wins, so a directory the service puts
 // first overrides the one that ships with the binary. A fragment a language
 // does not have falls back to DefaultLanguage's, and a fragment nobody has is
 // an error.
@@ -44,7 +44,7 @@ type Var struct {
 	Value string
 }
 
-// ParseVars reads the `nombre=valor,nombre=valor` list an embedder hands over.
+// ParseVars reads the `nombre=valor,nombre=valor` list it is given.
 // What is not a pair is left out.
 func ParseVars(spec string) []Var {
 	vars := []Var{}

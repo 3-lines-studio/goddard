@@ -143,7 +143,7 @@ const untitled = "Untitled session"
 // Store is where a conversation's history lives. It used to be a directory of
 // JSONL files; a cloud axe has no volume to mount, so the only implementation
 // is Postgres (PgStore) and the scope that used to be a path is a key the
-// embedder picks.
+// service picks.
 type Store interface {
 	Live(ctx context.Context) ([]Entry, error)
 	Save(ctx context.Context, entries []Entry) error

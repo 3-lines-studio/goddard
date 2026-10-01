@@ -14,7 +14,7 @@ import (
 // A session is a row of axe.sessions and each entry is a row of axe.entries,
 // so appending is an INSERT and the order is the seq. The live session is the
 // one with archived_at NULL, at most one per scope, and archiving it is an
-// UPDATE. A scope is whatever the embedder says it is — a chat, a project, a
+// UPDATE. A scope is whatever the service says it is — a chat, a project, a
 // user — and two stores over the same database and scope see the same history.
 //
 // The id of a session is the millisecond it was created, with a numeric suffix
