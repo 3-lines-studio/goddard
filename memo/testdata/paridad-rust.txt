@@ -1,0 +1,16 @@
+render_tres	## entorno · plataforma · 2026-09-27\n\nlinux\n\n## usuario · identidad · 2026-09-30\n\nvive en caba\n\n## jimmy/nueva · bugfix · 2026-09-29\n\nnueva\n\n## jimmy/media · decision · 2026-09-20\n\nmedia\n\n[en `notes/projects/jimmy.md` y afuera del prompt: jimmy/vieja]
+render_sin_cola	## entorno · plataforma · 2026-09-27\n\nlinux\n\n## usuario · identidad · 2026-09-30\n\nvive en caba\n\n## jimmy/vieja · estado · 2026-08-01\n\nvieja
+render_otro_proyecto	## entorno · plataforma · 2026-09-27\n\nlinux\n\n## usuario · identidad · 2026-09-30\n\nvive en caba
+render_sin_proyecto	## entorno · plataforma · 2026-09-27\n\nlinux\n\n## usuario · identidad · 2026-09-30\n\nvive en caba
+render_vacio	
+list	notes/memory/entorno.md\n  entorno · plataforma · 2026-09-27\nnotes/memory/usuario.md\n  usuario · identidad · 2026-09-30\nnotes/projects/jimmy.md\n  jimmy/vieja · estado · 2026-08-01\n  jimmy/media · decision · 2026-09-20\n  jimmy/nueva · bugfix · 2026-09-29
+show_vivo	## jimmy/nueva · bugfix · 2026-09-29\n\nnueva
+show_transversal	## usuario · identidad · 2026-09-30\n\nvive en caba
+show_borrado	## entorno · plataforma · 2026-09-27 (nivel 2)\nlinux
+show_no_existe	error: jimmy memo: no-existe no está en la memoria
+add_clave_invalida	error: jimmy memo: clave inválida: MaYus (minúsculas, números, `-` y `familia/tema`)
+add_tipo_desconocido	error: jimmy memo: tipo desconocido: inventado (los que hay: decision, estado, medicion, bugfix, herramienta, identidad, proyecto, plataforma)
+add_proyecto_desconocido	error: jimmy memo: no conozco el proyecto jimmz (¿jimmy?)
+add_vacio	error: jimmy memo: el hecho está vacío
+sync	sync: 5 hechos, 242 bytes · 5 nuevos · 0 actualizados · 0 reafirmados · 0 vueltas
+sync_sin_cambios	sync: 5 hechos, 242 bytes · 0 nuevos · 0 actualizados · 0 reafirmados · 0 vueltas
