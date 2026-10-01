@@ -10,8 +10,9 @@ import (
 // TestParidadConElRust replays testdata/paridad-rust.txt, what the Rust
 // schedule.rs answered for the same cases: the harness compiles that file with
 // stubs for the agent and the transport and prints one JSON value per case
-// (`scratch/agenda-harness`). A case of the dump without a counterpart fails
-// the test, and so does a counterpart that is not in the dump.
+// (`projects/agenda-harness`, in the workspace). A case of the dump without a
+// counterpart fails the test, and so does a counterpart that is not in the
+// dump.
 func TestParidadConElRust(t *testing.T) {
 	dump := readTestdata(t, "paridad-rust.txt")
 	casos := map[string]func() any{

@@ -23,18 +23,20 @@ const (
 	Day  int64 = 86_400
 )
 
-// Task is one programmed task. It belongs to a user or to a project, and
-// Target is the chat a copy of the answer goes to, if any: the run is kept
-// either way.
+// Task is one programmed task. It belongs to a user inside a project, and an
+// empty user is the project's own task, the one everybody shares. Target is
+// the chat a copy of the answer goes to, if any: the run is kept either way.
 type Task struct {
-	Name   string
-	When   string
-	At     string
-	Every  string
-	Target string
-	Prompt string
-	Silent bool
-	Paused bool
+	UserID  string
+	Project string
+	Name    string
+	When    string
+	At      string
+	Every   string
+	Target  string
+	Prompt  string
+	Silent  bool
+	Paused  bool
 }
 
 // Run is one time a task ran: when, how long it took, whether it went well and
@@ -51,6 +53,20 @@ type Run struct {
 type Entry struct {
 	Task Task
 	Runs []Run
+}
+
+// Clock is the local moment a tick runs at: what Due needs and nothing else.
+type Clock struct {
+	Now  int64
+	Date string
+	Time string
+}
+
+// At is the local moment a Unix second falls on, with the hours of offset the
+// service runs in.
+func At(unix, offset int64) Clock {
+	date, clock := LocalParts(unix, offset)
+	return Clock{Now: unix, Date: date, Time: clock}
 }
 
 // Due says whether the task has to run now, given its last runs and the local
