@@ -55,22 +55,39 @@ func testStore(t *testing.T) (*PgStore, *sql.DB) {
 	return NewPgStore(db), db
 }
 
+// testScope is the memory of a person inside a project, with the two owners
+// apart on purpose: the general facts are theirs and the project's belong to
+// the organization that owns it.
+func testScope() Scope {
+	return Scope{
+		User:    Owner{Kind: KindUser, ID: "u1"},
+		Project: Owner{Kind: KindOrg, ID: "o1"},
+		Slug:    "jimmy",
+	}
+}
+
 // seed escribe un hecho con la fecha que tenía en jimmy: Add siempre lo fecha
-// hoy, y la paridad necesita los días del dump.
-func seed(t *testing.T, db *sql.DB, fact Fact) {
+// hoy, y la paridad necesita los días del dump. El dueño sale de la clave, como
+// en Add.
+func seed(t *testing.T, db *sql.DB, scope Scope, fact Fact) {
 	t.Helper()
+	owner, project := scope.whereOf(fact.Key)
 	_, err := db.ExecContext(t.Context(),
-		`INSERT INTO memo.facts (project, key, kind, body, fact_date) VALUES ($1, $2, $3, $4, $5)`,
-		fact.Project, fact.Key, fact.Kind, fact.Body, fact.Date)
+		`INSERT INTO memo.facts (owner_kind, owner_id, project, key, kind, body, fact_date)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		owner.Kind, owner.ID, project, fact.Key, fact.Kind, fact.Body, fact.Date)
 	if err != nil {
 		t.Fatalf("no pude sembrar %q: %v", fact.Key, err)
 	}
 }
 
-func revisionsOf(t *testing.T, db *sql.DB, key string) []Revision {
+func revisionsOf(t *testing.T, db *sql.DB, scope Scope, key string) []Revision {
 	t.Helper()
+	owner, project := scope.whereOf(key)
 	rows, err := db.QueryContext(t.Context(),
-		`SELECT project, key, rev, kind, body, last_seen FROM memo.revisions WHERE key = $1 ORDER BY rev`, key)
+		`SELECT project, key, rev, kind, body, last_seen FROM memo.revisions
+		 WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND key = $4 ORDER BY rev`,
+		owner.Kind, owner.ID, project, key)
 	if err != nil {
 		t.Fatalf("no pude leer las revisiones de %q: %v", key, err)
 	}
@@ -89,17 +106,18 @@ func revisionsOf(t *testing.T, db *sql.DB, key string) []Revision {
 func TestAddDiceQueHizo(t *testing.T) {
 	store, db := testStore(t)
 	ctx := t.Context()
+	scope := testScope()
 
-	if outcome, err := store.Add(ctx, "jimmy/telemetria", "medicion", "un número"); err != nil || outcome != Created {
+	if outcome, err := store.Add(ctx, scope, "jimmy/telemetria", "medicion", "un número"); err != nil || outcome != Created {
 		t.Fatalf("el primero quedó %q, %v", outcome, err)
 	}
-	if outcome, err := store.Add(ctx, "jimmy/telemetria", "medicion", "otro número"); err != nil || outcome != Updated {
+	if outcome, err := store.Add(ctx, scope, "jimmy/telemetria", "medicion", "otro número"); err != nil || outcome != Updated {
 		t.Fatalf("el cambiado quedó %q, %v", outcome, err)
 	}
-	if outcome, err := store.Add(ctx, "jimmy/telemetria", "medicion", "otro número"); err != nil || outcome != Unchanged {
+	if outcome, err := store.Add(ctx, scope, "jimmy/telemetria", "medicion", "otro número"); err != nil || outcome != Unchanged {
 		t.Fatalf("el repetido quedó %q, %v", outcome, err)
 	}
-	if got := len(revisionsOf(t, db, "jimmy/telemetria")); got != 2 {
+	if got := len(revisionsOf(t, db, scope, "jimmy/telemetria")); got != 2 {
 		t.Fatalf("guardó %d revisiones donde escribió dos veces", got)
 	}
 
@@ -108,7 +126,7 @@ func TestAddDiceQueHizo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no pude envejecer el hecho: %v", err)
 	}
-	if outcome, err := store.Add(ctx, "jimmy/telemetria", "medicion", "otro número"); err != nil || outcome != Reasserted {
+	if outcome, err := store.Add(ctx, scope, "jimmy/telemetria", "medicion", "otro número"); err != nil || outcome != Reasserted {
 		t.Fatalf("el reafirmado quedó %q, %v", outcome, err)
 	}
 }
@@ -116,12 +134,13 @@ func TestAddDiceQueHizo(t *testing.T) {
 func TestLasRevisionesGuardanCadaVersion(t *testing.T) {
 	store, db := testStore(t)
 	ctx := t.Context()
+	scope := testScope()
 	for _, body := range []string{"uno", "dos", "tres"} {
-		if _, err := store.Add(ctx, "usuario", "identidad", body); err != nil {
+		if _, err := store.Add(ctx, scope, "usuario", "identidad", body); err != nil {
 			t.Fatal(err)
 		}
 	}
-	revisions := revisionsOf(t, db, "usuario")
+	revisions := revisionsOf(t, db, scope, "usuario")
 	if len(revisions) != 3 {
 		t.Fatalf("quedaron %d revisiones", len(revisions))
 	}
@@ -138,11 +157,11 @@ func TestLasRevisionesGuardanCadaVersion(t *testing.T) {
 func TestRenderEsElDeJimmy(t *testing.T) {
 	store, db := testStore(t)
 	for _, fact := range todo(t) {
-		seed(t, db, fact)
+		seed(t, db, testScope(), fact)
 	}
 	dump := readTestdata(t, "paridad-rust.txt")
 	want := adaptarCola(t, dump["render_tres"])
-	got, err := store.Render(t.Context(), "jimmy")
+	got, err := store.Render(t.Context(), testScope())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,11 +173,11 @@ func TestRenderEsElDeJimmy(t *testing.T) {
 func TestListNombraLosAmbitos(t *testing.T) {
 	store, db := testStore(t)
 	for _, fact := range todo(t) {
-		seed(t, db, fact)
+		seed(t, db, testScope(), fact)
 	}
 	dump := readTestdata(t, "paridad-rust.txt")
 	want := adaptarLista(t, dump["list"])
-	got, err := store.List(t.Context())
+	got, err := store.List(t.Context(), testScope())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,17 +188,19 @@ func TestListNombraLosAmbitos(t *testing.T) {
 
 func TestShowCaeAlNivelDos(t *testing.T) {
 	store, db := testStore(t)
-	seed(t, db, entorno(t))
+	scope := testScope()
+	seed(t, db, scope, entorno(t))
 	if _, err := db.ExecContext(t.Context(),
-		`INSERT INTO memo.revisions (project, key, rev, kind, body, last_seen) VALUES ($1, $2, 1, $3, $4, $5)`,
-		"", "entorno", "plataforma", "linux", day(t, "2026-09-27")); err != nil {
+		`INSERT INTO memo.revisions (owner_kind, owner_id, project, key, rev, kind, body, last_seen)
+		 VALUES ($1, $2, $3, $4, 1, $5, $6, $7)`,
+		scope.User.Kind, scope.User.ID, "", "entorno", "plataforma", "linux", day(t, "2026-09-27")); err != nil {
 		t.Fatalf("no pude sembrar la revisión: %v", err)
 	}
 	if _, err := db.ExecContext(t.Context(), `DELETE FROM memo.facts WHERE key = 'entorno'`); err != nil {
 		t.Fatalf("no pude borrar el hecho: %v", err)
 	}
 	dump := readTestdata(t, "paridad-rust.txt")
-	got, ok, err := store.Show(t.Context(), "entorno")
+	got, ok, err := store.Show(t.Context(), scope, "entorno")
 	if err != nil || !ok {
 		t.Fatalf("el hecho borrado quedó %v, %v", ok, err)
 	}
@@ -192,7 +213,7 @@ func TestShowNoExiste(t *testing.T) {
 	store, _ := testStore(t)
 	dump := readTestdata(t, "paridad-rust.txt")
 	want := adaptarError(t, dump["show_no_existe"])
-	_, err := run(t.Context(), store, "show", "no-existe", "", "")
+	_, err := run(t.Context(), store, testScope(), "show", "no-existe", "", "")
 	if err == nil {
 		t.Fatal("esperaba un error")
 	}
@@ -203,9 +224,9 @@ func TestShowNoExiste(t *testing.T) {
 
 func TestShowDeUnHechoVivo(t *testing.T) {
 	store, db := testStore(t)
-	seed(t, db, nueva(t))
+	seed(t, db, testScope(), nueva(t))
 	dump := readTestdata(t, "paridad-rust.txt")
-	got, ok, err := store.Show(t.Context(), "jimmy/nueva")
+	got, ok, err := store.Show(t.Context(), testScope(), "jimmy/nueva")
 	if err != nil || !ok {
 		t.Fatalf("el hecho quedó %v, %v", ok, err)
 	}
@@ -217,9 +238,9 @@ func TestShowDeUnHechoVivo(t *testing.T) {
 func TestFactsTraeLoDelProyectoYLoGeneral(t *testing.T) {
 	store, db := testStore(t)
 	for _, fact := range todo(t) {
-		seed(t, db, fact)
+		seed(t, db, testScope(), fact)
 	}
-	facts, err := store.Facts(t.Context(), "jimmy")
+	facts, err := store.Facts(t.Context(), testScope())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,5 +260,73 @@ func TestFactsTraeLoDelProyectoYLoGeneral(t *testing.T) {
 	}
 	if len(otros) > 0 {
 		t.Fatalf("se colaron hechos de otros proyectos: %v", otros)
+	}
+}
+
+func TestLaGeneralEsDeCadaUnoYLaDelProyectoEsDelProyecto(t *testing.T) {
+	store, _ := testStore(t)
+	ctx := t.Context()
+	casa := Owner{Kind: KindOrg, ID: "o1"}
+	berti := Scope{User: Owner{Kind: KindUser, ID: "u1"}, Project: casa, Slug: "jimmy"}
+	ana := Scope{User: Owner{Kind: KindUser, ID: "u2"}, Project: casa, Slug: "jimmy"}
+
+	if _, err := store.Add(ctx, berti, "usuario", "identidad", "es berti"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Add(ctx, ana, "usuario", "identidad", "es ana"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Add(ctx, berti, "jimmy/deploy", "estado", "sale de staging"); err != nil {
+		t.Fatal(err)
+	}
+
+	keys := func(scope Scope) map[string]string {
+		t.Helper()
+		facts, err := store.Facts(ctx, scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{}
+		for _, fact := range facts {
+			out[fact.Key] = fact.Body
+		}
+		return out
+	}
+	mine, theirs := keys(berti), keys(ana)
+	if len(mine) != 2 || mine["usuario"] != "es berti" || mine["jimmy/deploy"] != "sale de staging" {
+		t.Fatalf("berti ve %+v", mine)
+	}
+	if len(theirs) != 2 || theirs["usuario"] != "es ana" || theirs["jimmy/deploy"] != "sale de staging" {
+		t.Fatalf("ana ve %+v", theirs)
+	}
+
+	// y el mismo proyecto de la misma organización es el mismo hecho: el
+	// segundo que lo escribe lo reemplaza, y los dos lo leen.
+	if outcome, err := store.Add(ctx, ana, "jimmy/deploy", "estado", "ahora sale de main"); err != nil || outcome != Updated {
+		t.Fatalf("el hecho del proyecto quedó %q, %v", outcome, err)
+	}
+	if mine, theirs = keys(berti), keys(ana); mine["jimmy/deploy"] != "ahora sale de main" || theirs["jimmy/deploy"] != "ahora sale de main" {
+		t.Fatalf("el hecho del proyecto quedó %q y %q", mine["jimmy/deploy"], theirs["jimmy/deploy"])
+	}
+}
+
+func TestElProyectoDeOtroNoSeVe(t *testing.T) {
+	store, _ := testStore(t)
+	ctx := t.Context()
+	mine := Scope{User: Owner{Kind: KindUser, ID: "u1"}, Project: Owner{Kind: KindUser, ID: "u1"}, Slug: "jimmy"}
+	other := Scope{User: Owner{Kind: KindUser, ID: "u2"}, Project: Owner{Kind: KindUser, ID: "u2"}, Slug: "jimmy"}
+
+	if _, err := store.Add(ctx, other, "jimmy/deploy", "estado", "lo de ana"); err != nil {
+		t.Fatal(err)
+	}
+	facts, err := store.Facts(ctx, mine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facts) != 0 {
+		t.Fatalf("el proyecto del otro se ve: %+v", facts)
+	}
+	if found, ok, err := store.Show(ctx, mine, "jimmy/deploy"); err != nil || ok || found != "" {
+		t.Fatalf("el hecho del otro se lee: %q, %v, %v", found, ok, err)
 	}
 }

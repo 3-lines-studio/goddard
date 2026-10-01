@@ -90,6 +90,36 @@ func (s *Service) Say(ctx context.Context, conversationID string, user auth.User
 	return nil
 }
 
+// scopeOf is the memory a turn reads and writes: the general facts of the
+// person asking, and the ones of the project, which belong to whoever owns it.
+func (s *Service) scopeOf(project chat.Project, user auth.User) memo.Scope {
+	return memo.Scope{
+		User:    memo.Owner{Kind: memo.KindUser, ID: user.ID},
+		Project: memo.Owner{Kind: project.Owner.Kind, ID: project.Owner.ID},
+		Slug:    project.Slug,
+	}
+}
+
+// Scope is whose memory a request is about: the person asking, and the project
+// by slug when it is one they can see. A project of somebody else is not found,
+// which is how the page ends up showing what the prompt shows.
+func (s *Service) Scope(ctx context.Context, user auth.User, slug string) (memo.Scope, bool) {
+	if slug == "" {
+		return s.scopeOf(chat.Project{}, user), true
+	}
+	projects, err := s.Chat.Projects(ctx, chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, s.viewerOrgs(ctx, user.ID))
+	if err != nil {
+		log.Printf("goddard: no pude leer los proyectos de %s: %v", user.ID, err)
+		return memo.Scope{}, false
+	}
+	for _, project := range projects {
+		if project.Slug == slug {
+			return s.scopeOf(project, user), true
+		}
+	}
+	return memo.Scope{}, false
+}
+
 // chatOwner is the owner of a project the turn runs under. A task of nobody is
 // a project of nobody: it comes out with an owner of nothing, which is what the
 // list answers when there is nothing to see.
@@ -289,7 +319,7 @@ func (s *Service) write(ctx context.Context, conversationID string, event map[st
 // way to show a file in this thread.
 func (s *Service) tools(ctx context.Context, project chat.Project, conversationID string, machine axe.Machine, user auth.User) []axe.Tool {
 	tools := axe.BuildToolsOn(machine)
-	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer(ctx, user)), schedule.Tool(s.Schedule, user.ID, project.Slug), s.sendTool(conversationID, machine))
+	tools = append(tools, memo.Tool(s.Memo, s.scopeOf(project, user)), skill.Tool(s.Skill, s.Viewer(ctx, user)), schedule.Tool(s.Schedule, user.ID, project.Slug), s.sendTool(conversationID, machine))
 	return tools
 }
 
@@ -311,7 +341,7 @@ func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation cha
 		return out + "\n" + s.context(conversation, project)
 	}
 	out += "\n\n" + fragments
-	memory, err := s.Memo.Render(ctx, project.Slug)
+	memory, err := s.Memo.Render(ctx, s.scopeOf(project, user))
 	if err != nil {
 		log.Printf("goddard: no pude leer la memoria: %v", err)
 	}

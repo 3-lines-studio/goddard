@@ -30,18 +30,22 @@ const (
 
 const factColumns = `project, key, kind, body, fact_date`
 
+// visible is the memory a scope sees: the general facts of the person asking,
+// and the ones of the project in hand.
+const visible = `((owner_kind = $1 AND owner_id = $2 AND project = '') OR (owner_kind = $3 AND owner_id = $4 AND project = $5))`
+
 // Add writes a fact, creating it or replacing the one under that key, and
 // records the revision so the day it changed is not lost. A fact written again
 // the same day, saying the same thing, changes nothing: rewriting a fact is
 // not news.
-func (s *PgStore) Add(ctx context.Context, key, kind, body string) (Outcome, error) {
+func (s *PgStore) Add(ctx context.Context, scope Scope, key, kind, body string) (Outcome, error) {
 	key = strings.TrimSpace(key)
 	kind = strings.TrimSpace(kind)
 	body = strings.TrimSpace(body)
 	if err := Validate(key, kind, body); err != nil {
 		return "", err
 	}
-	project := projectOf(key)
+	owner, project := scope.whereOf(key)
 	day := today()
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -51,15 +55,15 @@ func (s *PgStore) Add(ctx context.Context, key, kind, body string) (Outcome, err
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx,
-		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, project+"/"+key); err != nil {
+		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, owner.Kind+"/"+owner.ID+"/"+project+"/"+key); err != nil {
 		return "", fmt.Errorf("no pude escribir el hecho %q: %w", key, err)
 	}
 
 	var previousKind, previousBody string
 	var previousDay int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT kind, body, fact_date FROM memo.facts WHERE project = $1 AND key = $2`,
-		project, key).Scan(&previousKind, &previousBody, &previousDay)
+		`SELECT kind, body, fact_date FROM memo.facts WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND key = $4`,
+		owner.Kind, owner.ID, project, key).Scan(&previousKind, &previousBody, &previousDay)
 
 	outcome := Created
 	switch {
@@ -75,21 +79,21 @@ func (s *PgStore) Add(ctx context.Context, key, kind, body string) (Outcome, err
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO memo.facts (project, key, kind, body, fact_date)
-		 VALUES ($1, $2, $3, $4, $5)
-		 ON CONFLICT (project, key) DO UPDATE SET
+		`INSERT INTO memo.facts (owner_kind, owner_id, project, key, kind, body, fact_date)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 ON CONFLICT (owner_kind, owner_id, project, key) DO UPDATE SET
 		     kind = EXCLUDED.kind,
 		     body = EXCLUDED.body,
 		     fact_date = EXCLUDED.fact_date`,
-		project, key, kind, body, day); err != nil {
+		owner.Kind, owner.ID, project, key, kind, body, day); err != nil {
 		return "", fmt.Errorf("no pude guardar el hecho %q: %w", key, err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO memo.revisions (project, key, rev, kind, body, last_seen)
-		 SELECT $1, $2, COALESCE(MAX(rev), 0) + 1, $3, $4, $5
-		 FROM memo.revisions WHERE project = $1 AND key = $2`,
-		project, key, kind, body, day); err != nil {
+		`INSERT INTO memo.revisions (owner_kind, owner_id, project, key, rev, kind, body, last_seen)
+		 SELECT $1, $2, $3, $4, COALESCE(MAX(rev), 0) + 1, $5, $6, $7
+		 FROM memo.revisions WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND key = $4`,
+		owner.Kind, owner.ID, project, key, kind, body, day); err != nil {
 		return "", fmt.Errorf("no pude guardar el hecho %q: %w", key, err)
 	}
 
@@ -101,10 +105,12 @@ func (s *PgStore) Add(ctx context.Context, key, kind, body string) (Outcome, err
 
 // Show is one fact as the model reads it, or the last revision there was when
 // the fact is gone: it was dropped by hand and the store kept the record.
-func (s *PgStore) Show(ctx context.Context, key string) (string, bool, error) {
+func (s *PgStore) Show(ctx context.Context, scope Scope, key string) (string, bool, error) {
 	key = strings.TrimSpace(key)
+	owner, project := scope.whereOf(key)
 	facts, err := s.query(ctx,
-		`SELECT `+factColumns+` FROM memo.facts WHERE key = $1`, key)
+		`SELECT `+factColumns+` FROM memo.facts WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND key = $4`,
+		owner.Kind, owner.ID, project, key)
 	if err != nil {
 		return "", false, err
 	}
@@ -115,7 +121,8 @@ func (s *PgStore) Show(ctx context.Context, key string) (string, bool, error) {
 	var revision Revision
 	err = s.db.QueryRowContext(ctx,
 		`SELECT project, key, rev, kind, body, last_seen FROM memo.revisions
-		 WHERE key = $1 ORDER BY rev DESC LIMIT 1`, key).
+		 WHERE owner_kind = $1 AND owner_id = $2 AND project = $3 AND key = $4 ORDER BY rev DESC LIMIT 1`,
+		owner.Kind, owner.ID, project, key).
 		Scan(&revision.Project, &revision.Key, &revision.Rev, &revision.Kind, &revision.Body, &revision.LastSeen)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
@@ -126,9 +133,12 @@ func (s *PgStore) Show(ctx context.Context, key string) (string, bool, error) {
 	return ShowRevision(revision), true, nil
 }
 
-// List is every fact the store holds.
-func (s *PgStore) List(ctx context.Context) (string, error) {
-	facts, err := s.query(ctx, `SELECT `+factColumns+` FROM memo.facts`)
+// List is every fact this scope can see: the general ones of the person asking
+// and the ones of the project in hand.
+func (s *PgStore) List(ctx context.Context, scope Scope) (string, error) {
+	facts, err := s.query(ctx,
+		`SELECT `+factColumns+` FROM memo.facts WHERE `+visible,
+		scope.User.Kind, scope.User.ID, scope.Project.Kind, scope.Project.ID, scope.Slug)
 	if err != nil {
 		return "", err
 	}
@@ -138,17 +148,18 @@ func (s *PgStore) List(ctx context.Context) (string, error) {
 // Facts is the memory of a project as data: the general facts and the ones of
 // that project, in order and with their date. It is what the prompt renders
 // and what a page can show.
-func (s *PgStore) Facts(ctx context.Context, project string) ([]Fact, error) {
+func (s *PgStore) Facts(ctx context.Context, scope Scope) ([]Fact, error) {
 	return s.query(ctx,
-		`SELECT `+factColumns+` FROM memo.facts WHERE project = '' OR project = $1 ORDER BY project, key`,
-		project)
+		`SELECT `+factColumns+` FROM memo.facts WHERE `+visible+` ORDER BY project, key`,
+		scope.User.Kind, scope.User.ID, scope.Project.Kind, scope.Project.ID, scope.Slug)
 }
 
 // Render is the memory the prompt gets for that project: the general facts and
 // the newest of the project.
-func (s *PgStore) Render(ctx context.Context, project string) (string, error) {
+func (s *PgStore) Render(ctx context.Context, scope Scope) (string, error) {
 	facts, err := s.query(ctx,
-		`SELECT `+factColumns+` FROM memo.facts WHERE project = '' OR project = $1`, project)
+		`SELECT `+factColumns+` FROM memo.facts WHERE `+visible,
+		scope.User.Kind, scope.User.ID, scope.Project.Kind, scope.Project.ID, scope.Slug)
 	if err != nil {
 		return "", err
 	}

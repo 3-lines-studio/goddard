@@ -9,7 +9,7 @@ import (
 // texto afuera.
 func TestLaToolEscribeYLee(t *testing.T) {
 	store, _ := testStore(t)
-	tool := Tool(store)
+	tool := Tool(store, testScope())
 
 	got := tool.Run(`{"action":"add","key":"jimmy/telemetria","kind":"medicion","text":"un número"}`, nil)
 	if !strings.HasPrefix(got.Text, "jimmy/telemetria · medicion · ") {
@@ -33,7 +33,7 @@ func TestLaToolEscribeYLee(t *testing.T) {
 
 func TestLaToolDiceQueSalióMal(t *testing.T) {
 	store, _ := testStore(t)
-	tool := Tool(store)
+	tool := Tool(store, testScope())
 	for _, raw := range []string{
 		`{"action":"nope"}`,
 		`{"action":"show"}`,

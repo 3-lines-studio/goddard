@@ -21,10 +21,16 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
-	facts, err := service.Memo.Facts(r.Context(), r.URL.Query().Get("project"))
+	scope, ok := service.Scope(r.Context(), user, r.URL.Query().Get("project"))
+	if !ok {
+		http.Error(w, "ese proyecto no es tuyo", http.StatusNotFound)
+		return
+	}
+	facts, err := service.Memo.Facts(r.Context(), scope)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
