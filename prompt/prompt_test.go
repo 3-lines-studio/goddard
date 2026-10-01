@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/3-lines-studio/goddard/schedule"
 )
 
 func fragmentIn(t *testing.T, dir, name, text string) {
@@ -319,5 +321,21 @@ func TestTheShippedFragmentsTalkAboutGoddard(t *testing.T) {
 		if !strings.Contains(got, right) {
 			t.Fatalf("el prompt no dice %q", right)
 		}
+	}
+}
+
+func TestElTopeQueNombraElPromptEsElDelServicio(t *testing.T) {
+	got, err := Assemble("", Default, []fs.FS{Builtin}, []Var{
+		{"usuario", "Ana"}, {"asistente", "Jimmy"}, {"skills", "No hay ninguna instalada."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nombres := []string{"cero", "una", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez"}
+	if schedule.MaxRunsPerHour >= len(nombres) {
+		t.Skipf("el tope del servicio es %d y la frase del prompt no llega hasta ahí", schedule.MaxRunsPerHour)
+	}
+	if !strings.Contains(got, nombres[schedule.MaxRunsPerHour]+" corridas en una hora") {
+		t.Fatalf("el prompt no dice el tope del servicio (%d):\n%s", schedule.MaxRunsPerHour, got)
 	}
 }
