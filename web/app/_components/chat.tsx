@@ -32,15 +32,25 @@ export function Chat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
+  const [user, setUser] = useState("");
+  const [needLogin, setNeedLogin] = useState(false);
+  const [sent, setSent] = useState("");
+  const [link, setLink] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/state");
+    if (response.status === 401) {
+      setNeedLogin(true);
+      return;
+    }
     if (!response.ok) {
       setError(await response.text());
       return;
     }
     const data = await response.json();
+    setNeedLogin(false);
+    setUser(data.user ?? "");
     setProjects(data.projects ?? []);
   }, []);
 
@@ -52,9 +62,13 @@ export function Chat() {
     if (!open) return;
     setLines([]);
     const stream = new EventSource(`/api/stream?conversation=${encodeURIComponent(open)}`);
-    stream.onmessage = (message) => setLines((current) => [...current, JSON.parse(message.data)]);
+    stream.onmessage = (message) => {
+      const line: Event = JSON.parse(message.data);
+      setLines((current) => [...current, line]);
+      if (line.event === "done" || line.event === "error") load();
+    };
     return () => stream.close();
-  }, [open]);
+  }, [open, load]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -76,6 +90,36 @@ export function Chat() {
       return;
     }
     setText("");
+  }
+
+  async function login(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const email = new FormData(event.currentTarget).get("email");
+    if (typeof email !== "string") return;
+    setError("");
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    const data = await response.json();
+    setSent(email);
+    setLink(data.link ?? "");
+  }
+
+  async function logout() {
+    await fetch("/api/logout", { method: "POST" });
+    setProjects([]);
+    setOpen("");
+    setLines([]);
+    setUser("");
+    setSent("");
+    setLink("");
+    setNeedLogin(true);
   }
 
   async function newProject(event: React.FormEvent<HTMLFormElement>) {
@@ -109,6 +153,40 @@ export function Chat() {
     await load();
     setOpen(line.id);
     setMenu(false);
+  }
+
+  if (needLogin) {
+    return (
+      <div className="mx-auto flex h-dvh max-w-sm flex-col justify-center gap-4 p-6">
+        <h1 className="text-2xl font-semibold">Goddard</h1>
+        {sent ? (
+          <>
+            <p className="text-sm">Si el mail está en la lista, te llegó un link a {sent}.</p>
+            {link ? (
+              <p className="text-sm break-all">
+                <a href={link} data-login-link="" className="underline">
+                  {link}
+                </a>
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <form onSubmit={login} className="flex flex-col gap-2">
+            <input
+              name="email"
+              type="email"
+              data-login-email=""
+              placeholder="tu@mail"
+              className="rounded border border-neutral-700 bg-transparent px-3 py-2 text-sm"
+            />
+            <button type="submit" data-login-send="" className="rounded border border-neutral-700 px-3 py-2 text-sm">
+              Mandame el link
+            </button>
+          </form>
+        )}
+        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+      </div>
+    );
   }
 
   return (
@@ -164,6 +242,12 @@ export function Chat() {
           ))}
           {projects.length === 0 ? <p className="text-sm opacity-60">Todavía no hay proyectos.</p> : null}
         </nav>
+        <div className="flex items-center justify-between border-t border-neutral-800 p-3 text-xs">
+          <span className="truncate opacity-60">{user}</span>
+          <button type="button" onClick={logout} data-logout="" className="rounded border border-neutral-700 px-2 py-1">
+            salir
+          </button>
+        </div>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">

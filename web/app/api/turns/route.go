@@ -19,6 +19,9 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
+	if _, ok := app.Session(service, w, r); !ok {
+		return
+	}
 	var body request
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "no pude leer el mensaje", http.StatusBadRequest)

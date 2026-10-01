@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -92,6 +93,8 @@ func build(db *sql.DB) (*Service, error) {
 		Skill:     skill.NewPgStore(db),
 		Schedule:  schedule.NewPgStore(db),
 		Provider:  axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key),
+		Mail:      newMailer(),
+		Allowed:   emails(os.Getenv("GODDARD_ALLOWED_EMAILS")),
 		Model:     env("GODDARD_MODEL", "deepseek-flash"),
 		Workspace: workspace,
 		Viewer:    skill.Viewer{Org: env("GODDARD_ORG", "3-lines-studio"), User: env("GODDARD_USER", "berti")},
@@ -100,6 +103,18 @@ func build(db *sql.DB) (*Service, error) {
 		Language:  env("GODDARD_LANGUAGE", prompt.DefaultLanguage),
 		Spec:      env("GODDARD_PROMPT", prompt.Default),
 	}, nil
+}
+
+// emails is the comma separated list of who may ask for a link. Empty means
+// anybody, which is a goddard of one with no list to keep.
+func emails(list string) []string {
+	out := []string{}
+	for _, one := range strings.Split(list, ",") {
+		if trimmed := strings.TrimSpace(one); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func health(db *sql.DB) http.Handler {
