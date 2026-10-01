@@ -123,8 +123,8 @@ function TaskCard({
               "size-2 shrink-0 rounded-full",
               state === "running" && "bg-foreground",
               state === "done" && "bg-ok",
-              state === "error" && "bg-err",
-              state === "" && "border border-strong",
+              state === "error" && "bg-destructive",
+              state === "" && "border border-muted-foreground",
             )}
           />
           <span className="font-semibold">{task.name}</span>
@@ -176,7 +176,7 @@ function TaskCard({
                   {one.ok ? "" : " · con error"}
                 </span>
                 <div
-                  className={cn("md text-sm", one.ok ? "text-muted-foreground" : "text-err")}
+                  className={cn("md text-sm", one.ok ? "text-muted-foreground" : "text-destructive")}
                   dangerouslySetInnerHTML={{ __html: markdown(one.text.trim() || "sin novedades") }}
                 />
               </div>
