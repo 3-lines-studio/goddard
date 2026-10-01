@@ -190,6 +190,104 @@ func TestCadaQuienVeSuAgenda(t *testing.T) {
 	}
 }
 
+func TestListAllTraeTodosLosProyectos(t *testing.T) {
+	store, _ := testStore(t)
+	ctx := t.Context()
+	for _, donde := range []string{"goddard", "picsel"} {
+		task := unaTarea("memoria")
+		task.Project = donde
+		if err := store.Add(ctx, task); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := store.ListAll(ctx, "berti")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || entries[0].Task.Project != "goddard" || entries[1].Task.Project != "picsel" {
+		t.Fatalf("la agenda quedó %+v", entries)
+	}
+	ajena, err := store.ListAll(ctx, "otro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ajena) != 0 {
+		t.Fatalf("la agenda ajena quedó %+v", ajena)
+	}
+}
+
+func TestLoQueNadieLeyoEsLoUltimo(t *testing.T) {
+	store, db := testStore(t)
+	ctx := t.Context()
+	task := unaTarea("memoria")
+	if err := store.Add(ctx, task); err != nil {
+		t.Fatal(err)
+	}
+	corridasDe(t, db, task, 3)
+
+	entry, err := store.Get(ctx, "berti", "goddard", "memoria")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Unread != 3 {
+		t.Fatalf("dijo %d sin leer", entry.Unread)
+	}
+
+	if err := store.MarkRead(ctx, "berti", "goddard", "memoria"); err != nil {
+		t.Fatal(err)
+	}
+	entry, err = store.Get(ctx, "berti", "goddard", "memoria")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Unread != 0 {
+		t.Fatalf("después de leer quedaron %d", entry.Unread)
+	}
+
+	if err := store.Finish(ctx, task, Run{TS: 9_999, Date: "2026-09-14", MS: 1, OK: true, Text: "nueva"}); err != nil {
+		t.Fatal(err)
+	}
+	entry, err = store.Get(ctx, "berti", "goddard", "memoria")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Unread != 1 {
+		t.Fatalf("la corrida nueva quedó en %d", entry.Unread)
+	}
+	if err := store.MarkRead(ctx, "berti", "goddard", "fantasma"); err == nil {
+		t.Fatal("leer una tarea que no existe tendría que fallar")
+	}
+}
+
+func TestMarcarTodoLeido(t *testing.T) {
+	store, db := testStore(t)
+	ctx := t.Context()
+	tareas := []Task{unaTarea("memoria"), unaTarea("limpieza")}
+	tareas[1].Project = "picsel"
+	for _, task := range tareas {
+		if err := store.Add(ctx, task); err != nil {
+			t.Fatal(err)
+		}
+		corridasDe(t, db, task, 2)
+	}
+	if err := store.MarkAllRead(ctx, "berti"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := store.ListAll(ctx, "berti")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("la agenda quedó con %d tareas", len(entries))
+	}
+	for _, entry := range entries {
+		if entry.Unread != 0 {
+			t.Fatalf("%s quedó con %d sin leer", entry.Task.Name, entry.Unread)
+		}
+	}
+}
+
 func TestValidateRechazaLoQueNoSePuedeCorrer(t *testing.T) {
 	sinHorario := unaTarea("sin-horario")
 	sinHorario.At = ""

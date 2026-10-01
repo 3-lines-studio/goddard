@@ -30,6 +30,18 @@ func NewPgStore(db *sql.DB) *PgStore {
 
 const taskColumns = `user_id, project, name, once_at, daily_at, every, target, prompt, silent, paused`
 
+const taskSeen = taskColumns + `, seen_ts`
+
+// markRead is the one statement of reading a task: what its log has up to now
+// stops counting as new. It runs over the runs of that task alone, and a task
+// without runs goes back to zero.
+const markRead = `UPDATE schedule.tasks SET seen_ts = COALESCE((
+    SELECT max(run_ts) FROM schedule.runs
+    WHERE runs.user_id = schedule.tasks.user_id
+      AND runs.project = schedule.tasks.project
+      AND runs.name = schedule.tasks.name
+), 0)`
+
 const runColumns = `run_ts, run_date, ms, ok, body`
 
 // querier is what the store asks for rows, so one operation can read inside
@@ -70,26 +82,43 @@ func (s *PgStore) Add(ctx context.Context, task Task) error {
 // runs.
 func (s *PgStore) List(ctx context.Context, userID, project string) ([]Entry, error) {
 	tasks, err := tasksOf(ctx, s.db,
-		`SELECT `+taskColumns+` FROM schedule.tasks WHERE user_id = $1 AND project = $2 ORDER BY name`,
+		`SELECT `+taskSeen+` FROM schedule.tasks WHERE user_id = $1 AND project = $2 ORDER BY name`,
 		userID, project)
 	if err != nil {
 		return nil, err
 	}
-	entries := make([]Entry, 0, len(tasks))
+	return s.entries(ctx, s.db, tasks)
+}
+
+// ListAll is every task of that user, in every project, by project and name:
+// the agenda is one list and not one per project.
+func (s *PgStore) ListAll(ctx context.Context, userID string) ([]Entry, error) {
+	tasks, err := tasksOf(ctx, s.db,
+		`SELECT `+taskSeen+` FROM schedule.tasks WHERE user_id = $1 ORDER BY project, name`,
+		userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.entries(ctx, s.db, tasks)
+}
+
+// entries is each task with its runs and how many of them nobody has read.
+func (s *PgStore) entries(ctx context.Context, from querier, tasks []Task) ([]Entry, error) {
+	out := make([]Entry, 0, len(tasks))
 	for _, task := range tasks {
-		runs, err := runsOf(ctx, s.db, task)
+		runs, err := runsOf(ctx, from, task)
 		if err != nil {
 			return nil, err
 		}
-		entries = append(entries, Entry{Task: task, Runs: runs})
+		out = append(out, Entry{Task: task, Runs: runs, Unread: unread(runs, task.Seen)})
 	}
-	return entries, nil
+	return out, nil
 }
 
 // Get is one task with its runs.
 func (s *PgStore) Get(ctx context.Context, userID, project, name string) (Entry, error) {
 	tasks, err := tasksOf(ctx, s.db,
-		`SELECT `+taskColumns+` FROM schedule.tasks WHERE user_id = $1 AND project = $2 AND name = $3`,
+		`SELECT `+taskSeen+` FROM schedule.tasks WHERE user_id = $1 AND project = $2 AND name = $3`,
 		userID, project, name)
 	if err != nil {
 		return Entry{}, err
@@ -101,7 +130,7 @@ func (s *PgStore) Get(ctx context.Context, userID, project, name string) (Entry,
 	if err != nil {
 		return Entry{}, err
 	}
-	return Entry{Task: tasks[0], Runs: runs}, nil
+	return Entry{Task: tasks[0], Runs: runs, Unread: unread(runs, tasks[0].Seen)}, nil
 }
 
 // Pause stops a task from running without losing it.
@@ -110,6 +139,22 @@ func (s *PgStore) Pause(ctx context.Context, userID, project, name string, pause
 		`UPDATE schedule.tasks SET paused = $4 WHERE user_id = $1 AND project = $2 AND name = $3`,
 		userID, project, name, paused)
 	return touched(result, err, name)
+}
+
+// MarkRead is reading a task to the end, so what it answered up to now stops
+// being new. Reading one that never ran leaves it where it was.
+func (s *PgStore) MarkRead(ctx context.Context, userID, project, name string) error {
+	result, err := s.db.ExecContext(ctx,
+		markRead+` WHERE user_id = $1 AND project = $2 AND name = $3`, userID, project, name)
+	return touched(result, err, name)
+}
+
+// MarkAllRead is the same for every task of that user.
+func (s *PgStore) MarkAllRead(ctx context.Context, userID string) error {
+	if _, err := s.db.ExecContext(ctx, markRead+` WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("no pude marcar las tareas: %w", err)
+	}
+	return nil
 }
 
 // Remove is how a task stops existing.
@@ -133,7 +178,7 @@ func (s *PgStore) Claim(ctx context.Context, clock Clock, lease int64, limit int
 	defer tx.Rollback()
 
 	tasks, err := tasksOf(ctx, tx,
-		`SELECT `+taskColumns+` FROM schedule.tasks
+		`SELECT `+taskSeen+` FROM schedule.tasks
 		 WHERE NOT paused AND (claimed_until IS NULL OR claimed_until < $1)
 		 ORDER BY user_id, project, name
 		 LIMIT $2
@@ -269,7 +314,7 @@ func tasksOf(ctx context.Context, from querier, query string, args ...any) ([]Ta
 	for rows.Next() {
 		var task Task
 		if err := rows.Scan(&task.UserID, &task.Project, &task.Name, &task.When, &task.At, &task.Every,
-			&task.Target, &task.Prompt, &task.Silent, &task.Paused); err != nil {
+			&task.Target, &task.Prompt, &task.Silent, &task.Paused, &task.Seen); err != nil {
 			return nil, fmt.Errorf("no pude leer una tarea: %w", err)
 		}
 		tasks = append(tasks, task)
@@ -305,6 +350,18 @@ func runsOf(ctx context.Context, from querier, task Task) ([]Run, error) {
 	}
 	slices.Reverse(runs)
 	return runs, nil
+}
+
+// unread is how many runs of a task nobody has read: the ones after the last
+// time somebody looked at it.
+func unread(runs []Run, seen int64) int {
+	count := 0
+	for _, run := range runs {
+		if run.TS > seen {
+			count++
+		}
+	}
+	return count
 }
 
 func ranThisHour(runs []Run, now int64) int {

@@ -26,6 +26,8 @@ const (
 // Task is one programmed task. It belongs to a user inside a project, and an
 // empty user is the project's own task, the one everybody shares. Target is
 // the chat a copy of the answer goes to, if any: the run is kept either way.
+// Seen is the moment its log was last read, which is what the runs newer than
+// it are counted against.
 type Task struct {
 	UserID  string
 	Project string
@@ -37,6 +39,7 @@ type Task struct {
 	Prompt  string
 	Silent  bool
 	Paused  bool
+	Seen    int64
 }
 
 // Run is one time a task ran: when, how long it took, whether it went well and
@@ -51,8 +54,9 @@ type Run struct {
 
 // Entry is a task with its runs, what the list shows.
 type Entry struct {
-	Task Task
-	Runs []Run
+	Task   Task
+	Runs   []Run
+	Unread int
 }
 
 // Clock is the local moment a tick runs at: what Due needs and nothing else.

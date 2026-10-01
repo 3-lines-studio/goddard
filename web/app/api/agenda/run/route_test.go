@@ -1,14 +1,31 @@
 package run
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/3-lines-studio/goddard/schedule"
+	"github.com/3-lines-studio/goddard/web/app"
 	"github.com/3-lines-studio/goddard/web/app/apptest"
 )
+
+// corrida espera la corrida de la tarea: la ruta la deja corriendo y contesta,
+// así que lo que hay que mirar es el log.
+func corrida(t *testing.T, service *app.Service) schedule.Entry {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		entry, err := service.Schedule.Get(t.Context(), "u1", "goddard", "reporte")
+		if err == nil && len(entry.Runs) > 0 {
+			return entry
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("la tarea no corrió")
+	return schedule.Entry{}
+}
 
 func TestPostWantsASession(t *testing.T) {
 	apptest.Route(t, apptest.Provider(t))
@@ -19,7 +36,7 @@ func TestPostWantsASession(t *testing.T) {
 	}
 }
 
-func TestPostRunsTheTaskAndAnswersWhatItSaid(t *testing.T) {
+func TestPostLeavesTheTaskRunningAndTheRunIsInItsLog(t *testing.T) {
 	service := apptest.Route(t, apptest.Provider(t, []string{
 		`{"choices":[{"delta":{"content":"el repo está limpio"}}]}`,
 		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
@@ -35,18 +52,15 @@ func TestPostRunsTheTaskAndAnswersWhatItSaid(t *testing.T) {
 	Post(recorder, apptest.Request(t, "POST", "/api/agenda/run", map[string]string{
 		"project": "goddard", "name": "reporte",
 	}, cookie))
-	if recorder.Code != http.StatusOK {
+	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("contestar %d: %s", recorder.Code, apptest.Text(t, recorder))
 	}
-	var body struct {
-		OK   bool   `json:"ok"`
-		Text string `json:"text"`
+	entry := corrida(t, service)
+	if !entry.Runs[0].OK || entry.Runs[0].Text != "el repo está limpio" {
+		t.Fatalf("el run quedó %+v", entry.Runs[0])
 	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("no pude leer la respuesta: %v", err)
-	}
-	if !body.OK || body.Text != "el repo está limpio" {
-		t.Fatalf("el run quedó %+v", body)
+	if entry.Unread != 1 {
+		t.Fatalf("la corrida quedó en %d sin leer", entry.Unread)
 	}
 }
 
