@@ -1,6 +1,6 @@
 APP := .
 
-.PHONY: install build dev serve clean
+.PHONY: install build dev serve test clean
 
 install:
 	bun install
@@ -10,6 +10,9 @@ build:
 
 dev:
 	go run github.com/3-lines-studio/bifrost/cmd/bifrost dev $(APP)
+
+test:
+	bun test
 
 serve: build
 	./.bifrost/bifrost-app
