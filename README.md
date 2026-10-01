@@ -56,15 +56,28 @@ Jimmy as a service: the agent, in Go, so bifrost can embed it.
   tool the harness gets is the command line jimmy had, `add`, `show` and `list`,
   and the dump jimmy's binary left in `memo/testdata/paridad-rust.txt` is
   replayed byte for byte.
+- `schedule` — the agenda: the tasks the service runs on their own, in the
+  `schedule` schema of the same Postgres. Port of jimmy's `src/schedule.rs`,
+  with the directory of TOML files replaced by rows. A task belongs to a user
+  inside a project — an empty user is the project's own task, the one everybody
+  shares — and says when it runs in one of three ways: once, every day at an
+  hour, or every so often since its last run. The last twenty runs are kept,
+  and that log is also the state of the task: the last one is what the interval
+  measures from. What makes the agenda hold in the cloud is the claim: a pass
+  takes what is due with `FOR UPDATE SKIP LOCKED` and holds it with a lease
+  while it runs, so two instances never run the same task and one that dies
+  mid-run leaves its task for the next pass. `Runner` and `Notifier` are what
+  the embedder plugs in: how a prompt is answered, and where a copy goes when
+  the task names a target.
 
 Five dependencies: `golang.org/x/net` for the HTML parser behind `fetch` (the
 article extraction is the one layer of `axe` that is not byte-for-byte with the
 Rust, which runs Readability and htmd), `golang.org/x/crypto` and
 `github.com/zeebo/blake3` for the sealed boxes and the key derived per
 environment, `github.com/jackc/pgx/v5` for the store, and `modernc.org/sqlite`,
-pure Go, to read the old store once and bring it across. `prompt` and `skill`
-do not add one: fragments, variables and skills are the standard library and
-nothing else.
+pure Go, to read the old store once and bring it across. `prompt`, `skill` and
+`schedule` do not add one: fragments, variables, skills and rows are the
+standard library and nothing else.
 
 ## Embed
 

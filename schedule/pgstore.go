@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Keep is how many runs of a task the store holds: the log is also the state
@@ -214,8 +215,8 @@ func (s *PgStore) Finish(ctx context.Context, task Task, run Run) error {
 }
 
 // Validate checks a task before it reaches the store. What a task does not
-// say is when it runs: without a schedule it never fires, and that is a
-// mistake worth telling apart from a task waiting for its hour.
+// say is when it runs: without a schedule it never fires, and a schedule
+// nobody can read is a task that would sit there looking alive.
 func Validate(task Task) error {
 	if !validName(task.Name) {
 		return fmt.Errorf("nombre inválido: %q (minúsculas, números, `-` y `.`)", task.Name)
@@ -225,6 +226,21 @@ func Validate(task Task) error {
 	}
 	if task.When == "" && task.At == "" && task.Every == "" {
 		return fmt.Errorf("la tarea %q no dice cuándo corre", task.Name)
+	}
+	if task.When != "" {
+		if _, err := time.Parse("2006-01-02T15:04", strings.ReplaceAll(strings.TrimSpace(task.When), " ", "T")); err != nil {
+			return fmt.Errorf("la tarea %q tiene una fecha que no entiendo: %q (YYYY-MM-DDTHH:MM)", task.Name, task.When)
+		}
+	}
+	if task.At != "" {
+		if _, ok := HHMM(task.At); !ok {
+			return fmt.Errorf("la tarea %q tiene una hora que no existe: %q (HH:MM)", task.Name, task.At)
+		}
+	}
+	if task.Every != "" {
+		if _, ok := Period(task.Every); !ok {
+			return fmt.Errorf("la tarea %q tiene un intervalo que no entiendo: %q (30m, 6h, 2d)", task.Name, task.Every)
+		}
 	}
 	return nil
 }
