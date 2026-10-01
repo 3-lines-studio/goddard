@@ -82,7 +82,10 @@ below.
   of jimmy's `src/memo.rs`, with the tree of files replaced by rows. A fact is a
   key, a kind from a short list, a body and the day it was last touched, and the
   key says where it belongs: `usuario` is a general fact and `jimmy/telemetria`
-  one of the project `jimmy`. What the prompt gets is `Render` — every general
+  one of the project `jimmy`. Who it belongs to is the other half: the general
+  facts are the person's and the ones of a project are the project's, so an
+  organization shares its memory with its members and nobody reads the general
+  memory of somebody else. What the prompt gets is `Render` — every general
   fact plus the newest of the project in hand — and the rest stays in the store
   until the topic comes back. `Add` is one transaction that writes the fact and
   the revision behind it, so jimmy's `sync` is gone: the store already knows

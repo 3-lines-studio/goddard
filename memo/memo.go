@@ -39,6 +39,37 @@ var Kinds = []string{
 	"plataforma",
 }
 
+// Owner is who a memory belongs to: a person, or the organization a project
+// belongs to. The pair is the one the rest of goddard keeps.
+type Owner struct {
+	Kind string
+	ID   string
+}
+
+// The kinds of owner, the same two the rest of goddard knows.
+const (
+	KindUser = "user"
+	KindOrg  = "org"
+)
+
+// Scope is whose memory is being read or written. The general facts — the ones
+// whose key has no slash — belong to the person asking; the ones of a project
+// belong to whoever owns it, which is a person or an organization.
+type Scope struct {
+	User    Owner
+	Project Owner
+	Slug    string
+}
+
+// whereOf is who a key belongs to, and in what project: a key with a slash is
+// of a project, and one without is general.
+func (s Scope) whereOf(key string) (Owner, string) {
+	if project := projectOf(key); project != "" {
+		return s.Project, project
+	}
+	return s.User, ""
+}
+
 // Fact is one thing the agent remembers. Date is the day it was last touched,
 // in days since the epoch, the way jimmy kept it.
 type Fact struct {
