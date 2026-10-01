@@ -33,7 +33,12 @@ func Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	projects, err := service.Chat.Projects(r.Context())
+	orgs, err := service.OrgsOf(r.Context(), user.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	projects, err := service.Chat.Projects(r.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, orgs)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

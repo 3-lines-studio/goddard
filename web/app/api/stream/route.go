@@ -17,7 +17,8 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	conversation := r.URL.Query().Get("conversation")
@@ -34,8 +35,8 @@ func Get(w http.ResponseWriter, r *http.Request) {
 			since = value
 		}
 	}
-	if _, ok, err := service.Chat.Conversation(r.Context(), conversation); err != nil || !ok {
-		http.Error(w, "esa conversación no existe", http.StatusNotFound)
+	if _, allowed, err := service.Yours(r.Context(), user, conversation); err != nil || !allowed {
+		http.Error(w, "esa conversación no es tuya", http.StatusForbidden)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")

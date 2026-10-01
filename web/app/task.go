@@ -51,7 +51,7 @@ func (s *Service) taskUser(ctx context.Context, task schedule.Task) (auth.User, 
 // made the first time the task fires. It is born read only, like every thread
 // that is not the web's: the task writes it and the web watches.
 func (s *Service) taskThread(ctx context.Context, task schedule.Task) (chat.Conversation, error) {
-	projects, err := s.Chat.Projects(ctx)
+	projects, err := s.Chat.Projects(ctx, s.chatOwner(task.UserID), s.viewerOrgs(ctx, task.UserID))
 	if err != nil {
 		return chat.Conversation{}, err
 	}
@@ -61,6 +61,12 @@ func (s *Service) taskThread(ctx context.Context, task schedule.Task) (chat.Conv
 			project, found = candidate, true
 			break
 		}
+	}
+	if !found {
+		return chat.Conversation{}, fmt.Errorf("el proyecto %q no existe", task.Project)
+	}
+	if err != nil {
+		return chat.Conversation{}, err
 	}
 	if !found {
 		return chat.Conversation{}, fmt.Errorf("el proyecto %q no existe", task.Project)

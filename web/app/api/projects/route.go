@@ -6,11 +6,13 @@ import (
 	"net/http"
 
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/web/app"
 )
 
 type request struct {
 	Name string `json:"name"`
+	Org  string `json:"org"`
 }
 
 type rename struct {
@@ -33,7 +35,20 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer el proyecto", http.StatusBadRequest)
 		return
 	}
-	project, err := service.Chat.CreateProject(r.Context(), body.Name, user.ID)
+	owner := chat.Owner{Kind: chat.OwnerUser, ID: user.ID}
+	if body.Org != "" {
+		role, in, err := service.Orgs.Role(r.Context(), body.Org, user.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !in || role != org.RoleOwner {
+			http.Error(w, "esa organización no es tuya", http.StatusForbidden)
+			return
+		}
+		owner = chat.Owner{Kind: chat.OwnerOrg, ID: body.Org}
+	}
+	project, err := service.Chat.CreateProject(r.Context(), body.Name, owner, user.ID)
 	if errors.Is(err, chat.ErrTaken) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return

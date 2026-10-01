@@ -129,6 +129,13 @@ func Route(t *testing.T, server *httptest.Server) *app.Service {
 // the id the turn runs with.
 const TestEmail = "berti@ejemplo.com"
 
+// Somebody is a user of the test's own, by the mail it came in with.
+func Somebody(t *testing.T, service *app.Service, email string) auth.User {
+	t.Helper()
+	user, _ := signIn(t, service, email)
+	return user
+}
+
 // AnOrg is an organization the test user is the owner of, made the way the
 // route makes one.
 func AnOrg(t *testing.T, service *app.Service, name string) org.Org {
@@ -187,14 +194,15 @@ func Request(t *testing.T, method, target string, body any, cookie *http.Cookie)
 	return request
 }
 
-// Thread is a project with one conversation in it.
+// Thread is a project of the test user with one conversation of theirs in it.
 func Thread(t *testing.T, service *app.Service) chat.Conversation {
 	t.Helper()
-	project, err := service.Chat.CreateProject(t.Context(), "goddard", "u1")
+	user := User(t, service)
+	project, err := service.Chat.CreateProject(t.Context(), "goddard", chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, user.ID)
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
-	conversation, err := service.Chat.CreateConversation(t.Context(), project.ID, "", "", "u1")
+	conversation, err := service.Chat.CreateConversation(t.Context(), project.ID, "", "", user.ID)
 	if err != nil {
 		t.Fatalf("conversation: %v", err)
 	}
