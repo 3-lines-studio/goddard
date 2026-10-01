@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { markdown } from "../_lib/markdown";
 import { describeTool } from "../_lib/tool";
+import { Avatar } from "./avatar";
 import { Icon } from "./icon";
 
 type Line = {
@@ -445,6 +446,13 @@ export function Chat() {
     openTab("agenda");
   }
 
+  function avatarState(project: Project) {
+    if (collapsed.has(project.slug)) return "sleeping";
+    if ((project.conversations ?? []).some((line) => line.running)) return "working";
+    if (tab?.slug === project.slug && (tab?.kind === "thread" || tab?.kind === "memoria")) return "focused";
+    return "idle";
+  }
+
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
@@ -618,16 +626,8 @@ export function Chat() {
             const shown = more.has(project.slug) ? threads : threads.slice(0, VISIBLE);
             return (
               <div key={project.id} className="mb-3">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => toggleProject(project.slug)}
-                    data-toggle-project={project.id}
-                    aria-label={shut ? `Mostrar los hilos de ${project.name}` : `Ocultar los hilos de ${project.name}`}
-                    className="shrink-0 rounded p-1 opacity-60 hover:opacity-100"
-                  >
-                    <Icon name="down" size={14} className={`transition-transform ${shut ? "-rotate-90" : ""}`} />
-                  </button>
+                <div className="flex items-center gap-1.5">
+                  <Avatar name={project.slug} state={avatarState(project)} />
                   {editing === project.id ? (
                     <Name
                       value={project.name}
@@ -644,6 +644,15 @@ export function Chat() {
                       {project.name}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => toggleProject(project.slug)}
+                    data-toggle-project={project.id}
+                    aria-label={shut ? `Mostrar los hilos de ${project.name}` : `Ocultar los hilos de ${project.name}`}
+                    className="shrink-0 rounded p-1 opacity-60 hover:opacity-100"
+                  >
+                    <Icon name="down" size={14} className={`transition-transform ${shut ? "-rotate-90" : ""}`} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => setMenuProject(menuProject === project.slug ? "" : project.slug)}
