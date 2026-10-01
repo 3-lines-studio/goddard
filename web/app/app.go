@@ -36,8 +36,7 @@ type Service struct {
 	Model     string
 	Workspace string
 	Machine   axe.Machine
-	Viewer    skill.Viewer
-	User      string
+	Org       string
 	Assistant string
 	Language  string
 	Spec      string
@@ -69,6 +68,13 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// Viewer is who a turn is for: the id the database minted, which is what the
+// skills, the agenda and the memory keep. It comes from the session and not
+// from the environment, because the environment is one for every user.
+func (s *Service) Viewer(user auth.User) skill.Viewer {
+	return skill.Viewer{Org: s.Org, User: user.ID}
 }
 
 // Running says whether a turn is going on in that conversation right now. The

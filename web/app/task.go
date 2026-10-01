@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/schedule"
 )
@@ -16,6 +17,10 @@ import (
 // What comes back is what the agent said, and the run the scheduler writes
 // down keeps it. The thread keeps it too, which is where the web reads it.
 func (s *Service) runTask(ctx context.Context, task schedule.Task) (string, error) {
+	user, err := s.taskUser(ctx, task)
+	if err != nil {
+		return "", err
+	}
 	conversation, err := s.taskThread(ctx, task)
 	if err != nil {
 		return "", err
@@ -23,7 +28,23 @@ func (s *Service) runTask(ctx context.Context, task schedule.Task) (string, erro
 	if _, err := s.write(ctx, conversation.ID, map[string]any{"event": "user", "text": task.Prompt}); err != nil {
 		return "", err
 	}
-	return s.answer(ctx, conversation, task.Prompt)
+	return s.answer(ctx, conversation, user, task.Prompt)
+}
+
+// taskUser is who a task belongs to, and the turn runs as that person. A task
+// of nobody — the project's own, the one everybody shares — runs as nobody.
+func (s *Service) taskUser(ctx context.Context, task schedule.Task) (auth.User, error) {
+	if task.UserID == "" {
+		return auth.User{}, nil
+	}
+	user, ok, err := s.Auth.ByID(ctx, task.UserID)
+	if err != nil {
+		return auth.User{}, err
+	}
+	if !ok {
+		return auth.User{}, fmt.Errorf("el usuario %q de la tarea no existe", task.UserID)
+	}
+	return user, nil
 }
 
 // taskThread is the conversation a task runs in: one per task, named after it,

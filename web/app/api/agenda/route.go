@@ -45,10 +45,11 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
-	entries, err := service.Schedule.ListAll(r.Context(), service.Viewer.User)
+	entries, err := service.Schedule.ListAll(r.Context(), user.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -88,7 +89,8 @@ func Patch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	var body pause
@@ -96,7 +98,7 @@ func Patch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer la tarea", http.StatusBadRequest)
 		return
 	}
-	if err := service.Schedule.Pause(r.Context(), service.Viewer.User, body.Project, body.Name, body.Paused); err != nil {
+	if err := service.Schedule.Pause(r.Context(), user.ID, body.Project, body.Name, body.Paused); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -109,11 +111,12 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := app.Session(service, w, r); !ok {
+	user, ok := app.Session(service, w, r)
+	if !ok {
 		return
 	}
 	query := r.URL.Query()
-	if err := service.Schedule.Remove(r.Context(), service.Viewer.User, query.Get("project"), query.Get("name")); err != nil {
+	if err := service.Schedule.Remove(r.Context(), user.ID, query.Get("project"), query.Get("name")); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}

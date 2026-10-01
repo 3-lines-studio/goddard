@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/memo"
@@ -36,8 +37,10 @@ var (
 // the turn is claimed: what the agent answers shows up in the log, and the web
 // reads it from there. The uploads are the attachments of this message, by id:
 // they are written to the workspace so the agent can read them, and into the
-// log so the thread shows them.
-func (s *Service) Say(ctx context.Context, conversationID, text string, uploads []string) error {
+// log so the thread shows them. The user is who is asking, and the turn keeps
+// it: the skills it sees, the agenda it writes and the name in the prompt are
+// that person's.
+func (s *Service) Say(ctx context.Context, conversationID string, user auth.User, text string, uploads []string) error {
 	conversation, ok, err := s.Chat.Conversation(ctx, conversationID)
 	if err != nil {
 		return err
@@ -76,7 +79,7 @@ func (s *Service) Say(ctx context.Context, conversationID, text string, uploads 
 	s.Stops.add(conversationID, cancel)
 	go func() {
 		defer s.Stops.drop(conversationID)
-		_, _ = s.answer(turn, conversation, messageOf(text, files))
+		_, _ = s.answer(turn, conversation, user, messageOf(text, files))
 	}()
 	return nil
 }
@@ -144,7 +147,7 @@ func first(files []attached) string {
 // answer runs one turn and leaves it written in the log. It returns what the
 // agent said, which is what a task of the agenda is after. The request that
 // asked for a turn is long gone by then, so the context is the caller's.
-func (s *Service) answer(ctx context.Context, conversation chat.Conversation, text string) (string, error) {
+func (s *Service) answer(ctx context.Context, conversation chat.Conversation, user auth.User, text string) (string, error) {
 	defer func() {
 		if err := s.Chat.Release(context.WithoutCancel(ctx), conversation.ID); err != nil {
 			log.Printf("goddard: no pude soltar %s: %v", conversation.ID, err)
@@ -165,10 +168,10 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, te
 	messages := axe.DropIncompleteToolCalls(axe.ContextMessages(entries))
 	messages = append(messages, axe.Message{Role: "user", Content: text})
 	project := s.projectSlug(ctx, conversation)
-	tools := s.tools(project, conversation.ID)
+	tools := s.tools(project, conversation.ID, user)
 	options := &axe.RunOptions{
 		Model:    s.Model,
-		System:   s.system(ctx, tools, conversation, project),
+		System:   s.system(ctx, tools, conversation, project, user),
 		Tools:    tools,
 		MaxTurns: math.MaxInt,
 	}
@@ -213,22 +216,22 @@ func (s *Service) write(ctx context.Context, conversationID string, event map[st
 // tools is what the agent can do: the harness' own, plus the memory, the
 // skills and the agenda of the project this conversation belongs to, and the
 // way to show a file in this thread.
-func (s *Service) tools(project, conversationID string) []axe.Tool {
+func (s *Service) tools(project, conversationID string, user auth.User) []axe.Tool {
 	tools := axe.BuildToolsOn(s.Machine)
-	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer), schedule.Tool(s.Schedule, s.Viewer.User, project), s.sendTool(conversationID))
+	tools = append(tools, memo.Tool(s.Memo), skill.Tool(s.Skill, s.Viewer(user)), schedule.Tool(s.Schedule, user.ID, project), s.sendTool(conversationID))
 	return tools
 }
 
 // system is the prompt: what the harness says about its tools, the fragments
 // of goddard, the memory of the project and where this turn is running.
-func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project string) string {
+func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project string, user auth.User) string {
 	out := axe.SystemPrompt(tools)
-	skills, err := s.Skill.Index(ctx, s.Viewer)
+	skills, err := s.Skill.Index(ctx, s.Viewer(user))
 	if err != nil {
 		log.Printf("goddard: no pude leer las skills: %v", err)
 	}
 	fragments, err := prompt.Assemble(s.Language, s.Spec, []fs.FS{prompt.Builtin}, []prompt.Var{
-		{Name: "usuario", Value: s.User},
+		{Name: "usuario", Value: user.Name},
 		{Name: "asistente", Value: s.Assistant},
 		{Name: "skills", Value: skills},
 	})

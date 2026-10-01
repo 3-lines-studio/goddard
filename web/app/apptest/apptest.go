@@ -19,11 +19,11 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/migrations"
 	"github.com/3-lines-studio/goddard/prompt"
-	"github.com/3-lines-studio/goddard/skill"
 	"github.com/3-lines-studio/goddard/web/app"
 )
 
@@ -107,8 +107,7 @@ func Service(t *testing.T, server *httptest.Server) *app.Service {
 	t.Helper()
 	built := app.New(Database(t), axe.NewOpenAI(server.URL, "k1"), t.TempDir())
 	built.Model = "m1"
-	built.Viewer = skill.Viewer{Org: "o1", User: "u1"}
-	built.User = "Don Berti"
+	built.Org = "o1"
 	built.Assistant = "Jimmy"
 	built.Language = prompt.DefaultLanguage
 	built.Spec = prompt.Default
@@ -125,19 +124,37 @@ func Route(t *testing.T, server *httptest.Server) *app.Service {
 	return service
 }
 
+// TestEmail is who the tests come in as. The user of a session and the user of
+// a turn a test writes by hand are the same person, so the id a route keeps is
+// the id the turn runs with.
+const TestEmail = "berti@ejemplo.com"
+
+// User is somebody who already came in. It goes through the store and not
+// through `Login`, which has a cooldown: a test may ask twice in the same run.
+func User(t *testing.T, service *app.Service) auth.User {
+	t.Helper()
+	user, _ := signIn(t, service, TestEmail)
+	return user
+}
+
 // Session is a cookie for an email that already came in.
 func Session(t *testing.T, service *app.Service, email string) *http.Cookie {
 	t.Helper()
-	token, err := service.Login(t.Context(), email)
+	_, session := signIn(t, service, email)
+	return &http.Cookie{Name: app.Cookie, Value: session}
+}
+
+func signIn(t *testing.T, service *app.Service, email string) (auth.User, string) {
+	t.Helper()
+	token, err := service.Auth.CreateLogin(t.Context(), email, auth.LoginTTL)
 	if err != nil {
 		t.Fatalf("login: %v", err)
 	}
-	if _, session, err := service.Open(t.Context(), token); err == nil {
-		return &http.Cookie{Name: app.Cookie, Value: session}
-	} else {
+	user, session, err := service.Open(t.Context(), token)
+	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	return nil
+	return user, session
 }
 
 // Request is a request with a body, and with the cookie when there is one.
@@ -218,7 +235,7 @@ func Event(t *testing.T, body string) map[string]any {
 // Say is a message the test writes, with the attachments it names.
 func Say(t *testing.T, service *app.Service, conversationID, text string, uploads []string) {
 	t.Helper()
-	if err := service.Say(t.Context(), conversationID, text, uploads); err != nil {
+	if err := service.Say(t.Context(), conversationID, User(t, service), text, uploads); err != nil {
 		t.Fatalf("say: %v", err)
 	}
 	Wait(t, service, conversationID)

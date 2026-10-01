@@ -21,10 +21,11 @@ func TestSkillsWantsASession(t *testing.T) {
 
 func TestSkillsIsTheIndexThePromptShows(t *testing.T) {
 	service := apptest.Route(t, apptest.Provider(t))
-	cookie := apptest.Session(t, service, "berti@ejemplo.com")
-	if err := service.Skill.Put(t.Context(), service.Viewer, skill.Skill{
+	cookie := apptest.Session(t, service, apptest.TestEmail)
+	user := apptest.User(t, service)
+	if err := service.Skill.Put(t.Context(), service.Viewer(user), skill.Skill{
 		Meta: skill.Meta{
-			Owner:       skill.Owner{Kind: skill.User, ID: service.Viewer.User},
+			Owner:       skill.Owner{Kind: skill.User, ID: user.ID},
 			Name:        "picsel-deploy",
 			Description: "Cómo se despliega picsel.",
 		},

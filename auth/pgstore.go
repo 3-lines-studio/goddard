@@ -34,6 +34,22 @@ func (s *Store) User(ctx context.Context, email string) (User, bool, error) {
 	return user, true, nil
 }
 
+// ByID finds somebody by the id the database minted, which is what the rest of
+// goddard keeps. The email is how they come in and can change; the id cannot.
+func (s *Store) ByID(ctx context.Context, id string) (User, bool, error) {
+	var user User
+	err := s.db.QueryRowContext(ctx,
+		"SELECT "+userColumns+" FROM auth.users u WHERE u.id = $1 AND u.deleted_at IS NULL", id).
+		Scan(&user.ID, &user.Email, &user.Name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, false, nil
+	}
+	if err != nil {
+		return User{}, false, err
+	}
+	return user, true, nil
+}
+
 // CreateLogin mints a link for an email, creating the user the first time, and
 // returns what goes in it. The link is not stored: only its hash.
 func (s *Store) CreateLogin(ctx context.Context, email string, ttl int64) (string, error) {

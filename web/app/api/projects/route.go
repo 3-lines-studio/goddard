@@ -33,7 +33,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer el proyecto", http.StatusBadRequest)
 		return
 	}
-	project, err := service.Chat.CreateProject(r.Context(), body.Name, user.Email)
+	project, err := service.Chat.CreateProject(r.Context(), body.Name, user.ID)
 	if errors.Is(err, chat.ErrTaken) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
