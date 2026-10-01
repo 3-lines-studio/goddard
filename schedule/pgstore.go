@@ -85,6 +85,24 @@ func (s *PgStore) List(ctx context.Context, userID, project string) ([]Entry, er
 	return entries, nil
 }
 
+// Get is one task with its runs.
+func (s *PgStore) Get(ctx context.Context, userID, project, name string) (Entry, error) {
+	tasks, err := tasksOf(ctx, s.db,
+		`SELECT `+taskColumns+` FROM schedule.tasks WHERE user_id = $1 AND project = $2 AND name = $3`,
+		userID, project, name)
+	if err != nil {
+		return Entry{}, err
+	}
+	if len(tasks) == 0 {
+		return Entry{}, fmt.Errorf("no existe la tarea %q", name)
+	}
+	runs, err := runsOf(ctx, s.db, tasks[0])
+	if err != nil {
+		return Entry{}, err
+	}
+	return Entry{Task: tasks[0], Runs: runs}, nil
+}
+
 // Pause stops a task from running without losing it.
 func (s *PgStore) Pause(ctx context.Context, userID, project, name string, paused bool) error {
 	result, err := s.db.ExecContext(ctx,
