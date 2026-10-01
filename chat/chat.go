@@ -10,15 +10,29 @@ import (
 // ErrTaken is a project whose slug is already somebody else's.
 var ErrTaken = errors.New("ese proyecto ya existe")
 
-// Project is a place where work lives: its slug names the directory of the
+// Owner is who a project belongs to: a user, or the organization it is
+// shared with. It is the same kind and id the skills and the secrets keep.
+type Owner struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+}
+
+// A project is a place where work lives: its slug names the directory of the
 // workspace, and it is the string the rest of goddard already knows — memo,
 // schedule and heimdall keep it in their own tables.
 type Project struct {
 	ID        string `json:"id"`
 	Slug      string `json:"slug"`
 	Name      string `json:"name"`
+	Owner     Owner  `json:"owner"`
 	CreatedBy string `json:"created_by"`
 }
+
+// The kinds of owner a project can have.
+const (
+	OwnerUser = "user"
+	OwnerOrg  = "org"
+)
 
 // Conversation is one thread inside a project. Its id is the scope an axe
 // session uses, so the history of the conversation is the history of that

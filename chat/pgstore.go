@@ -20,12 +20,16 @@ func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-const projectColumns = "id, slug, name, created_by"
+const projectColumns = "id, slug, name, owner_kind, owner_id, created_by"
 
-// Projects is every project that is alive, by name.
-func (s *Store) Projects(ctx context.Context) ([]Project, error) {
+// Projects is every project alive that is this viewer's: theirs, and the ones
+// of the organizations they are in, by name. A project of somebody else is
+// invisible, not forbidden.
+func (s *Store) Projects(ctx context.Context, viewer Owner, orgs []string) ([]Project, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT "+projectColumns+" FROM chat.projects WHERE deleted_at IS NULL ORDER BY name, id")
+		"SELECT "+projectColumns+" FROM chat.projects WHERE deleted_at IS NULL AND ("+
+			"(owner_kind = 'user' AND owner_id = $1) OR (owner_kind = 'org' AND owner_id = ANY($2))"+
+			") ORDER BY name, id", viewer.ID, orgs)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +37,7 @@ func (s *Store) Projects(ctx context.Context) ([]Project, error) {
 	projects := []Project{}
 	for rows.Next() {
 		var project Project
-		if err := rows.Scan(&project.ID, &project.Slug, &project.Name, &project.CreatedBy); err != nil {
+		if err := scanProject(rows, &project); err != nil {
 			return nil, err
 		}
 		projects = append(projects, project)
@@ -41,12 +45,13 @@ func (s *Store) Projects(ctx context.Context) ([]Project, error) {
 	return projects, rows.Err()
 }
 
-// Project finds one by id.
+// Project finds one by id. It answers it whatever the owner: the caller decides
+// what they may do with what they found.
 func (s *Store) Project(ctx context.Context, id string) (Project, bool, error) {
 	var project Project
 	err := s.db.QueryRowContext(ctx,
 		"SELECT "+projectColumns+" FROM chat.projects WHERE id = $1 AND deleted_at IS NULL", id).
-		Scan(&project.ID, &project.Slug, &project.Name, &project.CreatedBy)
+		Scan(&project.ID, &project.Slug, &project.Name, &project.Owner.Kind, &project.Owner.ID, &project.CreatedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Project{}, false, nil
 	}
@@ -56,18 +61,25 @@ func (s *Store) Project(ctx context.Context, id string) (Project, bool, error) {
 	return project, true, nil
 }
 
+func scanProject(row interface{ Scan(...any) error }, project *Project) error {
+	return row.Scan(&project.ID, &project.Slug, &project.Name, &project.Owner.Kind, &project.Owner.ID, &project.CreatedBy)
+}
+
 // CreateProject opens one. The slug comes from the name and is what the
 // directory of the workspace and the other tables use, so it is taken once and
 // renaming the project later does not move it.
-func (s *Store) CreateProject(ctx context.Context, name, createdBy string) (Project, error) {
+func (s *Store) CreateProject(ctx context.Context, name string, owner Owner, createdBy string) (Project, error) {
 	slug := naming.From(name)
 	if slug == "" {
 		return Project{}, errors.New("ese proyecto no tiene nombre")
 	}
-	project := Project{Slug: slug, Name: name, CreatedBy: createdBy}
+	if owner.Kind == "" || owner.ID == "" {
+		return Project{}, errors.New("ese proyecto no tiene dueño")
+	}
+	project := Project{Slug: slug, Name: name, Owner: owner, CreatedBy: createdBy}
 	err := s.db.QueryRowContext(ctx,
-		"INSERT INTO chat.projects (slug, name, created_by) VALUES ($1, $2, $3) RETURNING id",
-		slug, name, createdBy).Scan(&project.ID)
+		"INSERT INTO chat.projects (slug, name, owner_kind, owner_id, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+		slug, name, owner.Kind, owner.ID, createdBy).Scan(&project.ID)
 	if taken(err) {
 		return Project{}, ErrTaken
 	}

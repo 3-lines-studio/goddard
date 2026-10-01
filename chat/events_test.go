@@ -8,7 +8,7 @@ import (
 
 func thread(t *testing.T, store *Store) Conversation {
 	t.Helper()
-	found, err := store.CreateProject(t.Context(), "goddard", "berti")
+	found, err := store.CreateProject(t.Context(), "goddard", Owner{Kind: OwnerUser, ID: "berti"}, "berti")
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestTheStreamAsksFromWhatItAlreadySaw(t *testing.T) {
 
 func TestAThreadIsSeparateFromTheOthers(t *testing.T) {
 	store := testStore(t)
-	project, err := store.CreateProject(t.Context(), "goddard", "berti")
+	project, err := store.CreateProject(t.Context(), "goddard", Owner{Kind: OwnerUser, ID: "berti"}, "berti")
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}

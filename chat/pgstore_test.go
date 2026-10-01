@@ -54,7 +54,7 @@ func testStore(t *testing.T) *Store {
 
 func project(t *testing.T, store *Store, name string) Project {
 	t.Helper()
-	found, err := store.CreateProject(t.Context(), name, "berti")
+	found, err := store.CreateProject(t.Context(), name, Owner{Kind: OwnerUser, ID: "berti"}, "berti")
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
@@ -76,13 +76,36 @@ func TestAProjectKeepsItsNameAndTakesASlug(t *testing.T) {
 	}
 }
 
+func TestTheSlugOfAProjectIsGlobalBecauseItNamesADirectory(t *testing.T) {
+	store := testStore(t)
+	berti := Owner{Kind: OwnerUser, ID: "berti"}
+	ana := Owner{Kind: OwnerUser, ID: "ana"}
+	created, err := store.CreateProject(t.Context(), "goddard", berti, "berti")
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	if created.Owner.Kind != OwnerUser || created.Owner.ID != "berti" {
+		t.Fatalf("el dueño quedó %+v", created.Owner)
+	}
+	if _, err := store.CreateProject(t.Context(), "goddard", ana, "ana"); !errors.Is(err, ErrTaken) {
+		t.Fatalf("el slug goddard quedó libre para otro dueño: %v", err)
+	}
+	created, err = store.CreateProject(t.Context(), "picsel", Owner{Kind: OwnerOrg, ID: "casa"}, "berti")
+	if err != nil {
+		t.Fatalf("la org no pudo: %v", err)
+	}
+	if created.Owner.Kind != OwnerOrg || created.Owner.ID != "casa" {
+		t.Fatalf("el dueño quedó %+v", created.Owner)
+	}
+
+}
 func TestTheSameSlugTwiceIsRefused(t *testing.T) {
 	store := testStore(t)
 	project(t, store, "Goddard")
-	if _, err := store.CreateProject(t.Context(), "goddard", "berti"); !errors.Is(err, ErrTaken) {
+	if _, err := store.CreateProject(t.Context(), "goddard", Owner{Kind: OwnerUser, ID: "berti"}, "berti"); !errors.Is(err, ErrTaken) {
 		t.Fatalf("dio %v", err)
 	}
-	if _, err := store.CreateProject(t.Context(), "...", "berti"); err == nil {
+	if _, err := store.CreateProject(t.Context(), "...", Owner{Kind: OwnerUser, ID: "berti"}, "berti"); err == nil {
 		t.Fatal("aceptó un proyecto sin nombre")
 	}
 }
@@ -93,7 +116,7 @@ func TestProjectsComeBackByName(t *testing.T) {
 	project(t, store, "axe")
 	project(t, store, "bifrost")
 	names := []string{}
-	projects, err := store.Projects(t.Context())
+	projects, err := store.Projects(t.Context(), Owner{Kind: OwnerUser, ID: "berti"}, nil)
 	if err != nil {
 		t.Fatalf("projects: %v", err)
 	}
@@ -126,7 +149,7 @@ func TestADeletedProjectLeavesTheList(t *testing.T) {
 	if err := store.DeleteProject(t.Context(), created.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	projects, err := store.Projects(t.Context())
+	projects, err := store.Projects(t.Context(), Owner{Kind: OwnerUser, ID: "berti"}, nil)
 	if err != nil {
 		t.Fatalf("projects: %v", err)
 	}
@@ -144,7 +167,7 @@ func TestTheSlugStaysTakenAfterDeleting(t *testing.T) {
 	if err := store.DeleteProject(t.Context(), created.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, err := store.CreateProject(t.Context(), "ken", "berti"); !errors.Is(err, ErrTaken) {
+	if _, err := store.CreateProject(t.Context(), "ken", Owner{Kind: OwnerUser, ID: "berti"}, "berti"); !errors.Is(err, ErrTaken) {
 		t.Fatalf("el slug se liberó: %v", err)
 	}
 }
@@ -152,7 +175,7 @@ func TestTheSlugStaysTakenAfterDeleting(t *testing.T) {
 func TestConversationsLiveInsideAProject(t *testing.T) {
 	db := testDB(t)
 	store := NewStore(db)
-	created, err := store.CreateProject(t.Context(), "goddard", "berti")
+	created, err := store.CreateProject(t.Context(), "goddard", Owner{Kind: OwnerUser, ID: "berti"}, "berti")
 	if err != nil {
 		t.Fatalf("project: %v", err)
 	}
