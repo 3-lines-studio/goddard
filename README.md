@@ -32,9 +32,12 @@ below.
   string the rest of goddard already keeps in its own tables: memo, schedule
   and heimdall name the project that way. A conversation is a thread inside it,
   and its id is the scope an axe session uses, so the history of the thread is
-  the history of that session and nobody keeps the two in step. Renaming a
-  project keeps its slug, and both are marked as gone instead of dropped: what
-  happened keeps pointing at them.
+  the history of that session and nobody keeps the two in step. The log of the
+  thread (`events`) is what the stream reads with `since`, and the attachments
+  (`uploads`) live in the database and not on a disk: a file in one instance's
+  filesystem is a file the others cannot show. Renaming a project keeps its
+  slug, and both are marked as gone instead of dropped: what happened keeps
+  pointing at them.
 - `heimdall` — the secrets store: projects, environments and tokens scoped to
   one environment and, if you want, to a list of key names, so an agent gets
   test credentials with no path to production. Port of
