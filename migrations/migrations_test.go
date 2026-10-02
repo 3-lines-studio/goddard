@@ -98,7 +98,7 @@ func TestAplicaElEsquemaDeHeimdall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if len(applied) != len(pending(t)) || applied[0] != "heimdall" {
+	if len(applied) != len(pending(t)) || applied[0] != "goddard" {
 		t.Fatalf("aplicó %v", applied)
 	}
 	want := []string{"audit", "environments", "secrets", "tokens"}
@@ -106,11 +106,11 @@ func TestAplicaElEsquemaDeHeimdall(t *testing.T) {
 	if got != strings.Join(want, ",") {
 		t.Fatalf("las tablas quedaron %s", got)
 	}
-	wanted := "project:text,env:text,name:text,value:bytea,updated_at:bigint,id:text,created_at:bigint,deleted_at:bigint,owner_kind:text,owner_id:text"
+	wanted := "id:text,owner_kind:text,owner_id:text,project:text,env:text,name:text,value:bytea,created_at:bigint,updated_at:bigint,deleted_at:bigint"
 	if got := columnsOf(t, db, "heimdall", "secrets"); strings.Join(got, ",") != wanted {
 		t.Fatalf("heimdall.secrets quedó %v", got)
 	}
-	wantedTokens := "id:text,name:text,project:text,env:text,keys:jsonb,hash:text,role:text,created_at:bigint,expires_at:bigint,last_used:bigint,updated_at:bigint,deleted_at:bigint,owner_kind:text,owner_id:text"
+	wantedTokens := "id:text,owner_kind:text,owner_id:text,name:text,project:text,env:text,keys:jsonb,hash:text,role:text,created_at:bigint,expires_at:bigint,last_used:bigint,updated_at:bigint,deleted_at:bigint"
 	if got := columnsOf(t, db, "heimdall", "tokens"); strings.Join(got, ",") != wantedTokens {
 		t.Fatalf("heimdall.tokens quedó %v", got)
 	}
@@ -126,11 +126,11 @@ func TestAplicaElEsquemaDeAxe(t *testing.T) {
 	if got != strings.Join(want, ",") {
 		t.Fatalf("las tablas quedaron %s", got)
 	}
-	wantedSessions := "id:text,scope:text,title:text,turns:integer,updated_at:bigint,deleted_at:bigint,seq:bigint,created_at:bigint"
+	wantedSessions := "id:text,scope:text,title:text,turns:integer,seq:bigint,created_at:bigint,updated_at:bigint,deleted_at:bigint"
 	if got := columnsOf(t, db, "axe", "sessions"); strings.Join(got, ",") != wantedSessions {
 		t.Fatalf("axe.sessions quedó %v", got)
 	}
-	wantedEntries := "session_id:text,seq:bigint,entry:jsonb,id:text,created_at:bigint,updated_at:bigint,deleted_at:bigint"
+	wantedEntries := "id:text,session_id:text,seq:bigint,entry:jsonb,created_at:bigint,updated_at:bigint,deleted_at:bigint"
 	if got := columnsOf(t, db, "axe", "entries"); strings.Join(got, ",") != wantedEntries {
 		t.Fatalf("axe.entries quedó %v", got)
 	}
