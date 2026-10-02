@@ -81,6 +81,25 @@ func Post(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// Delete unloads it: the projects of that owner go back to the volume by
+// default and the sandbox stops being loaded, so nothing runs there. It is for
+// whoever can write it, and doing it twice is the same as doing it once.
+func Delete(w http.ResponseWriter, r *http.Request) {
+	service, user, ok := session(w, r)
+	if !ok {
+		return
+	}
+	owner, ok := ownerOf(w, r, service, user, r.URL.Query().Get("org"), true)
+	if !ok {
+		return
+	}
+	if err := service.RemoveWorkspace(r.Context(), owner, user.ID); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func current(r *http.Request, service *app.Service, owner chat.Owner) (view, error) {
 	space, err := service.Workspace(r.Context(), owner)
 	if err != nil {

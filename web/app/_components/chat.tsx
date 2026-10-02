@@ -68,6 +68,7 @@ export function Chat() {
   const [members, setMembers] = useState<Record<string, Member[]>>({});
   const [spaces, setSpaces] = useState<Record<string, Sandbox>>({});
   const [saving, setSaving] = useState("");
+  const [removingSpace, setRemovingSpace] = useState("");
   const [keys, setKeys] = useState<string[]>([]);
   const [active, setActive] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -316,8 +317,7 @@ export function Chat() {
     load();
   }
 
-  async function saveSpace(org: string, input: SandboxInput) {
-    setSaving(org || "personal");
+  async function saveSpace(org: string, input: SandboxInput) {    setSaving(org || "personal");
     setError("");
     const response = await fetch("/api/workspace", {
       method: "POST",
@@ -325,6 +325,27 @@ export function Chat() {
       body: JSON.stringify({ org, ...input }),
     });
     setSaving("");
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadSpace(org);
+    load();
+  }
+
+  function askSpace(org: string) {
+    if (removingSpace !== (org || "personal")) {
+      setRemovingSpace(org || "personal");
+      return;
+    }
+    void removeSpace(org);
+  }
+
+  async function removeSpace(org: string) {
+    setRemovingSpace("");
+    setError("");
+    const target = org ? `/api/workspace?org=${encodeURIComponent(org)}` : "/api/workspace";
+    const response = await fetch(target, { method: "DELETE" });
     if (!response.ok) {
       setError(await response.text());
       return;
@@ -694,7 +715,14 @@ export function Chat() {
                 </div>
               ) : tab.kind === "sandbox" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">
-                  <Sandboxes spaces={spaces} orgs={orgs} saving={saving} onSave={(org, input) => void saveSpace(org, input)} />
+                  <Sandboxes
+                    spaces={spaces}
+                    orgs={orgs}
+                    saving={saving}
+                    removing={removingSpace}
+                    onSave={(org, input) => void saveSpace(org, input)}
+                    onRemove={(org) => askSpace(org)}
+                  />
                 </div>
               ) : tab.kind === "agenda" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">

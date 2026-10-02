@@ -99,3 +99,24 @@ func TestSetRefusesWhatCannotBeWritten(t *testing.T) {
 		t.Fatal("escribió un path relativo")
 	}
 }
+
+func TestDeletingAWorkspaceLeavesTheDefaultAgain(t *testing.T) {
+	store := NewPgStore(testDB(t))
+	owner := Owner{Kind: OwnerUser, ID: "01M5"}
+	if err := store.Set(t.Context(), Workspace{Owner: owner, Path: "/data/volumes/la-casa"}, "berti"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if err := store.Delete(t.Context(), owner); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	_, ok, err := store.Get(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if ok {
+		t.Fatal("la fila quedó")
+	}
+	if err := store.Delete(t.Context(), owner); err != nil {
+		t.Fatalf("borrar dos veces: %v", err)
+	}
+}

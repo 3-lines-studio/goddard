@@ -105,3 +105,33 @@ func TestTheWorkspaceOfAnOrganizationIsItsOwn(t *testing.T) {
 		t.Fatalf("el path quedó %q", space.Path)
 	}
 }
+
+func TestRemovingAWorkspaceTakesThePathAndTheSandboxAway(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	user := apptest.User(t, service)
+	owner := chat.Owner{Kind: chat.OwnerUser, ID: user.ID}
+	path := filepath.Join(t.TempDir(), "volumen")
+	if err := service.SaveWorkspace(t.Context(), owner, path, app.Sandbox{Addr: "127.0.0.1:2222", User: "root", Key: []byte("una-llave")}, user.ID); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := service.RemoveWorkspace(t.Context(), owner, user.ID); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	space, err := service.Workspace(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("workspace: %v", err)
+	}
+	if want := workspace.DefaultPath(service.Volumes, workspace.Owner{Kind: workspace.OwnerUser, ID: user.ID}); space.Path != want {
+		t.Fatalf("el path quedó %q", space.Path)
+	}
+	sandbox, err := service.Sandbox(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if sandbox.Addr != "" || sandbox.User != "" || len(sandbox.Key) > 0 {
+		t.Fatalf("el sandbox quedó %+v", sandbox)
+	}
+	if err := service.RemoveWorkspace(t.Context(), owner, user.ID); err != nil {
+		t.Fatalf("sacar dos veces: %v", err)
+	}
+}

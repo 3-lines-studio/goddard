@@ -23,14 +23,18 @@ function Space({
   role,
   space,
   saving,
+  removing,
   onSave,
+  onRemove,
 }: {
   id: string;
   name: string;
   role: string;
   space: Sandbox | undefined;
   saving: boolean;
+  removing: boolean;
   onSave: (id: string, input: SandboxInput) => void;
+  onRemove: (id: string) => void;
 }) {
   const [path, setPath] = useState(space?.path ?? "");
   const [addr, setAddr] = useState(space?.addr ?? "");
@@ -120,6 +124,18 @@ function Space({
                 <Button type="submit" size="sm" variant="outline" data-space-save={id}>
                   {saving ? "guardando…" : "Guardar"}
                 </Button>
+                {space.addr || space.has_key ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    data-space-remove={id}
+                    className="text-muted-foreground"
+                    onClick={() => onRemove(id)}
+                  >
+                    {removing ? "otra vez para sacarla" : "sacar la computadora"}
+                  </Button>
+                ) : null}
               </Field>
             </FieldGroup>
           </form>
@@ -138,12 +154,16 @@ export function Sandboxes({
   spaces,
   orgs,
   saving,
+  removing,
   onSave,
+  onRemove,
 }: {
   spaces: Record<string, Sandbox>;
   orgs: Org[];
   saving: string;
+  removing: string;
   onSave: (id: string, input: SandboxInput) => void;
+  onRemove: (id: string) => void;
 }) {
   const owners = [{ id: "", name: "Personal", role: "owner" }, ...orgs];
   return (
@@ -163,7 +183,9 @@ export function Sandboxes({
           role={owner.role}
           space={spaces[owner.id]}
           saving={saving === (owner.id || "personal")}
+          removing={removing === (owner.id || "personal")}
           onSave={onSave}
+          onRemove={onRemove}
         />
       ))}
     </div>

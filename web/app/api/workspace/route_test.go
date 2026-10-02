@@ -50,6 +50,11 @@ func TestAWorkspaceWantsASession(t *testing.T) {
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("escribir sin sesión contestó %d", recorder.Code)
 	}
+	recorder = httptest.NewRecorder()
+	Delete(recorder, apptest.Request(t, "DELETE", "/api/workspace", nil, nil))
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("sacar sin sesión contestó %d", recorder.Code)
+	}
 }
 
 func TestTheWorkspaceOfThePersonAskingComesAndGoes(t *testing.T) {
@@ -191,5 +196,61 @@ func TestTheWorkspaceOfAnOrgSomebodyIsNotInIsNotThere(t *testing.T) {
 	}
 	if recorder := save(t, ana, map[string]string{"org": created.ID, "path": "/volumes/x"}); recorder.Code != http.StatusNotFound {
 		t.Fatalf("escribir una ajena contestó %d", recorder.Code)
+	}
+}
+
+func TestRemovingTheWorkspaceOfThePersonAsking(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t))
+	cookie := apptest.Session(t, service, apptest.TestEmail)
+	path := filepath.Join(t.TempDir(), "volumen")
+	if recorder := save(t, cookie, map[string]string{
+		"path": path, "addr": "127.0.0.1:2222", "user": "root", "key": "una-llave",
+	}); recorder.Code != http.StatusNoContent {
+		t.Fatalf("guardar contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	recorder := httptest.NewRecorder()
+	Delete(recorder, apptest.Request(t, "DELETE", "/api/workspace", nil, cookie))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("sacar contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	got := read(t, service, cookie, "")
+	if got.Addr != "" || got.User != "" || got.HasKey {
+		t.Fatalf("el sandbox quedó %+v", got)
+	}
+	if want := filepath.Join(service.Volumes, apptest.User(t, service).ID); got.Path != want {
+		t.Fatalf("el path quedó %q", got.Path)
+	}
+	recorder = httptest.NewRecorder()
+	Delete(recorder, apptest.Request(t, "DELETE", "/api/workspace", nil, cookie))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("sacar dos veces contestó %d", recorder.Code)
+	}
+}
+
+func TestTheWorkspaceOfAnOrgIsNotForAMemberToRemove(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t))
+	cookie := apptest.Session(t, service, apptest.TestEmail)
+	ana := apptest.Session(t, service, "ana@ejemplo.com")
+	created := apptest.AnOrg(t, service, "La casa")
+	if err := service.Orgs.Add(t.Context(), created.ID, "ana@ejemplo.com", org.RoleMember, apptest.User(t, service).ID); err != nil {
+		t.Fatalf("agregar: %v", err)
+	}
+	if recorder := save(t, cookie, map[string]string{
+		"org": created.ID, "path": filepath.Join(t.TempDir(), "la-casa"), "addr": "acme.local:22", "user": "goddard", "key": "la-de-acme",
+	}); recorder.Code != http.StatusNoContent {
+		t.Fatalf("guardar contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	recorder := httptest.NewRecorder()
+	Delete(recorder, apptest.Request(t, "DELETE", "/api/workspace?org="+created.ID, nil, ana))
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("la miembro sacó el sandbox: %d", recorder.Code)
+	}
+	if got := read(t, service, cookie, created.ID); got.Addr != "acme.local:22" || !got.HasKey {
+		t.Fatalf("la organización quedó %+v", got)
+	}
+	recorder = httptest.NewRecorder()
+	Delete(recorder, apptest.Request(t, "DELETE", "/api/workspace?org="+created.ID, nil, cookie))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("el dueño no pudo sacarlo: %d %s", recorder.Code, apptest.Text(t, recorder))
 	}
 }

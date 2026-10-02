@@ -50,3 +50,23 @@ func (s *Service) SaveWorkspace(ctx context.Context, owner chat.Owner, path stri
 func workspaceOwner(owner chat.Owner) workspace.Owner {
 	return workspace.Owner{Kind: owner.Kind, ID: owner.ID}
 }
+
+// RemoveWorkspace takes the workspace of an owner back to nothing: its projects
+// go back to the volume of that owner and its sandbox stops being loaded, so a
+// turn does not run there. It is what "esta máquina ya no" means, and it is
+// idempotent: doing it twice leaves the same nothing.
+func (s *Service) RemoveWorkspace(ctx context.Context, owner chat.Owner, actor string) error {
+	secrets, err := s.Heimdall.Secrets(ctx, heimdallOwner(owner), SandboxProject, SandboxEnv)
+	if err != nil {
+		return err
+	}
+	for _, name := range []string{SandboxAddr, SandboxUser, SandboxKey} {
+		if _, loaded := secrets[name]; !loaded {
+			continue
+		}
+		if err := s.Heimdall.Unset(ctx, heimdallOwner(owner), SandboxProject, SandboxEnv, name, actor); err != nil {
+			return err
+		}
+	}
+	return s.Workspaces.Delete(ctx, workspaceOwner(owner))
+}
