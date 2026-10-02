@@ -262,6 +262,13 @@ run it now, pause it and take it out. A member of the organization sees the
 tasks of the projects of the team in the same list, and can pause or take out
 the ones of the team.
 
+The `computadoras` button at the bottom of the rail is where the sandbox of
+whoever the panel is for is loaded: the volume where the projects live and the
+address, the user and the key of the machine that runs the tools. There is one
+card per owner — the person, and each organization they are in — and the key is
+asked for and never shown: what comes back is whether there is one. The key of
+an organization is loaded by its owners and its admins.
+
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a
 comma separated list; empty means anybody, which is a goddard of one.
