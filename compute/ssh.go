@@ -10,13 +10,17 @@ import (
 )
 
 type SSH struct {
-	address string
-	user    string
-	key     []byte
+	address    string
+	user       string
+	key        []byte
+	passphrase []byte
 }
 
-func NewSSH(address, user string, key []byte) *SSH {
-	return &SSH{address: address, user: user, key: key}
+// NewSSH is how a turn gets in: where the machine is, who to be there and the
+// key that opens it. The passphrase is the word the key was kept with, and an
+// empty one is a key that was not kept with any.
+func NewSSH(address, user string, key, passphrase []byte) *SSH {
+	return &SSH{address: address, user: user, key: key, passphrase: passphrase}
 }
 
 func (s *SSH) Exec(ctx context.Context, command string, stdin []byte) (Result, error) {
@@ -61,7 +65,7 @@ func (s *SSH) Exec(ctx context.Context, command string, stdin []byte) (Result, e
 }
 
 func (s *SSH) dial(ctx context.Context) (*ssh.Client, error) {
-	signer, err := ssh.ParsePrivateKey(s.key)
+	signer, err := s.signer()
 	if err != nil {
 		return nil, err
 	}
@@ -81,4 +85,20 @@ func (s *SSH) dial(ctx context.Context) (*ssh.Client, error) {
 		return nil, err
 	}
 	return ssh.NewClient(connection, channels, requests), nil
+}
+
+// signer is the key that opens the machine. A key kept with a passphrase is
+// the same key: what changes is that somebody has to say the word. A key that
+// asks for one and is not told says so, instead of the machine refusing the
+// key or answering that it could not get in.
+func (s *SSH) signer() (ssh.Signer, error) {
+	if len(s.passphrase) == 0 {
+		signer, err := ssh.ParsePrivateKey(s.key)
+		var locked *ssh.PassphraseMissingError
+		if errors.As(err, &locked) {
+			return nil, errors.New("la llave pide una passphrase y no está cargada")
+		}
+		return signer, err
+	}
+	return ssh.ParsePrivateKeyWithPassphrase(s.key, s.passphrase)
 }

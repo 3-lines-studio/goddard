@@ -6,6 +6,7 @@ package sshtest
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
@@ -19,14 +20,28 @@ import (
 )
 
 // Server is where that machine is, who to be there and the key that opens it:
-// the same three things a sandbox is loaded with.
+// the same secrets a sandbox is loaded with, and a key kept under a word when
+// the passphrase is not empty.
 type Server struct {
 	Addr string
 	User string
 	Key  []byte
 }
 
+// New is a machine whose client key is kept in the open, and NewWithPassphrase
+// one whose key is kept under a word, which is how a key ends up in a machine
+// somebody else owns.
 func New(t *testing.T) Server {
+	t.Helper()
+	return newServer(t, "")
+}
+
+func NewWithPassphrase(t *testing.T, passphrase string) Server {
+	t.Helper()
+	return newServer(t, passphrase)
+}
+
+func newServer(t *testing.T, passphrase string) Server {
 	t.Helper()
 	clientPublic, clientPrivate, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -69,11 +84,18 @@ func New(t *testing.T) Server {
 		}
 	}()
 
-	encoded, err := ssh.MarshalPrivateKey(clientPrivate, "")
+	encoded, err := marshal(clientPrivate, passphrase)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	return Server{Addr: listener.Addr().String(), User: "tester", Key: pem.EncodeToMemory(encoded)}
+}
+
+func marshal(key crypto.PrivateKey, passphrase string) (*pem.Block, error) {
+	if passphrase == "" {
+		return ssh.MarshalPrivateKey(key, "")
+	}
+	return ssh.MarshalPrivateKeyWithPassphrase(key, "", []byte(passphrase))
 }
 
 func serve(conn net.Conn, config *ssh.ServerConfig) {

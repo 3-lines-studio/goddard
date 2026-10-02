@@ -106,6 +106,28 @@ func TestTheKeyNeverComesBack(t *testing.T) {
 	}
 }
 
+func TestThePassphraseOfAKeyNeverComesBack(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t))
+	cookie := apptest.Session(t, service, apptest.TestEmail)
+	if recorder := save(t, cookie, map[string]string{
+		"path":       filepath.Join(t.TempDir(), "volumen"),
+		"addr":       "127.0.0.1:2222",
+		"user":       "root",
+		"key":        "una-llave",
+		"passphrase": "una palabra",
+	}); recorder.Code != http.StatusNoContent {
+		t.Fatalf("guardar contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	if got := read(t, service, cookie, ""); !got.HasPassphrase {
+		t.Fatalf("dijo que no hay passphrase: %+v", got)
+	}
+	recorder := httptest.NewRecorder()
+	Get(recorder, apptest.Request(t, "GET", "/api/workspace", nil, cookie))
+	if strings.Contains(recorder.Body.String(), "una palabra") {
+		t.Fatalf("la passphrase volvió: %s", apptest.Text(t, recorder))
+	}
+}
+
 func TestTheFormCanSaveWithoutSendingTheKeyAgain(t *testing.T) {
 	service := apptest.Route(t, apptest.Provider(t))
 	cookie := apptest.Session(t, service, apptest.TestEmail)

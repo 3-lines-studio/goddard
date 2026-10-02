@@ -11,7 +11,7 @@ import (
 func newTestSSH(t *testing.T) *SSH {
 	t.Helper()
 	server := sshtest.New(t)
-	return NewSSH(server.Addr, server.User, server.Key)
+	return NewSSH(server.Addr, server.User, server.Key, nil)
 }
 
 func TestTheSSHChannelCarriesWhatTheMachineAsks(t *testing.T) {
@@ -57,6 +57,24 @@ func TestTheSSHChannelCarriesWhatTheMachineAsks(t *testing.T) {
 	}
 }
 
+func TestTheSSHChannelOpensAKeyKeptWithAPassphrase(t *testing.T) {
+	server := sshtest.NewWithPassphrase(t, "una palabra")
+	client := NewSSH(server.Addr, server.User, server.Key, []byte("una palabra"))
+	machine := NewMachine(client, t.TempDir())
+	if out := machine.Run("echo hola", 10, nil); strings.TrimSpace(out) != "hola" {
+		t.Fatalf("el run quedó %q", out)
+	}
+}
+
+func TestAKeyThatAsksForAPassphraseSaysSoWhenThereIsNone(t *testing.T) {
+	server := sshtest.NewWithPassphrase(t, "una palabra")
+	client := NewSSH(server.Addr, server.User, server.Key, nil)
+	_, err := client.Exec(t.Context(), "echo hola", nil)
+	if err == nil || !strings.Contains(err.Error(), "passphrase") {
+		t.Fatalf("dio %v", err)
+	}
+}
+
 func TestTheSSHChannelCutsTheCommandThatTakesTooLong(t *testing.T) {
 	machine := NewMachine(newTestSSH(t), t.TempDir())
 	out := machine.Run("sleep 5", 1, nil)
@@ -66,7 +84,7 @@ func TestTheSSHChannelCutsTheCommandThatTakesTooLong(t *testing.T) {
 }
 
 func TestTheSSHChannelSaysWhenTheKeyIsNotAKey(t *testing.T) {
-	machine := NewMachine(NewSSH("127.0.0.1:1", "tester", []byte("no soy una llave")), t.TempDir())
+	machine := NewMachine(NewSSH("127.0.0.1:1", "tester", []byte("no soy una llave"), nil), t.TempDir())
 	if _, err := machine.Read("nada"); err == nil {
 		t.Fatal("leyó con una llave que no es una llave")
 	}

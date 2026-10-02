@@ -15,6 +15,14 @@ const ROLES: Record<string, string> = {
   member: "miembro",
 };
 
+// loaded says whether that owner has a machine loaded at all. The path that
+// comes with no machine is the volume of the house, and showing it as if it
+// were somebody's own is what makes a machine of one's own look like it
+// belongs in /volumes.
+function loaded(space: Sandbox) {
+  return space.addr !== "" || space.has_key;
+}
+
 // Space is the workspace of one owner: where its projects live and the machine
 // that runs the tools over them. The key never comes back from the app, so the
 // box starts empty, and an empty box keeps the one that is already there.
@@ -47,14 +55,16 @@ function Space({
   const [addr, setAddr] = useState(space?.addr ?? "");
   const [user, setUser] = useState(space?.user ?? "");
   const [key, setKey] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const writable = role === "owner" || role === "admin";
 
   useEffect(() => {
     if (!space) return;
-    setPath(space.path);
+    setPath(loaded(space) ? space.path : "");
     setAddr(space.addr);
     setUser(space.user);
     setKey("");
+    setPassphrase("");
   }, [space]);
 
   return (
@@ -72,7 +82,7 @@ function Space({
             data-space-form={id}
             onSubmit={(event) => {
               event.preventDefault();
-              onSave(id, { path, addr, user, key });
+              onSave(id, { path, addr, user, key, passphrase });
             }}
           >
             <FieldGroup>
@@ -83,9 +93,10 @@ function Space({
                   name="path"
                   value={path}
                   data-space-path={id}
+                  placeholder="/home/tu-usuario/goddard"
                   onChange={(event) => setPath(event.target.value)}
                 />
-                <FieldDescription>La carpeta donde viven los proyectos, montada en la máquina.</FieldDescription>
+                <FieldDescription>La carpeta donde viven los proyectos, montada en la máquina. Tiene que existir: goddard no la crea.</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor={`space-addr-${id}`}>dirección</FieldLabel>
@@ -127,6 +138,18 @@ function Space({
                     ? "Ya hay una cargada. Escribí otra para reemplazarla, o dejá el casillero vacío."
                     : "El archivo de la llave, entero: la que entra a la máquina sin pedir contraseña."}
                 </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`space-passphrase-${id}`}>passphrase</FieldLabel>
+                <Input
+                  id={`space-passphrase-${id}`}
+                  name="passphrase"
+                  value={passphrase}
+                  data-space-passphrase={id}
+                  placeholder={space.has_passphrase ? "la que ya está" : "sin passphrase"}
+                  onChange={(event) => setPassphrase(event.target.value)}
+                />
+                <FieldDescription>Sólo si la llave se guardó con una palabra.</FieldDescription>
               </Field>
               <Field orientation="horizontal">
                 <Button type="submit" size="sm" variant="outline" data-space-save={id}>

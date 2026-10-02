@@ -14,22 +14,24 @@ import (
 )
 
 type request struct {
-	Org  string `json:"org"`
-	Path string `json:"path"`
-	Addr string `json:"addr"`
-	User string `json:"user"`
-	Key  string `json:"key"`
+	Org        string `json:"org"`
+	Path       string `json:"path"`
+	Addr       string `json:"addr"`
+	User       string `json:"user"`
+	Key        string `json:"key"`
+	Passphrase string `json:"passphrase"`
 }
 
-// view is the workspace of an owner as the panel shows it. The key never comes
-// back: what comes is whether there is one, because a secret that travels out
-// of the store stops being one.
+// view is the workspace of an owner as the panel shows it. The key and the
+// passphrase never come back: what comes is whether there is one, because a
+// secret that travels out of the store stops being one.
 type view struct {
-	Owner  chat.Owner `json:"owner"`
-	Path   string     `json:"path"`
-	Addr   string     `json:"addr"`
-	User   string     `json:"user"`
-	HasKey bool       `json:"has_key"`
+	Owner         chat.Owner `json:"owner"`
+	Path          string     `json:"path"`
+	Addr          string     `json:"addr"`
+	User          string     `json:"user"`
+	HasKey        bool       `json:"has_key"`
+	HasPassphrase bool       `json:"has_passphrase"`
 }
 
 // Get is where the projects of an owner live and how to reach the machine that
@@ -70,9 +72,10 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := service.SaveWorkspace(r.Context(), owner, body.Path, app.Sandbox{
-		Addr: body.Addr,
-		User: body.User,
-		Key:  []byte(body.Key),
+		Addr:       body.Addr,
+		User:       body.User,
+		Key:        []byte(body.Key),
+		Passphrase: []byte(body.Passphrase),
 	}, user.ID)
 	if err != nil {
 		fail(w, err)
@@ -110,11 +113,12 @@ func current(r *http.Request, service *app.Service, owner chat.Owner) (view, err
 		return view{}, err
 	}
 	return view{
-		Owner:  owner,
-		Path:   space.Path,
-		Addr:   sandbox.Addr,
-		User:   sandbox.User,
-		HasKey: len(sandbox.Key) > 0,
+		Owner:         owner,
+		Path:          space.Path,
+		Addr:          sandbox.Addr,
+		User:          sandbox.User,
+		HasKey:        len(sandbox.Key) > 0,
+		HasPassphrase: len(sandbox.Passphrase) > 0,
 	}, nil
 }
 

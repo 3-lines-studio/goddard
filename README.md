@@ -215,9 +215,9 @@ POST   /api/orgs/members                {org, email, role}: brings somebody in b
 PATCH  /api/orgs/members                {org, user, role}: changes what they can do
 DELETE /api/orgs/members?org=&user=      takes somebody out
 GET  /api/workspace?org=                where the projects of an owner live and how to reach its sandbox
-POST /api/workspace                     {org, path, addr, user, key}: loads it; what comes empty stays as it is
+POST /api/workspace                     {org, path, addr, user, key, passphrase}: loads it; what comes empty stays as it is
 DELETE /api/workspace?org=              unloads it: the volume by default, and a turn does not run
-POST /api/workspace/check               {org}: dials that sandbox and says whether a turn could run
+POST /api/workspace/check               {org, path, addr, user, key, passphrase}: dials a machine and says whether a turn could run
 GET  /api/onboarding                    how much of the first setup of whoever asks is done, and what is loaded
 PATCH /api/me                           {name}: what goddard calls you
 POST /api/login                         {email}: mails a one-shot link; without a provider it answers 503
@@ -269,14 +269,19 @@ the ones of the team.
 
 The `computadoras` button at the bottom of the rail is where the sandbox of
 whoever the panel is for is loaded: the volume where the projects live and the
-address, the user and the key of the machine that runs the tools. There is one
-card per owner — the person, and each organization they are in — and the key is
-asked for and never shown: what comes back is whether there is one. The key of
-an organization is loaded by its owners and its admins. `sacar la computadora`
-unloads it: the three secrets go and the projects go back to the volume by
-default, which is how somebody says that machine is not theirs anymore. `probar`
-dials what is loaded — the machine answers, and the volume is there inside it —
-and says which of the two is missing when it is not.
+address, the user, the key of the machine that runs the tools and the word that
+key is kept under, when it has one. There is one card per owner — the person,
+and each organization they are in — and the key and the passphrase are asked for
+and never shown: what comes back is whether there is one of each. The key of an
+organization is loaded by its owners and its admins. The volume is where the
+projects live inside that machine and not a directory of this container: the
+one of the house is `/volumes/<owner>`, and a machine of one's own names its
+own, because it is a folder that has to be there already — goddard does not
+create it. `sacar la computadora` unloads it: the secrets go and the projects
+go back to the volume by default, which is how somebody says that machine is not
+theirs anymore. `probar` dials a machine — the one that is loaded, or the one a
+form is about to load — and says which of the two is missing when it is not:
+the machine answers, and the volume is there inside it.
 
 `/` is the app, `/login` is the way in and `/onboarding` is the first setup:
 a page of its own each one. A request without the session cookie never
@@ -295,7 +300,16 @@ through the setup are in the same place. Without a session `/onboarding` goes
 to the login, and without a machine or half a model the app goes there: a
 turn would not run, and a thread that cannot be answered is not worth opening.
 A name is a courtesy and the other two are not, so the step can be skipped and
-the rest cannot.
+the rest cannot. The step lives in the URL — `/onboarding?paso=3` — so a reload
+keeps it and the back button works, and coming back with nothing in the URL
+opens the first step that is still owed.
+
+The last step **proves the machine before loading it**: the check is a question
+and not a row, so secrets of a machine that does not answer are never written
+down, and whoever went through the setup ends up with a machine a turn can use.
+What the form sends is used and what it does not is completed with what is
+loaded, which is why a form that only changes the address does not send the key
+again.
 
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a

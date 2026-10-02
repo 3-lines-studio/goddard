@@ -38,6 +38,7 @@ func (s *Service) SaveWorkspace(ctx context.Context, owner chat.Owner, path stri
 		{SandboxAddr, sandbox.Addr},
 		{SandboxUser, sandbox.User},
 		{SandboxKey, string(sandbox.Key)},
+		{SandboxPassphrase, string(sandbox.Passphrase)},
 	} {
 		if one.value == "" {
 			continue
@@ -56,15 +57,19 @@ func workspaceOwner(owner chat.Owner) workspace.Owner {
 	return workspace.Owner{Kind: owner.Kind, ID: owner.ID}
 }
 
-// CheckWorkspace dials the sandbox of an owner the way a turn would and says
-// whether it can run there: the machine answers and the volume of that owner is
-// mounted inside it. It is the same that a turn asks before running, and it
-// leaves nothing behind — not even the directory of a project.
-func (s *Service) CheckWorkspace(ctx context.Context, owner chat.Owner) error {
+// CheckSandbox dials a machine the way a turn would and says whether a turn
+// could run in it: the machine answers, and the volume of that owner is mounted
+// inside it. The secrets come from wherever the caller got them — loaded in
+// heimdall, or just typed in a form — and nothing is written down here: a
+// machine that does not answer is a machine that does not get loaded. It leaves
+// nothing behind, not even the directory of a project.
+func (s *Service) CheckSandbox(ctx context.Context, owner chat.Owner, volume string, sandbox Sandbox) error {
+	if err := sandbox.Ready(); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
-	_, _, err := s.machineOf(ctx, owner)
-	return err
+	return s.reach(ctx, owner, volume, s.Dialer.Dial(sandbox))
 }
 
 // RemoveWorkspace takes the workspace of an owner back to nothing: its projects
@@ -76,7 +81,7 @@ func (s *Service) RemoveWorkspace(ctx context.Context, owner chat.Owner, actor s
 	if err != nil {
 		return err
 	}
-	for _, name := range []string{SandboxAddr, SandboxUser, SandboxKey} {
+	for _, name := range []string{SandboxAddr, SandboxUser, SandboxKey, SandboxPassphrase} {
 		if _, loaded := secrets[name]; !loaded {
 			continue
 		}
