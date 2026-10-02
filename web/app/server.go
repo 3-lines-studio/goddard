@@ -19,7 +19,6 @@ import (
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/heimdall"
 	"github.com/3-lines-studio/goddard/memo"
-	"github.com/3-lines-studio/goddard/migrations"
 	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/schedule"
@@ -27,6 +26,9 @@ import (
 	"github.com/3-lines-studio/goddard/workspace"
 )
 
+// Serve opens the database and starts answering. The schema is not its
+// business: what is missing is applied by hand with cmd/migrate, so an app that
+// starts never changes the database it reads.
 func Serve(ctx context.Context, handler http.Handler) error {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
@@ -37,9 +39,6 @@ func Serve(ctx context.Context, handler http.Handler) error {
 		return err
 	}
 	defer db.Close()
-	if _, err := migrations.Apply(ctx, db); err != nil {
-		return err
-	}
 	built, err := build(db)
 	if err != nil {
 		return err
