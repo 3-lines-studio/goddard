@@ -51,8 +51,15 @@ func TestAnOrganizationHasItsOwnSandbox(t *testing.T) {
 	if found.Addr != "acme.local:22" || found.User != "goddard" || string(found.Key) != "la-de-acme" {
 		t.Fatalf("salió %+v", found)
 	}
-	if _, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: "otro"}); !errors.Is(err, app.ErrNoSandbox) {
-		t.Fatalf("un dueño sin sandbox devolvió %v", err)
+	if _, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: "otro"}); err != nil {
+		t.Fatalf("leer un dueño sin sandbox devolvió %v", err)
+	}
+	other, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: "otro"})
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if err := other.Ready(); !errors.Is(err, app.ErrNoSandbox) {
+		t.Fatalf("un dueño sin sandbox quedó listo: %v", err)
 	}
 }
 
@@ -66,11 +73,15 @@ func TestASandboxSaysWhichOfTheThreeIsMissing(t *testing.T) {
 			t.Fatalf("set %s: %v", name, err)
 		}
 	}
-	_, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerOrg, ID: "acme"})
-	if !errors.Is(err, app.ErrNoSandbox) {
-		t.Fatalf("sin llave devolvió %v", err)
+	sandbox, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerOrg, ID: "acme"})
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
 	}
-	if got := err.Error(); !strings.Contains(got, app.SandboxKey) {
+	ready := sandbox.Ready()
+	if !errors.Is(ready, app.ErrNoSandbox) {
+		t.Fatalf("sin llave devolvió %v", ready)
+	}
+	if got := ready.Error(); !strings.Contains(got, app.SandboxKey) {
 		t.Fatalf("no dijo cuál falta: %q", got)
 	}
 }

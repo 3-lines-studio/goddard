@@ -215,6 +215,8 @@ GET    /api/orgs/members?org=           who is in one, with the role of each
 POST   /api/orgs/members                {org, email, role}: brings somebody in by their mail
 PATCH  /api/orgs/members                {org, user, role}: changes what they can do
 DELETE /api/orgs/members?org=&user=      takes somebody out
+GET  /api/workspace?org=                where the projects of an owner live and how to reach its sandbox
+POST /api/workspace                     {org, path, addr, user, key}: loads it; what comes empty stays as it is
 POST /api/login                         {email}: mails a one-shot link, or hands it back
 GET  /auth?token=                       burns the link, sets the cookie and goes home
 POST /api/logout                        signs the session out
@@ -259,6 +261,13 @@ each task is, when it runs, what it answered last, and the three buttons that
 run it now, pause it and take it out. A member of the organization sees the
 tasks of the projects of the team in the same list, and can pause or take out
 the ones of the team.
+
+The `computadoras` button at the bottom of the rail is where the sandbox of
+whoever the panel is for is loaded: the volume where the projects live and the
+address, the user and the key of the machine that runs the tools. There is one
+card per owner — the person, and each organization they are in — and the key is
+asked for and never shown: what comes back is whether there is one. The key of
+an organization is loaded by its owners and its admins.
 
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a

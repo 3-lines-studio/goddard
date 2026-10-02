@@ -65,9 +65,29 @@ export type Skill = {
 
 export type Tab = {
   key: string;
-  kind: "thread" | "agenda" | "memoria" | "orgs";
+  kind: "thread" | "agenda" | "memoria" | "orgs" | "sandbox";
   title: string;
   slug: string;
+};
+
+// Sandbox is the workspace of an owner as the app hands it over: where its
+// projects live and how to reach the machine that runs the tools over them.
+// The key never comes back, only whether there is one.
+export type Sandbox = {
+  owner: Owner;
+  path: string;
+  addr: string;
+  user: string;
+  has_key: boolean;
+};
+
+// SandboxInput is what the panel sends: the same, and the key only when
+// somebody typed a new one.
+export type SandboxInput = {
+  path: string;
+  addr: string;
+  user: string;
+  key: string;
 };
 
 export type Event = {
