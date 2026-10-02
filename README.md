@@ -218,6 +218,8 @@ GET  /api/workspace?org=                where the projects of an owner live and 
 POST /api/workspace                     {org, path, addr, user, key}: loads it; what comes empty stays as it is
 DELETE /api/workspace?org=              unloads it: the volume by default, and a turn does not run
 POST /api/workspace/check               {org}: dials that sandbox and says whether a turn could run
+GET  /api/onboarding                    how much of the first setup of whoever asks is done, and what is loaded
+PATCH /api/me                           {name}: what goddard calls you
 POST /api/login                         {email}: mails a one-shot link; without a provider it answers 503
 GET  /auth?token=                       burns the link, sets the cookie and goes home
 POST /api/logout                        signs the session out
@@ -276,11 +278,24 @@ default, which is how somebody says that machine is not theirs anymore. `probar`
 dials what is loaded — the machine answers, and the volume is there inside it —
 and says which of the two is missing when it is not.
 
-`/` is the app and `/login` is the way in, a page of its own: a request
-without the session cookie never renders the app, it is sent to the login, and
-whoever already came in and asks for it goes home. A session that runs out
-while somebody is inside sends the browser there too, and the login asks for
-the link in its own name instead of the shell doing it.
+`/` is the app, `/login` is the way in and `/onboarding` is the first setup:
+a page of its own each one. A request without the session cookie never
+renders the app, it is sent to the login, and whoever already came in and asks
+for it goes home. A session that runs out while somebody is inside sends the
+browser there too, and the login asks for the link in its own name instead of
+the shell doing it.
+
+The first setup is three steps and none of them is written down: the name
+goddard calls somebody, the model a turn answers with — the one of the house,
+which is what goddard was built with, or the one the person brought — and the
+machine the tools run in, which is the one thing goddard cannot invent. What
+is done is read from what is loaded, which is what a turn asks before it runs,
+so somebody that loaded a sandbox from the panel and somebody that went
+through the setup are in the same place. Without a session `/onboarding` goes
+to the login, and without a machine or half a model the app goes there: a
+turn would not run, and a thread that cannot be answered is not worth opening.
+A name is a courtesy and the other two are not, so the step can be skipped and
+the rest cannot.
 
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a

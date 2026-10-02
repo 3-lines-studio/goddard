@@ -96,6 +96,17 @@ export type SandboxCheck = {
   message: string;
 };
 
+// Setup is how much of the first setup of a person is done: the name goddard
+// calls them, the model it answers with and the machine its tools run in. It is
+// read from what is loaded, so it is the same state a turn reads before it
+// runs. The keys never come back, only whether there is one of each.
+export type Setup = {
+  done: boolean;
+  user: { name: string; email: string };
+  model: { own: boolean; base: string; name: string; has_key: boolean; house: string };
+  compute: { path: string; addr: string; user: string; has_key: boolean };
+};
+
 // Model is the model of an owner as the app hands it over: the one it brought,
 // or nothing when it answers with the one of the house, whose name always
 // comes. The key never comes back, only whether there is one.

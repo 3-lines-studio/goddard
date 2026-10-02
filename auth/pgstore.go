@@ -50,6 +50,16 @@ func (s *Store) ByID(ctx context.Context, id string) (User, bool, error) {
 	return user, true, nil
 }
 
+// SetName changes what goddard calls somebody. The name that comes with the
+// email is a guess — the local part of the mail — and this is where it stops
+// being one: it is what the prompt says and what the app shows.
+func (s *Store) SetName(ctx context.Context, id, name string) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE auth.users SET name = $1, updated_at = goddard.now() WHERE id = $2 AND deleted_at IS NULL",
+		name, id)
+	return err
+}
+
 // CreateLogin mints a link for an email, creating the user the first time, and
 // returns what goes in it. The link is not stored: only its hash.
 func (s *Store) CreateLogin(ctx context.Context, email string, ttl int64) (string, error) {
