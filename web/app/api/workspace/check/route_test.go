@@ -31,6 +31,29 @@ func sandbox() app.Sandbox {
 	return app.Sandbox{Addr: "127.0.0.1:22", User: "tester", Key: []byte("una-llave")}
 }
 
+func TestTheCheckCanProveAMachineThatIsNotLoadedYet(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t))
+	cookie := apptest.Session(t, service, apptest.TestEmail)
+	user := apptest.User(t, service)
+	owner := chat.Owner{Kind: chat.OwnerUser, ID: user.ID}
+	if err := service.RemoveWorkspace(t.Context(), owner, user.ID); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	found, code := post(t, cookie, map[string]string{
+		"path": t.TempDir(), "addr": "127.0.0.1:22", "user": "tester", "key": "una-llave",
+	})
+	if code != http.StatusOK || !found.OK {
+		t.Fatalf("probando una máquina sin cargarla contestó %d %+v", code, found)
+	}
+	after, err := service.Sandbox(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if after.Addr != "" || len(after.Key) > 0 {
+		t.Fatalf("el chequeo la cargó: %+v", after)
+	}
+}
+
 func TestTheCheckWantsASession(t *testing.T) {
 	apptest.Route(t, apptest.Provider(t))
 	recorder := httptest.NewRecorder()

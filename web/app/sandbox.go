@@ -11,26 +11,30 @@ import (
 )
 
 // The sandbox of an owner is the machine that runs the tools of a turn, and it
-// is reached with three secrets of that owner in heimdall, under a project of
+// is reached with the secrets of that owner in heimdall, under a project of
 // its own so they are not mixed with the secrets of the projects: where it is,
-// who to be there and the key to get in. None of the three is written down
-// anywhere else, so a sandbox moves without touching the workspace.
+// who to be there, the key to get in and the word the key was kept with, when
+// it has one. None of them is written down anywhere else, so a sandbox moves
+// without touching the workspace.
 const (
 	SandboxProject = "sandbox"
 	SandboxEnv     = "default"
 
-	SandboxAddr = "SSH_ADDR"
-	SandboxUser = "SSH_USER"
-	SandboxKey  = "SSH_KEY"
+	SandboxAddr       = "SSH_ADDR"
+	SandboxUser       = "SSH_USER"
+	SandboxKey        = "SSH_KEY"
+	SandboxPassphrase = "SSH_PASSPHRASE"
 )
 
 // Sandbox is how a turn gets into the machine of an owner, as it is loaded:
 // what is there, complete or not, which is what the panel that loads it shows.
-// `Ready` is what says whether a turn can use it.
+// `Ready` is what says whether a turn can use it. The passphrase is the word
+// the key was kept with, and most keys have none.
 type Sandbox struct {
-	Addr string
-	User string
-	Key  []byte
+	Addr       string
+	User       string
+	Key        []byte
+	Passphrase []byte
 }
 
 // ErrNoSandbox is what a turn gets when its owner loaded no sandbox: without
@@ -45,20 +49,25 @@ type Dialer interface {
 	Dial(sandbox Sandbox) compute.Channel
 }
 
-// SSH is the way in: the three secrets of the sandbox, over ssh.
+// SSH is the way in: the secrets of the sandbox, over ssh.
 type SSH struct{}
 
 func (SSH) Dial(sandbox Sandbox) compute.Channel {
-	return compute.NewSSH(sandbox.Addr, sandbox.User, sandbox.Key)
+	return compute.NewSSH(sandbox.Addr, sandbox.User, sandbox.Key, sandbox.Passphrase)
 }
 
-// Sandbox reads the three secrets of the sandbox of an owner.
+// Sandbox reads the secrets of the sandbox of an owner.
 func (s *Service) Sandbox(ctx context.Context, owner chat.Owner) (Sandbox, error) {
 	secrets, err := s.Heimdall.Secrets(ctx, heimdallOwner(owner), SandboxProject, SandboxEnv)
 	if err != nil {
 		return Sandbox{}, err
 	}
-	return Sandbox{Addr: secrets[SandboxAddr], User: secrets[SandboxUser], Key: []byte(secrets[SandboxKey])}, nil
+	return Sandbox{
+		Addr:       secrets[SandboxAddr],
+		User:       secrets[SandboxUser],
+		Key:        []byte(secrets[SandboxKey]),
+		Passphrase: []byte(secrets[SandboxPassphrase]),
+	}, nil
 }
 
 // Ready says whether a sandbox has the three pieces a turn needs, and which

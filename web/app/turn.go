@@ -529,14 +529,26 @@ func (s *Service) machineOf(ctx context.Context, owner chat.Owner) (workspace.Wo
 		return workspace.Workspace{}, nil, err
 	}
 	channel := s.Dialer.Dial(sandbox)
-	mounted, err := compute.NewMachine(channel, space.Path).Mounted(ctx)
-	if err != nil {
-		return workspace.Workspace{}, nil, fmt.Errorf("no pude entrar a la máquina: %w", err)
-	}
-	if !mounted {
-		return workspace.Workspace{}, nil, fmt.Errorf("la máquina no tiene el volumen de %s montado en %s", owner.ID, space.Path)
+	if err := s.reach(ctx, owner, space.Path, channel); err != nil {
+		return workspace.Workspace{}, nil, err
 	}
 	return space, channel, nil
+}
+
+// reach says whether a channel can run a turn over that volume: it gets in,
+// and the volume of the owner is mounted inside. It is what a turn asks before
+// running and what the button that checks a machine asks, which is why it
+// takes the channel and not the sandbox: the same question, with secrets that
+// are loaded or secrets somebody just typed.
+func (s *Service) reach(ctx context.Context, owner chat.Owner, volume string, channel compute.Channel) error {
+	mounted, err := compute.NewMachine(channel, volume).Mounted(ctx)
+	if err != nil {
+		return fmt.Errorf("no pude entrar a la máquina: %w", err)
+	}
+	if !mounted {
+		return fmt.Errorf("la máquina no tiene el volumen de %s montado en %s", owner.ID, volume)
+	}
+	return nil
 }
 
 // ProjectDir is the directory of a project: the workspace of whoever owns it —

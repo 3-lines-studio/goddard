@@ -13,6 +13,22 @@ import type { SandboxCheck, Setup } from "./types";
 
 const STEPS = ["vos", "el modelo", "la computadora"];
 
+// first is where the page opens when the URL does not say: the first step that
+// is still owed. A name nobody chose is the one that comes with the mail, and
+// half a model is not a model.
+function first(setup: Setup) {
+  if (setup.user.name === setup.user.email.split("@")[0]) return 0;
+  if (setup.model.own && !setup.model.has_key) return 1;
+  return 2;
+}
+
+// asked is the step in the URL, if it is one: that is what keeps the step
+// somebody is in when they reload the page or come back with the back button.
+function asked(): number {
+  const one = Number(new URLSearchParams(window.location.search).get("paso"));
+  return Number.isInteger(one) && one >= 1 && one <= STEPS.length ? one - 1 : -1;
+}
+
 // Onboarding is the first setup: what goddard calls somebody, the model it
 // answers with and the machine its tools run in. The name is a courtesy and
 // the other two are not — without a machine and a model there is no turn — and
@@ -29,6 +45,7 @@ export function Onboarding() {
   const [addr, setAddr] = useState("");
   const [user, setUser] = useState("");
   const [key, setKey] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [answer, setAnswer] = useState("");
@@ -48,9 +65,15 @@ export function Onboarding() {
     setName(found.user.name);
     setBase(found.model.base);
     setModelName(found.model.name);
-    setPath(found.compute.path);
+    setPath(found.compute.addr || found.compute.has_key ? found.compute.path : "");
     setAddr(found.compute.addr);
     setUser(found.compute.user);
+    setStep(asked() >= 0 ? asked() : first(found));
+  }
+
+  function go(step: number) {
+    setStep(step);
+    window.history.replaceState(null, "", `/onboarding?paso=${step + 1}`);
   }
 
   async function call(target: string, method: string, body?: unknown) {
@@ -71,31 +94,31 @@ export function Onboarding() {
 
   async function saveName(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (await call("/api/me", "PATCH", { name })) setStep(1);
+    if (await call("/api/me", "PATCH", { name })) go(1);
   }
 
   async function useHouse() {
-    if (await call("/api/model", "DELETE")) setStep(2);
+    if (await call("/api/model", "DELETE")) go(2);
   }
 
   async function saveModel(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!(await call("/api/model", "POST", { base, name: modelName, key: modelKey }))) return;
     setModelKey("");
-    setStep(2);
+    go(2);
   }
 
   async function saveMachine(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAnswer("");
-    if (!(await call("/api/workspace", "POST", { path, addr, user, key }))) return;
-    const response = await call("/api/workspace/check", "POST", { org: "" });
+    const response = await call("/api/workspace/check", "POST", { org: "", path, addr, user, key, passphrase });
     if (!response) return;
     const found: SandboxCheck = await response.json();
     if (!found.ok) {
       setAnswer(found.message);
       return;
     }
+    if (!(await call("/api/workspace", "POST", { path, addr, user, key, passphrase }))) return;
     window.location.href = "/";
   }
 
@@ -130,7 +153,7 @@ export function Onboarding() {
                   <Button type="submit" data-onboarding-next="vos" disabled={busy !== ""}>
                     {busy ? "guardando…" : "Seguir"}
                   </Button>
-                  <Button type="button" variant="ghost" data-onboarding-skip="" onClick={() => setStep(1)}>
+                  <Button type="button" variant="ghost" data-onboarding-skip="" onClick={() => go(1)}>
                     Saltear
                   </Button>
                 </Field>
@@ -211,7 +234,7 @@ export function Onboarding() {
                 </Card>
               </Field>
               <Field>
-                <Button type="button" variant="ghost" data-onboarding-skip-model="" onClick={() => setStep(2)}>
+                <Button type="button" variant="ghost" data-onboarding-skip-model="" onClick={() => go(2)}>
                   Seguir con el de la casa
                 </Button>
               </Field>
@@ -226,10 +249,12 @@ export function Onboarding() {
                     name="path"
                     value={path}
                     data-onboarding-path=""
+                    placeholder="/home/tu-usuario/goddard"
+                    required
                     onChange={(event) => setPath(event.target.value)}
                   />
                   <FieldDescription>
-                    La carpeta donde viven los proyectos, ya montada en la máquina: goddard la usa tal cual y no la
+                    La carpeta donde viven los proyectos adentro de esa máquina. Tiene que existir ya: goddard no la
                     crea.
                   </FieldDescription>
                 </Field>
@@ -241,6 +266,7 @@ export function Onboarding() {
                     value={addr}
                     data-onboarding-addr=""
                     placeholder="sandbox.local:22"
+                    required
                     onChange={(event) => setAddr(event.target.value)}
                   />
                   <FieldDescription>La máquina que corre las herramientas, y el puerto del ssh.</FieldDescription>
@@ -253,6 +279,7 @@ export function Onboarding() {
                     value={user}
                     data-onboarding-user=""
                     placeholder="goddard"
+                    required
                     onChange={(event) => setUser(event.target.value)}
                   />
                 </Field>
@@ -266,14 +293,27 @@ export function Onboarding() {
                     data-onboarding-ssh-key=""
                     className="font-mono text-xs"
                     placeholder={setup.compute.has_key ? "la que ya está" : "el archivo entero"}
+                    required={!setup.compute.has_key}
                     onChange={(event) => setKey(event.target.value)}
                   />
                   <FieldDescription>La que entra a la máquina sin pedir contraseña.</FieldDescription>
                 </Field>
                 <Field>
+                  <FieldLabel htmlFor="passphrase">passphrase</FieldLabel>
+                  <Input
+                    id="passphrase"
+                    name="passphrase"
+                    value={passphrase}
+                    data-onboarding-passphrase=""
+                    placeholder={setup.compute.has_passphrase ? "la que ya está" : "sin passphrase"}
+                    onChange={(event) => setPassphrase(event.target.value)}
+                  />
+                  <FieldDescription>Sólo si la llave se guardó con una palabra.</FieldDescription>
+                </Field>
+                <Field>
                   <Button type="submit" data-onboarding-check="" disabled={busy !== ""}>
                     <LaptopIcon data-icon="inline-start" />
-                    {busy ? "probando…" : "Guardar y probar"}
+                    {busy ? "probando…" : "Probar y guardar"}
                   </Button>
                 </Field>
               </FieldGroup>

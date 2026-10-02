@@ -35,10 +35,11 @@ type modelView struct {
 }
 
 type computeView struct {
-	Path   string `json:"path"`
-	Addr   string `json:"addr"`
-	User   string `json:"user"`
-	HasKey bool   `json:"has_key"`
+	Path          string `json:"path"`
+	Addr          string `json:"addr"`
+	User          string `json:"user"`
+	HasKey        bool   `json:"has_key"`
+	HasPassphrase bool   `json:"has_passphrase"`
 }
 
 // Get is how much of the first setup of whoever is asking is done, and what is
@@ -70,10 +71,11 @@ func Get(w http.ResponseWriter, r *http.Request) {
 			House:  service.Model,
 		},
 		Compute: computeView{
-			Path:   volumes.Path,
-			Addr:   setup.Sandbox.Addr,
-			User:   setup.Sandbox.User,
-			HasKey: len(setup.Sandbox.Key) > 0,
+			Path:          volumes.Path,
+			Addr:          setup.Sandbox.Addr,
+			User:          setup.Sandbox.User,
+			HasKey:        len(setup.Sandbox.Key) > 0,
+			HasPassphrase: len(setup.Sandbox.Passphrase) > 0,
 		},
 	}
 	w.Header().Set("Content-Type", "application/json")

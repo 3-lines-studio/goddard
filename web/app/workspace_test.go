@@ -138,6 +138,47 @@ func TestRemovingAWorkspaceTakesThePathAndTheSandboxAway(t *testing.T) {
 	}
 }
 
+func TestThePassphraseOfAKeyIsKeptAndGoesAwayWithTheMachine(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	user := apptest.User(t, service)
+	owner := chat.Owner{Kind: chat.OwnerUser, ID: user.ID}
+	if err := service.SaveWorkspace(t.Context(), owner, t.TempDir(), app.Sandbox{
+		Addr:       "127.0.0.1:22",
+		User:       "tester",
+		Key:        []byte("una-llave"),
+		Passphrase: []byte("una palabra"),
+	}, user.ID); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	found, err := service.Sandbox(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if string(found.Passphrase) != "una palabra" {
+		t.Fatalf("la passphrase quedó %q", found.Passphrase)
+	}
+	if err := service.SaveWorkspace(t.Context(), owner, t.TempDir(), app.Sandbox{Addr: "otra.local:22"}, user.ID); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	again, err := service.Sandbox(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if string(again.Passphrase) != "una palabra" {
+		t.Fatalf("guardar sin passphrase la pisó: %q", again.Passphrase)
+	}
+	if err := service.RemoveWorkspace(t.Context(), owner, user.ID); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	gone, err := service.Sandbox(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if len(gone.Passphrase) > 0 {
+		t.Fatalf("sacando la máquina quedó la passphrase: %q", gone.Passphrase)
+	}
+}
+
 func TestCheckingAWorkspaceSaysWhetherTheVolumeIsThere(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t))
 	user := apptest.User(t, service)
@@ -147,14 +188,14 @@ func TestCheckingAWorkspaceSaysWhetherTheVolumeIsThere(t *testing.T) {
 	if err := service.SaveWorkspace(t.Context(), owner, volume, sandbox, user.ID); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := service.CheckWorkspace(t.Context(), owner); err != nil {
+	if err := service.CheckSandbox(t.Context(), owner, volume, sandbox); err != nil {
 		t.Fatalf("el volumen está y dijo %v", err)
 	}
 	gone := filepath.Join(volume, "no-está")
 	if err := service.SaveWorkspace(t.Context(), owner, gone, sandbox, user.ID); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	err := service.CheckWorkspace(t.Context(), owner)
+	err := service.CheckSandbox(t.Context(), owner, gone, sandbox)
 	if err == nil {
 		t.Fatal("dijo que anda con un volumen que no está")
 	}
@@ -179,7 +220,11 @@ func TestCheckingASandboxThatDoesNotAnswerSaysSo(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 	service.Dialer = app.SSH{}
-	err := service.CheckWorkspace(t.Context(), owner)
+	err := service.CheckSandbox(t.Context(), owner, volume, app.Sandbox{
+		Addr: "127.0.0.1:1",
+		User: "tester",
+		Key:  []byte("no soy una llave"),
+	})
 	if err == nil {
 		t.Fatal("dijo que entró a una máquina que no contesta")
 	}
@@ -189,7 +234,9 @@ func TestCheckingASandboxThatDoesNotAnswerSaysSo(t *testing.T) {
 }
 
 func TestCheckingASandboxWithNoKeySaysWhichOneIsMissing(t *testing.T) {
-	if err := apptest.Service(t, apptest.Provider(t)).CheckWorkspace(t.Context(), chat.Owner{Kind: chat.OwnerOrg, ID: "acme"}); !errors.Is(err, app.ErrNoSandbox) {
+	service := apptest.Service(t, apptest.Provider(t))
+	owner := chat.Owner{Kind: chat.OwnerOrg, ID: "acme"}
+	if err := service.CheckSandbox(t.Context(), owner, "/volumes/acme", app.Sandbox{}); !errors.Is(err, app.ErrNoSandbox) {
 		t.Fatalf("sin llave devolvió %v", err)
 	}
 }

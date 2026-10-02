@@ -72,22 +72,24 @@ export type Tab = {
 
 // Sandbox is the workspace of an owner as the app hands it over: where its
 // projects live and how to reach the machine that runs the tools over them.
-// The key never comes back, only whether there is one.
+// The key and the passphrase never come back, only whether there is one.
 export type Sandbox = {
   owner: Owner;
   path: string;
   addr: string;
   user: string;
   has_key: boolean;
+  has_passphrase: boolean;
 };
 
-// SandboxInput is what the panel sends: the same, and the key only when
-// somebody typed a new one.
+// SandboxInput is what the panel sends: the same, and the key and the
+// passphrase only when somebody typed new ones.
 export type SandboxInput = {
   path: string;
   addr: string;
   user: string;
   key: string;
+  passphrase: string;
 };
 
 // SandboxCheck is what the panel gets when it asks a machine if it answers.
@@ -104,7 +106,7 @@ export type Setup = {
   done: boolean;
   user: { name: string; email: string };
   model: { own: boolean; base: string; name: string; has_key: boolean; house: string };
-  compute: { path: string; addr: string; user: string; has_key: boolean };
+  compute: { path: string; addr: string; user: string; has_key: boolean; has_passphrase: boolean };
 };
 
 // Model is the model of an owner as the app hands it over: the one it brought,
