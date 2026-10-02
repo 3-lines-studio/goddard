@@ -327,14 +327,19 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, pr
 		s.failed(ctx, conversation.ID, err)
 		return "", err
 	}
+	provider, model, err := s.ModelOf(ctx, project.Owner)
+	if err != nil {
+		s.failed(ctx, conversation.ID, err)
+		return "", err
+	}
 	tools := s.tools(project, conversation.ID, machine, actor)
 	options := &axe.RunOptions{
-		Model:    s.Model,
-		System:   s.system(ctx, tools, conversation, project, dir, actor),
+		Model:    model,
+		System:   s.system(ctx, tools, conversation, project, dir, model, actor),
 		Tools:    tools,
 		MaxTurns: math.MaxInt,
 	}
-	end := axe.RunStream(ctx, s.Provider, options, messages, sink)
+	end := axe.RunStream(ctx, provider, options, messages, sink)
 	if len(end.Messages) > len(messages) {
 		fresh := make([]axe.Entry, 0, len(end.Messages)-len(messages))
 		for _, message := range end.Messages[len(messages):] {
@@ -385,7 +390,7 @@ func (s *Service) tools(project chat.Project, conversationID string, machine axe
 
 // system is the prompt: what the harness says about its tools, the fragments
 // of goddard, the memory of the project and where this turn is running.
-func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project chat.Project, dir string, actor who) string {
+func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project chat.Project, dir, model string, actor who) string {
 	out := axe.SystemPrompt(tools)
 	skills, err := s.Skill.Index(ctx, actor.viewer)
 	if err != nil {
@@ -398,7 +403,7 @@ func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation cha
 	})
 	if err != nil {
 		log.Printf("goddard: no pude armar el prompt: %v", err)
-		return out + "\n" + s.context(conversation, dir)
+		return out + "\n" + s.context(conversation, dir, model)
 	}
 	out += "\n\n" + fragments
 	memory, err := s.Memo.Render(ctx, s.scopeOf(project, actor.viewer.User))
@@ -408,12 +413,12 @@ func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation cha
 	if strings.TrimSpace(memory) != "" {
 		out += "\n\n## Memoria en contexto\n\n" + memory
 	}
-	return out + "\n" + s.context(conversation, dir)
+	return out + "\n" + s.context(conversation, dir, model)
 }
 
-func (s *Service) context(conversation chat.Conversation, dir string) string {
+func (s *Service) context(conversation chat.Conversation, dir, model string) string {
 	return fmt.Sprintf("## Entorno de ejecución\n- Modelo: %s\n- Workspace: %s\n- Conversación: %s\n",
-		s.Model, dir, conversation.ID)
+		model, dir, conversation.ID)
 }
 
 // logSink turns what axe does into the events the web reads: what is worth

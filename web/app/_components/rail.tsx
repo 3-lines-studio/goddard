@@ -11,6 +11,7 @@ import {
   PencilIcon,
   PlusIcon,
   SunIcon,
+  SparklesIcon,
   TrashIcon,
   UsersIcon,
   XIcon,
@@ -72,6 +73,7 @@ export function Rail({
   onOpenAgenda,
   onOpenOrgs,
   onOpenSandbox,
+  onOpenModel,
   onToggleTheme,
   onLogout,
 }: {
@@ -99,6 +101,7 @@ export function Rail({
   onOpenAgenda: () => void;
   onOpenOrgs: () => void;
   onOpenSandbox: () => void;
+  onOpenModel: () => void;
   onToggleTheme: () => void;
   onLogout: () => void;
 }) {
@@ -324,6 +327,12 @@ export function Rail({
             >
               <LaptopIcon />
               <span>Computadoras</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={tab?.kind === "model"} onClick={onOpenModel} data-model-tab="" tooltip="Modelo">
+              <SparklesIcon />
+              <span>Modelo</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

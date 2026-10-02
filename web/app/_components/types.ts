@@ -65,7 +65,7 @@ export type Skill = {
 
 export type Tab = {
   key: string;
-  kind: "thread" | "agenda" | "memoria" | "orgs" | "sandbox";
+  kind: "thread" | "agenda" | "memoria" | "orgs" | "sandbox" | "model";
   title: string;
   slug: string;
 };
@@ -94,6 +94,26 @@ export type SandboxInput = {
 export type SandboxCheck = {
   ok: boolean;
   message: string;
+};
+
+// Model is the model of an owner as the app hands it over: the one it brought,
+// or nothing when it answers with the one of the house, whose name always
+// comes. The key never comes back, only whether there is one.
+export type Model = {
+  owner: Owner;
+  own: boolean;
+  base: string;
+  name: string;
+  has_key: boolean;
+  house: string;
+};
+
+// ModelInput is what the panel sends: the same, and the key only when somebody
+// typed a new one.
+export type ModelInput = {
+  base: string;
+  name: string;
+  key: string;
 };
 
 export type Event = {
