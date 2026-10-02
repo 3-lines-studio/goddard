@@ -218,7 +218,7 @@ GET  /api/workspace?org=                where the projects of an owner live and 
 POST /api/workspace                     {org, path, addr, user, key}: loads it; what comes empty stays as it is
 DELETE /api/workspace?org=              unloads it: the volume by default, and a turn does not run
 POST /api/workspace/check               {org}: dials that sandbox and says whether a turn could run
-POST /api/login                         {email}: mails a one-shot link, or hands it back
+POST /api/login                         {email}: mails a one-shot link; without a provider it answers 503
 GET  /auth?token=                       burns the link, sets the cookie and goes home
 POST /api/logout                        signs the session out
 ```
@@ -294,9 +294,11 @@ To run it: `DATABASE_URL`, `OPENAI_API_KEY` and `HEIMDALL_MASTER_KEY`, plus
 `GODDARD_BASE`, `GODDARD_MODEL` and `GODDARD_ALLOWED_EMAILS` when the defaults
 do not fit. The master key is 32 bytes in hex, the same in every instance of
 the same goddard, and nothing opens again if it changes. The
-link goes out through Resend with `RESEND_API_KEY` and `GODDARD_WEB_FROM`;
-without a key the link comes back in the response instead of in an email, which
-is how it is used in development.
+link goes out through Resend with `RESEND_API_KEY` and `GODDARD_WEB_FROM`.
+Without a provider the request is refused —503, and nothing enters— and the
+link is left in the log of the server: a link handed back in the answer is a
+way in for whoever asks, and a goddard that lost its mailer by accident would
+be open to anybody.
 
 ## Migrate
 

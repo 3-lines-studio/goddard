@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -19,11 +20,11 @@ var (
 	ErrNotAllowed = errors.New("ese mail no está en la lista")
 	ErrTooSoon    = errors.New("pediste un link hace un momento")
 	ErrNoSession  = errors.New("no hay sesión")
+	ErrNoMailer   = errors.New("no hay proveedor de mails: falta RESEND_API_KEY o GODDARD_WEB_FROM")
 )
 
 // Login mints a one-shot link for an email and returns what goes in it. It is
-// the caller who mails it, and who decides to show it when there is no
-// provider.
+// the caller who mails it, and the link never travels back in the answer.
 func (s *Service) Login(ctx context.Context, email string) (string, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !strings.Contains(email, "@") {
@@ -120,12 +121,14 @@ func (s *Service) allowed(email string) bool {
 	return false
 }
 
-// SendLink mails a link when there is a provider, and says it did not when
-// there is none: without one the link is handed back to whoever asked, which
-// is how it is used in development.
-func (s *Service) SendLink(ctx context.Context, to, link string) (bool, error) {
+// SendLink mails a link when there is a provider. Without one there is nothing
+// to send it with, so the link is left in the log of the server and never in
+// the answer: a link handed back is a way in for whoever asks, and a goddard
+// that lost its mailer by accident would be open to anybody.
+func (s *Service) SendLink(ctx context.Context, to, link string) error {
 	if s.Mail == nil {
-		return false, nil
+		log.Printf("goddard: sin proveedor de mails, el link de %s es %s", to, link)
+		return ErrNoMailer
 	}
-	return true, s.Mail.sendLink(ctx, to, link, s.Assistant)
+	return s.Mail.sendLink(ctx, to, link, s.Assistant)
 }
