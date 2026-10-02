@@ -220,6 +220,7 @@ export function Rail({
                     <DropdownMenuGroup>
                       <DropdownMenuItem
                         variant="destructive"
+                        closeOnClick={false}
                         data-delete-project={project.id}
                         onClick={() => onAsk("/api/projects", project.id)}
                       >
