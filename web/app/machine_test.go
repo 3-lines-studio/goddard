@@ -6,9 +6,67 @@ import (
 	"testing"
 
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/compute/sshtest"
 	"github.com/3-lines-studio/goddard/web/app"
 	"github.com/3-lines-studio/goddard/web/app/apptest"
 )
+
+// TestATurnRunsInTheSandboxOverSSH is the whole way of production: the app
+// reads the workspace of the owner and the three secrets of its sandbox, dials
+// the machine over ssh and the tools run there. What the agent writes lands
+// where that machine has the volume, and nothing of it touches the container
+// goddard runs in.
+func TestATurnRunsInTheSandboxOverSSH(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t,
+		[]string{
+			`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"bash","arguments":"{\"command\":\"echo hola > nota.txt\"}"}}]}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+		},
+		[]string{
+			`{"choices":[{"delta":{"content":"listo"}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		}))
+	user := apptest.User(t, service)
+	conversation := apptest.Thread(t, service)
+
+	server := sshtest.New(t)
+	volume := t.TempDir()
+	owner := chat.Owner{Kind: chat.OwnerUser, ID: user.ID}
+	if err := service.SaveWorkspace(t.Context(), owner, volume, app.Sandbox{
+		Addr: server.Addr,
+		User: server.User,
+		Key:  server.Key,
+	}, user.ID); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	service.Dialer = app.SSH{}
+
+	upload, err := service.Chat.PutUpload(t.Context(), conversation.ID, "adjunto.txt", "text/plain", []byte("lo que subí"))
+	if err != nil {
+		t.Fatalf("putUpload: %v", err)
+	}
+	if err := service.Say(t.Context(), conversation.ID, user, "guardá la nota", []string{upload.ID}); err != nil {
+		t.Fatalf("say: %v", err)
+	}
+	apptest.Wait(t, service, conversation.ID)
+
+	dir := filepath.Join(volume, "goddard")
+	for path, want := range map[string]string{
+		filepath.Join(dir, "nota.txt"):                              "hola\n",
+		filepath.Join(dir, "files", conversation.ID, "adjunto.txt"): "lo que subí",
+	} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("el sandbox no tiene %s: %v", path, err)
+		}
+		if string(data) != want {
+			t.Fatalf("%s quedó %q", path, data)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(service.Volumes, user.ID)); !os.IsNotExist(err) {
+		t.Fatalf("también escribió en el container de goddard: %v", err)
+	}
+}
 
 // projectDir is the directory of a project: the workspace of the owner inside
 // the volume, and the slug of the project, which is where the tools of a turn
