@@ -559,6 +559,10 @@ func (s *Service) machineOf(ctx context.Context, owner chat.Owner) (workspace.Wo
 	if err != nil {
 		return workspace.Workspace{}, nil, err
 	}
+	space, err = s.Workspace(ctx, owner)
+	if err != nil {
+		return workspace.Workspace{}, nil, err
+	}
 	channel := s.Dialer.Dial(sandbox)
 	if err := s.reach(ctx, owner, space.Path, channel); err != nil {
 		return workspace.Workspace{}, nil, err
