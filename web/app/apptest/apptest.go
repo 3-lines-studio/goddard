@@ -22,6 +22,7 @@ import (
 	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/heimdall"
 	"github.com/3-lines-studio/goddard/migrations"
 	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/prompt"
@@ -106,12 +107,27 @@ func SSE(lines ...string) string {
 // builds it.
 func Service(t *testing.T, server *httptest.Server) *app.Service {
 	t.Helper()
-	built := app.New(Database(t), axe.NewOpenAI(server.URL, "k1"), t.TempDir())
+	built := app.New(Database(t), axe.NewOpenAI(server.URL, "k1"), t.TempDir(), MasterKey(t))
 	built.Model = "m1"
 	built.Assistant = "Jimmy"
 	built.Language = prompt.DefaultLanguage
 	built.Spec = prompt.Default
 	return built
+}
+
+// MasterKey is the key the app of a test seals its secrets with: any 32 bytes
+// do, and the test reads them back through the app and not around it.
+func MasterKey(t *testing.T) heimdall.Key {
+	t.Helper()
+	text, err := heimdall.RandomHex(32)
+	if err != nil {
+		t.Fatalf("no pude armar la master key: %v", err)
+	}
+	key, err := heimdall.KeyFromHex(text)
+	if err != nil {
+		t.Fatalf("no pude armar la master key: %v", err)
+	}
+	return key
 }
 
 // Route is the app a test of a route answers with: it starts it, so that the

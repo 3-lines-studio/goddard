@@ -1,6 +1,9 @@
 package heimdall
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type Owner struct {
 	Kind string `json:"kind"`
@@ -28,5 +31,8 @@ func (o Owner) check() error {
 	if o.Kind != OwnerOrg && o.Kind != OwnerUser {
 		return bad(fmt.Sprintf("«%s» no es una organización ni un usuario", o.Kind))
 	}
-	return slug(o.ID)
+	if strings.TrimSpace(o.ID) == "" {
+		return bad("el dueño no tiene id")
+	}
+	return nil
 }
