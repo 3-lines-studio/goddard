@@ -10,6 +10,8 @@ export type Owner = {
   id: string;
 };
 
+export type Theme = "light" | "dark" | "system";
+
 export type Project = {
   id: string;
   slug: string;

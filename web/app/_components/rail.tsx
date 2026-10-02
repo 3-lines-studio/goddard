@@ -7,6 +7,7 @@ import {
   LaptopIcon,
   LogOutIcon,
   MessageSquarePlusIcon,
+  MonitorIcon,
   MoonIcon,
   PencilIcon,
   PlusIcon,
@@ -47,7 +48,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { Avatar } from "./avatar";
-import type { Org, Project, Tab } from "./types";
+import type { Org, Project, Tab, Theme } from "./types";
 import { VISIBLE } from "./types";
 
 export function Rail({
@@ -76,7 +77,7 @@ export function Rail({
   onOpenOrgs,
   onOpenSandbox,
   onOpenModel,
-  onToggleTheme,
+  onTheme,
   onLogout,
 }: {
   projects: Project[];
@@ -84,7 +85,7 @@ export function Rail({
   tab: Tab | null;
   unread: number;
   user: string;
-  theme: string;
+  theme: Theme;
   collapsed: Set<string>;
   more: Set<string>;
   editing: string;
@@ -104,7 +105,7 @@ export function Rail({
   onOpenOrgs: () => void;
   onOpenSandbox: () => void;
   onOpenModel: () => void;
-  onToggleTheme: () => void;
+  onTheme: (theme: Theme) => void;
   onLogout: () => void;
 }) {
   const groups = [
@@ -348,16 +349,37 @@ export function Rail({
         <div className="flex items-center justify-between gap-2 px-2 text-xs">
           <span className="truncate text-muted-foreground">{user}</span>
           <span className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              onClick={onToggleTheme}
-              data-theme-toggle=""
-              aria-label={theme === "dark" ? "Tema claro" : "Tema oscuro"}
-            >
-              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    data-theme-toggle=""
+                    aria-label="Tema"
+                  />
+                }
+              >
+                {theme === "system" ? <MonitorIcon /> : theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem data-theme="light" onClick={() => onTheme("light")}>
+                    <SunIcon />
+                    claro
+                  </DropdownMenuItem>
+                  <DropdownMenuItem data-theme="dark" onClick={() => onTheme("dark")}>
+                    <MoonIcon />
+                    oscuro
+                  </DropdownMenuItem>
+                  <DropdownMenuItem data-theme="system" onClick={() => onTheme("system")}>
+                    <MonitorIcon />
+                    el del sistema
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button type="button" variant="ghost" size="icon-xs" onClick={onLogout} data-logout="" aria-label="Salir">
               <LogOutIcon />
             </Button>
