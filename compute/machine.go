@@ -123,7 +123,7 @@ func (m *Machine) Run(command string, timeout uint64, _ axe.Progress) string {
 	defer cancel()
 	script := ""
 	if m.dir != "" {
-		script += "cd -- " + quote(m.dir) + " || exit 1\n"
+		script += "mkdir -p -- " + quote(m.dir) + " && cd -- " + quote(m.dir) + " || exit 1\n"
 	}
 	script += "{ " + command + "\n} 2>&1"
 	result, err := m.channel.Exec(ctx, "bash -s", []byte(script))
