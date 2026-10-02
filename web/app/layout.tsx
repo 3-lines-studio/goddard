@@ -13,7 +13,7 @@ const BOOT = `(() => {
     saved = localStorage.getItem("goddard-theme");
   } catch {}
   const light = matchMedia("(prefers-color-scheme: light)").matches;
-  const theme = saved || (light ? "light" : "dark");
+  const theme = saved === "light" || saved === "dark" ? saved : light ? "light" : "dark";
   document.documentElement.classList.toggle("dark", theme === "dark");
 })();`;
 

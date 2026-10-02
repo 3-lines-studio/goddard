@@ -15,7 +15,7 @@ import { Orgs } from "./orgs";
 import { Rail } from "./rail";
 import { Sandboxes } from "./sandbox";
 import { Composer, Thread } from "./thread";
-import type { Event, Fact, Member, Model, ModelInput, Org, Project, Sandbox, SandboxCheck, SandboxInput, Skill, Tab, Task, Upload } from "./types";
+import type { Event, Fact, Member, Model, ModelInput, Org, Project, Sandbox, SandboxCheck, SandboxInput, Skill, Tab, Task, Theme, Upload } from "./types";
 
 const TABS_KEY = "goddard-tabs";
 const OPEN_KEY = "goddard-open-projects";
@@ -38,12 +38,30 @@ function writeList(key: string, values: string[]) {
   }
 }
 
-function rememberTheme(name: string) {
+function rememberTheme(theme: Theme) {
   try {
-    localStorage.setItem(THEME_KEY, name);
+    localStorage.setItem(THEME_KEY, theme);
   } catch {
     return;
   }
+}
+
+function readTheme(): Theme {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "light" || saved === "dark" || saved === "system") return saved;
+  } catch {
+    return "system";
+  }
+  return "system";
+}
+
+function systemTheme(): "light" | "dark" {
+  return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.classList.toggle("dark", (theme === "system" ? systemTheme() : theme) === "dark");
 }
 
 function tabFromKey(key: string, projects: Project[]): Tab | null {
@@ -95,7 +113,7 @@ export function Chat() {
   const [removingTask, setRemovingTask] = useState("");
   const [pending, setPending] = useState<{ key: string; ts: number } | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState<Theme>("system");
   const restored = useRef(false);
 
   const tabs = keys.map((key) => tabFromKey(key, projects)).filter((one): one is Tab => one !== null);
@@ -105,8 +123,18 @@ export function Chat() {
   const unread = tasks.reduce((total, task) => total + task.unread, 0);
 
   useEffect(() => {
-    setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
+    const saved = readTheme();
+    setTheme(saved);
+    applyTheme(saved);
   }, []);
+
+  useEffect(() => {
+    if (theme !== "system") return;
+    const query = matchMedia("(prefers-color-scheme: light)");
+    const onChange = () => applyTheme("system");
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, [theme]);
 
   useEffect(() => {
     if (restored.current) writeList(TABS_KEY, keys);
@@ -573,10 +601,9 @@ export function Chat() {
     return "idle";
   }
 
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
+  function pickTheme(next: Theme) {
     setTheme(next);
-    document.documentElement.classList.toggle("dark", next === "dark");
+    applyTheme(next);
     rememberTheme(next);
   }
 
@@ -711,7 +738,7 @@ export function Chat() {
         onOpenOrgs={() => openTab("orgs")}
         onOpenSandbox={() => openTab("sandbox")}
         onOpenModel={() => openTab("model")}
-        onToggleTheme={toggleTheme}
+        onTheme={pickTheme}
         onLogout={logout}
       />
       <SidebarInset className="min-w-0 overflow-hidden">
