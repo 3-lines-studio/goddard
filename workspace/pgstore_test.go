@@ -58,12 +58,6 @@ func TestAWorkspaceExistsWithoutARow(t *testing.T) {
 	if found.Path != Volumes+"/01M3" {
 		t.Fatalf("el path quedó %q", found.Path)
 	}
-	if found.Sandbox.Kind != SandboxSSH {
-		t.Fatalf("el sandbox quedó %+v", found.Sandbox)
-	}
-	if found.Reachable() {
-		t.Fatal("dijo que el sandbox se alcanza")
-	}
 }
 
 func TestAWorkspaceKeepsWhatIsWritten(t *testing.T) {
@@ -71,7 +65,6 @@ func TestAWorkspaceKeepsWhatIsWritten(t *testing.T) {
 	owner := Owner{Kind: OwnerOrg, ID: "01M4"}
 	wanted := New(owner)
 	wanted.Path = "/data/volumes/la-casa"
-	wanted.Sandbox = Sandbox{Kind: SandboxSSH, Addr: "sandbox.local:22", User: "goddard"}
 	if err := store.Set(t.Context(), wanted, "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
@@ -79,13 +72,13 @@ func TestAWorkspaceKeepsWhatIsWritten(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Path != wanted.Path || found.Sandbox != wanted.Sandbox {
+	if found.Path != wanted.Path {
 		t.Fatalf("volvió %+v", found)
 	}
 	if found.ProjectDir("goddard") != "/data/volumes/la-casa/goddard" {
 		t.Fatalf("el directorio del proyecto quedó %q", found.ProjectDir("goddard"))
 	}
-	wanted.Sandbox.Addr = "otro.local:22"
+	wanted.Path = "/data/volumes/otra-casa"
 	if err := store.Set(t.Context(), wanted, "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
@@ -93,8 +86,8 @@ func TestAWorkspaceKeepsWhatIsWritten(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Sandbox.Addr != "otro.local:22" {
-		t.Fatalf("el sandbox quedó %+v", found.Sandbox)
+	if found.Path != "/data/volumes/otra-casa" {
+		t.Fatalf("el path quedó %q", found.Path)
 	}
 }
 

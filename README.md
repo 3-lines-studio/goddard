@@ -64,9 +64,16 @@ below.
   compatible with. The command line keeps the `doppler` dialect,
   `heimdall run --preserve-env -- npm test`. Outside: the HTTP server, the web
   page and the magic link, which bifrost and `auth` bring. It is where goddard
-  keeps what it has to seal: the key of the sandbox of an owner, under the
-  `sandbox` project and the `default` environment, sealed with
-  `HEIMDALL_MASTER_KEY`.
+  keeps what it has to seal: the sandbox of an owner — where it is, who to be
+  there and the key to get in — under the `sandbox` project and the `default`
+  environment, sealed with `HEIMDALL_MASTER_KEY`.
+- `workspace` — where the projects of an owner live, in the `workspace` schema
+  of the same Postgres: the path of the volume that holds them, `/volumes/<owner
+  id>` when nobody says otherwise, and the project inside it by its slug. It is
+  the owner's — a person, or the organization the projects are shared with —
+  and the path is stable on purpose, because a project that moves leaves every
+  file behind. How to reach the machine that runs the tools over them is not
+  here: it is the sandbox of `heimdall`.
 - `skill` — the skills: named instructions the agent loads into its context
   when the task calls for them, in the `skill` schema of the same Postgres.
   Port of jimmy's `src/skill.rs`, with the tree of directories replaced by
