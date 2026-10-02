@@ -13,6 +13,7 @@ import (
 	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/compute"
 	"github.com/3-lines-studio/goddard/heimdall"
 	"github.com/3-lines-studio/goddard/memo"
 	"github.com/3-lines-studio/goddard/metric"
@@ -47,6 +48,7 @@ type Service struct {
 	Heimdall   *heimdall.Store
 	Workspaces *workspace.PgStore
 	Metric     *metric.PgStore
+	House      compute.Provider
 	Dialer     Dialer
 	Assistant  string
 	Language   string

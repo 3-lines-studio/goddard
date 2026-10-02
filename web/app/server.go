@@ -17,6 +17,7 @@ import (
 	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/compute"
 	"github.com/3-lines-studio/goddard/heimdall"
 	"github.com/3-lines-studio/goddard/memo"
 	"github.com/3-lines-studio/goddard/metric"
@@ -112,6 +113,9 @@ func build(db *sql.DB) (*Service, error) {
 	built.Mail = newMailer()
 	built.Allowed = emails(os.Getenv("GODDARD_ALLOWED_EMAILS"))
 	built.Admins = emails(os.Getenv("GODDARD_ADMINS"))
+	if token := os.Getenv("GODDARD_BOAT_TOKEN"); token != "" {
+		built.House = compute.NewBoat(token)
+	}
 	built.Model = env("GODDARD_MODEL", "deepseek-flash")
 	built.Assistant = env("GODDARD_ASSISTANT", "Jimmy")
 	built.Language = env("GODDARD_LANGUAGE", prompt.DefaultLanguage)
