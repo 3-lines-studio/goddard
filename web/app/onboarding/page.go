@@ -1,4 +1,4 @@
-package app
+package onboarding
 
 import (
 	"errors"
@@ -7,14 +7,14 @@ import (
 	"github.com/3-lines-studio/bifrost"
 
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/web/app"
 )
 
-// Load keeps the app for whoever has a session and has gone through the first
-// setup: without a session there is nothing to show, so the request goes to the
-// login, which is where a link is asked for and where the cookie comes from,
-// and without a machine or a model there is no turn, so it goes to the setup.
+// Load keeps the first setup for whoever has a session and still owes it:
+// without a session the request goes to the login, and somebody whose goddard
+// already works goes home.
 func Load(r *http.Request) (any, error) {
-	service := Current()
+	service := app.Current()
 	if service == nil {
 		return nil, errors.New("goddard: el servicio no arrancó")
 	}
@@ -26,8 +26,8 @@ func Load(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !setup.Done() {
-		return nil, bifrost.Redirect("/onboarding", http.StatusSeeOther)
+	if setup.Done() {
+		return nil, bifrost.Redirect("/", http.StatusSeeOther)
 	}
 	return map[string]string{}, nil
 }
