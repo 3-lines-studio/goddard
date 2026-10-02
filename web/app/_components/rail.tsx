@@ -4,6 +4,7 @@ import {
   CalendarClockIcon,
   ChevronDownIcon,
   EllipsisIcon,
+  LaptopIcon,
   LogOutIcon,
   MessageSquarePlusIcon,
   MoonIcon,
@@ -70,6 +71,7 @@ export function Rail({
   onOpenTab,
   onOpenAgenda,
   onOpenOrgs,
+  onOpenSandbox,
   onToggleTheme,
   onLogout,
 }: {
@@ -96,6 +98,7 @@ export function Rail({
   onOpenTab: (key: string) => void;
   onOpenAgenda: () => void;
   onOpenOrgs: () => void;
+  onOpenSandbox: () => void;
   onToggleTheme: () => void;
   onLogout: () => void;
 }) {
@@ -310,6 +313,17 @@ export function Rail({
             <SidebarMenuButton isActive={tab?.kind === "orgs"} onClick={onOpenOrgs} data-orgs="" tooltip="Organizaciones">
               <UsersIcon />
               <span>Organizaciones</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={tab?.kind === "sandbox"}
+              onClick={onOpenSandbox}
+              data-sandbox=""
+              tooltip="Computadoras"
+            >
+              <LaptopIcon />
+              <span>Computadoras</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

@@ -12,8 +12,9 @@ import { Login } from "./login";
 import { Memory } from "./memory";
 import { Orgs } from "./orgs";
 import { Rail } from "./rail";
+import { Sandboxes } from "./sandbox";
 import { Composer, Thread } from "./thread";
-import type { Event, Fact, Member, Org, Project, Skill, Tab, Task, Upload } from "./types";
+import type { Event, Fact, Member, Org, Project, Sandbox, SandboxInput, Skill, Tab, Task, Upload } from "./types";
 
 const TABS_KEY = "goddard-tabs";
 const OPEN_KEY = "goddard-open-projects";
@@ -47,6 +48,7 @@ function rememberTheme(name: string) {
 function tabFromKey(key: string, projects: Project[]): Tab | null {
   if (key === "agenda") return { key, kind: "agenda", title: "Agenda", slug: "" };
   if (key === "orgs") return { key, kind: "orgs", title: "Organizaciones", slug: "" };
+  if (key === "sandbox") return { key, kind: "sandbox", title: "Computadoras", slug: "" };
   const memory = key.match(/^memoria:(.+)$/);
   if (memory) {
     const project = projects.find((one) => one.slug === memory[1]);
@@ -64,6 +66,8 @@ export function Chat() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [members, setMembers] = useState<Record<string, Member[]>>({});
+  const [spaces, setSpaces] = useState<Record<string, Sandbox>>({});
+  const [saving, setSaving] = useState("");
   const [keys, setKeys] = useState<string[]>([]);
   const [active, setActive] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -142,9 +146,26 @@ export function Chat() {
     setMembers((current) => ({ ...current, [org]: data.members ?? [] }));
   }, []);
 
+  const loadSpace = useCallback(async (org: string) => {
+    const target = org ? `/api/workspace?org=${encodeURIComponent(org)}` : "/api/workspace";
+    const response = await fetch(target);
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    const data: Sandbox = await response.json();
+    setSpaces((current) => ({ ...current, [org]: data }));
+  }, []);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (tab?.kind !== "sandbox") return;
+    if (!("" in spaces)) void loadSpace("");
+    for (const org of orgs) if (!(org.id in spaces)) void loadSpace(org.id);
+  }, [tab?.kind, orgs, spaces, loadSpace]);
 
   useEffect(() => {
     if (tab?.kind !== "orgs") return;
@@ -292,6 +313,23 @@ export function Chat() {
       return;
     }
     form.reset();
+    load();
+  }
+
+  async function saveSpace(org: string, input: SandboxInput) {
+    setSaving(org || "personal");
+    setError("");
+    const response = await fetch("/api/workspace", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ org, ...input }),
+    });
+    setSaving("");
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadSpace(org);
     load();
   }
 
@@ -596,6 +634,7 @@ export function Chat() {
         onOpenTab={openTab}
         onOpenAgenda={() => openTab("agenda")}
         onOpenOrgs={() => openTab("orgs")}
+        onOpenSandbox={() => openTab("sandbox")}
         onToggleTheme={toggleTheme}
         onLogout={logout}
       />
@@ -652,6 +691,10 @@ export function Chat() {
                     onRemove={(org, person) => void removeMember(org, person)}
                     onAsk={ask}
                   />
+                </div>
+              ) : tab.kind === "sandbox" ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <Sandboxes spaces={spaces} orgs={orgs} saving={saving} onSave={(org, input) => void saveSpace(org, input)} />
                 </div>
               ) : tab.kind === "agenda" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">
