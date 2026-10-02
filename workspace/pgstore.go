@@ -26,8 +26,8 @@ func (s *PgStore) Get(ctx context.Context, owner Owner) (Workspace, bool, error)
 	}
 	found := Workspace{Owner: owner}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT path FROM workspace.workspaces WHERE owner_kind = $1 AND owner_id = $2`,
-		owner.Kind, owner.ID).Scan(&found.Path)
+		`SELECT path, provider, sandbox_id FROM workspace.workspaces WHERE owner_kind = $1 AND owner_id = $2`,
+		owner.Kind, owner.ID).Scan(&found.Path, &found.Provider, &found.SandboxID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Workspace{}, false, nil
 	}
@@ -44,12 +44,14 @@ func (s *PgStore) Set(ctx context.Context, w Workspace, actor string) error {
 		return err
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO workspace.workspaces (owner_kind, owner_id, path, created_by)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO workspace.workspaces (owner_kind, owner_id, path, provider, sandbox_id, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (owner_kind, owner_id) DO UPDATE SET
 		     path = EXCLUDED.path,
+		     provider = EXCLUDED.provider,
+		     sandbox_id = EXCLUDED.sandbox_id,
 		     updated_at = goddard.now()`,
-		w.Owner.Kind, w.Owner.ID, w.Path, actor)
+		w.Owner.Kind, w.Owner.ID, w.Path, w.Provider, w.SandboxID, actor)
 	return err
 }
 

@@ -555,11 +555,8 @@ func (s *Service) machineOf(ctx context.Context, owner chat.Owner) (workspace.Wo
 	if err != nil {
 		return workspace.Workspace{}, nil, err
 	}
-	sandbox, err := s.Sandbox(ctx, owner)
+	sandbox, err := s.machineSandbox(ctx, owner, space)
 	if err != nil {
-		return workspace.Workspace{}, nil, err
-	}
-	if err := sandbox.Ready(); err != nil {
 		return workspace.Workspace{}, nil, err
 	}
 	channel := s.Dialer.Dial(sandbox)
@@ -567,6 +564,25 @@ func (s *Service) machineOf(ctx context.Context, owner chat.Owner) (workspace.Wo
 		return workspace.Workspace{}, nil, err
 	}
 	return space, channel, nil
+}
+
+// machineSandbox is where the tools of a turn run: the machine of the house for
+// an owner the house gave one to — woken up when it is asleep, which is what
+// makes stopping it free instead of a machine that is gone — and the one the
+// owner loaded when there is one. It is asked before every turn and not when a
+// sandbox is loaded, because a machine that sleeps is still written down.
+func (s *Service) machineSandbox(ctx context.Context, owner chat.Owner, space workspace.Workspace) (Sandbox, error) {
+	if space.Provider != "" && space.SandboxID != "" {
+		return s.houseSandbox(ctx, owner)
+	}
+	sandbox, err := s.Sandbox(ctx, owner)
+	if err != nil {
+		return Sandbox{}, err
+	}
+	if err := sandbox.Ready(); err != nil {
+		return s.houseSandbox(ctx, owner)
+	}
+	return sandbox, nil
 }
 
 // reach says whether a channel can run a turn over that volume: it gets in,

@@ -33,10 +33,15 @@ const (
 // Volumes is where the volumes are mounted when nobody says otherwise.
 const Volumes = "/volumes"
 
-// Workspace is the config of one owner: where its projects live.
+// Workspace is the config of one owner: where its projects live and, when the
+// machine that runs the tools is one goddard made, who provides it and which one
+// it is. The machine of the owner is not here: how to get into it is a secret,
+// and it lives in heimdall.
 type Workspace struct {
-	Owner Owner  `json:"owner"`
-	Path  string `json:"path"`
+	Owner     Owner  `json:"owner"`
+	Path      string `json:"path"`
+	Provider  string `json:"provider,omitempty"`
+	SandboxID string `json:"sandbox_id,omitempty"`
 }
 
 var (
