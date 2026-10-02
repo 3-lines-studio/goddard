@@ -28,6 +28,7 @@ import (
 	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/web/app"
+	"github.com/3-lines-studio/goddard/workspace"
 )
 
 const testLock = 0x676f6464544553
@@ -126,11 +127,16 @@ type shell struct{}
 
 func (shell) Dial(app.Sandbox) compute.Channel { return compute.Shell{} }
 
-// Sandbox gives an owner somewhere to run: the three secrets of a sandbox, so
-// the turn of a test has a machine. The dialer of the tests ignores where it
-// says it is and runs the commands where the test runs.
+// Sandbox gives an owner somewhere to run: the three secrets of a sandbox and
+// the volume its projects live in, which a sandbox comes with mounted. The
+// dialer of the tests ignores where it says it is and runs the commands where
+// the test runs, so that volume is a directory of the test.
 func Sandbox(t *testing.T, service *app.Service, owner heimdall.Owner) {
 	t.Helper()
+	one := workspace.Owner{Kind: owner.Kind, ID: owner.ID}
+	if err := os.MkdirAll(workspace.DefaultPath(service.Volumes, one), 0o755); err != nil {
+		t.Fatalf("no pude armar el volumen: %v", err)
+	}
 	for name, value := range map[string]string{
 		app.SandboxAddr: "127.0.0.1:22",
 		app.SandboxUser: "tester",

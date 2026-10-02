@@ -52,3 +52,17 @@ func (s *PgStore) Set(ctx context.Context, w Workspace, actor string) error {
 		w.Owner.Kind, w.Owner.ID, w.Path, actor)
 	return err
 }
+
+// Delete takes the row of an owner out, so its projects go back to the volume
+// by default. A row that is not there is not an error: what is left after this
+// is the same either way. The row is config and not history, so it goes for
+// real and nothing is left pointing at it.
+func (s *PgStore) Delete(ctx context.Context, owner Owner) error {
+	if err := checkOwner(owner); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM workspace.workspaces WHERE owner_kind = $1 AND owner_id = $2`,
+		owner.Kind, owner.ID)
+	return err
+}

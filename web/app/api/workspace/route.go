@@ -35,11 +35,11 @@ type view struct {
 // Get is where the projects of an owner live and how to reach the machine that
 // runs them: the person asking, or an organization they are in.
 func Get(w http.ResponseWriter, r *http.Request) {
-	service, user, ok := session(w, r)
+	service, user, ok := Session(w, r)
 	if !ok {
 		return
 	}
-	owner, ok := ownerOf(w, r, service, user, r.URL.Query().Get("org"), false)
+	owner, ok := OwnerOf(w, r, service, user, r.URL.Query().Get("org"), false)
 	if !ok {
 		return
 	}
@@ -56,7 +56,7 @@ func Get(w http.ResponseWriter, r *http.Request) {
 // sandbox. What comes empty is left as it was, and the key of an organization
 // is for its owners and its admins: that key opens the machine of the team.
 func Post(w http.ResponseWriter, r *http.Request) {
-	service, user, ok := session(w, r)
+	service, user, ok := Session(w, r)
 	if !ok {
 		return
 	}
@@ -65,7 +65,7 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no pude leer el workspace", http.StatusBadRequest)
 		return
 	}
-	owner, ok := ownerOf(w, r, service, user, body.Org, true)
+	owner, ok := OwnerOf(w, r, service, user, body.Org, true)
 	if !ok {
 		return
 	}
@@ -75,6 +75,25 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		Key:  []byte(body.Key),
 	}, user.ID)
 	if err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Delete unloads it: the projects of that owner go back to the volume by
+// default and the sandbox stops being loaded, so nothing runs there. It is for
+// whoever can write it, and doing it twice is the same as doing it once.
+func Delete(w http.ResponseWriter, r *http.Request) {
+	service, user, ok := Session(w, r)
+	if !ok {
+		return
+	}
+	owner, ok := OwnerOf(w, r, service, user, r.URL.Query().Get("org"), true)
+	if !ok {
+		return
+	}
+	if err := service.RemoveWorkspace(r.Context(), owner, user.ID); err != nil {
 		fail(w, err)
 		return
 	}
@@ -99,7 +118,10 @@ func current(r *http.Request, service *app.Service, owner chat.Owner) (view, err
 	}, nil
 }
 
-func session(w http.ResponseWriter, r *http.Request) (*app.Service, auth.User, bool) {
+// Session is who is asking, and it answers 401 when there is nobody: every
+// route of a workspace goes through here, and the one that checks a sandbox is
+// one more of them.
+func Session(w http.ResponseWriter, r *http.Request) (*app.Service, auth.User, bool) {
 	service := app.Current()
 	if service == nil {
 		http.Error(w, "el servicio no arrancó", http.StatusServiceUnavailable)
@@ -112,10 +134,10 @@ func session(w http.ResponseWriter, r *http.Request) (*app.Service, auth.User, b
 	return service, user, true
 }
 
-// ownerOf is the owner a request is about: the person asking when there is no
+// OwnerOf is the owner a request is about: the person asking when there is no
 // organization, or one they are in. Reading it is for anybody in it and
 // writing it is for its owners and its admins.
-func ownerOf(w http.ResponseWriter, r *http.Request, service *app.Service, user auth.User, id string, write bool) (chat.Owner, bool) {
+func OwnerOf(w http.ResponseWriter, r *http.Request, service *app.Service, user auth.User, id string, write bool) (chat.Owner, bool) {
 	if id == "" {
 		return chat.Owner{Kind: chat.OwnerUser, ID: user.ID}, true
 	}

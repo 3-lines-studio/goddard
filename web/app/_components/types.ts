@@ -90,6 +90,12 @@ export type SandboxInput = {
   key: string;
 };
 
+// SandboxCheck is what the panel gets when it asks a machine if it answers.
+export type SandboxCheck = {
+  ok: boolean;
+  message: string;
+};
+
 export type Event = {
   event: string;
   text?: string;
