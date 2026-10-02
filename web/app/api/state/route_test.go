@@ -152,3 +152,29 @@ func TestStateSaysWhoOwnsEveryProject(t *testing.T) {
 		t.Fatalf("el de la org quedó %+v", owners)
 	}
 }
+
+func TestStateSaysWhetherYouAreAnAdmin(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t))
+	cookie := apptest.Session(t, service, "berti@ejemplo.com")
+	admin := func() bool {
+		recorder := httptest.NewRecorder()
+		Get(recorder, apptest.Request(t, "GET", "/api/state", nil, cookie))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+		}
+		var body struct {
+			Admin bool `json:"admin"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+			t.Fatalf("no pude leer la respuesta: %v", err)
+		}
+		return body.Admin
+	}
+	if admin() {
+		t.Fatal("dijo que soy admin sin estar en la lista")
+	}
+	service.Admins = []string{"berti@ejemplo.com"}
+	if !admin() {
+		t.Fatal("no dijo que soy admin estando en la lista")
+	}
+}

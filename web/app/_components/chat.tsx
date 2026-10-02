@@ -14,8 +14,9 @@ import { Models } from "./model";
 import { Orgs } from "./orgs";
 import { Rail } from "./rail";
 import { Sandboxes } from "./sandbox";
+import { Telemetry } from "./telemetry";
 import { Composer, Thread } from "./thread";
-import type { Event, Fact, Member, Model, ModelInput, Org, Project, Sandbox, SandboxCheck, SandboxInput, Skill, Tab, Task, Theme, Upload } from "./types";
+import type { Event, Fact, Member, Model, ModelInput, Org, Project, Sandbox, SandboxCheck, SandboxInput, Skill, Summary, Tab, Task, Theme, Upload } from "./types";
 
 const TABS_KEY = "goddard-tabs";
 const OPEN_KEY = "goddard-open-projects";
@@ -69,6 +70,7 @@ function tabFromKey(key: string, projects: Project[]): Tab | null {
   if (key === "orgs") return { key, kind: "orgs", title: "Organizaciones", slug: "" };
   if (key === "sandbox") return { key, kind: "sandbox", title: "Computadoras", slug: "" };
   if (key === "model") return { key, kind: "model", title: "Modelo", slug: "" };
+  if (key === "telemetry") return { key, kind: "telemetry", title: "Telemetría", slug: "" };
   const memory = key.match(/^memoria:(.+)$/);
   if (memory) {
     const project = projects.find((one) => one.slug === memory[1]);
@@ -104,6 +106,8 @@ export function Chat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [user, setUser] = useState("");
+  const [admin, setAdmin] = useState(false);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [editing, setEditing] = useState("");
   const [removing, setRemoving] = useState("");
   const [facts, setFacts] = useState<Fact[]>([]);
@@ -156,6 +160,7 @@ export function Chat() {
     }
     const data = await response.json();
     setUser(data.user ?? "");
+    setAdmin(data.admin === true);
     const projects: Project[] = data.projects ?? [];
     setProjects(projects);
     setOrgs(data.orgs ?? []);
@@ -198,6 +203,15 @@ export function Chat() {
     }
     const data: Model = await response.json();
     setModels((current) => ({ ...current, [org]: data }));
+  }, []);
+
+  const loadSummary = useCallback(async () => {
+    const response = await fetch("/api/admin/telemetry");
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    setSummary(await response.json());
   }, []);
 
   useEffect(() => {
@@ -245,6 +259,7 @@ export function Chat() {
   useEffect(() => {
     if (tab?.kind === "agenda") void loadTasks();
     if (tab?.kind === "memoria") void loadMemory(tab.slug);
+    if (tab?.kind === "telemetry") void loadSummary();
   }, [tab?.kind, tab?.slug]);
 
   useEffect(() => {
@@ -738,6 +753,8 @@ export function Chat() {
         onOpenOrgs={() => openTab("orgs")}
         onOpenSandbox={() => openTab("sandbox")}
         onOpenModel={() => openTab("model")}
+        admin={admin}
+        onOpenTelemetry={() => openTab("telemetry")}
         onTheme={pickTheme}
         onLogout={logout}
       />
@@ -819,6 +836,10 @@ export function Chat() {
                     onSave={(org, input) => void saveModel(org, input)}
                     onRemove={(org) => askModel(org)}
                   />
+                </div>
+              ) : tab.kind === "telemetry" ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <Telemetry summary={summary} />
                 </div>
               ) : tab.kind === "agenda" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">

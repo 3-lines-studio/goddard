@@ -95,5 +95,6 @@ func Get(w http.ResponseWriter, r *http.Request) {
 		"projects": views,
 		"orgs":     orgViews,
 		"user":     user.Email,
+		"admin":    service.Admin(user),
 	})
 }
