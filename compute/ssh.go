@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"net"
+	"path/filepath"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -62,6 +64,32 @@ func (s *SSH) Exec(ctx context.Context, command string, stdin []byte) (Result, e
 		<-done
 		return Result{}, ctx.Err()
 	}
+}
+
+// Put writes a file on the machine, with the directory it lives in made when it
+// is not there. The content travels as the stdin of `cat`, which is what SSH is
+// good at and what a channel of the cloud does not always have.
+func (s *SSH) Put(ctx context.Context, path string, content []byte) error {
+	command := "mkdir -p -- " + quote(filepath.Dir(path)) + " && cat > " + quote(path)
+	result, err := s.Exec(ctx, command, content)
+	if err != nil {
+		return err
+	}
+	if result.Exit != 0 {
+		return errors.New(strings.TrimSpace(string(result.Stderr)))
+	}
+	return nil
+}
+
+func (s *SSH) Get(ctx context.Context, path string) ([]byte, error) {
+	result, err := s.Exec(ctx, "cat -- "+quote(path), nil)
+	if err != nil {
+		return nil, err
+	}
+	if result.Exit != 0 {
+		return nil, errors.New(strings.TrimSpace(string(result.Stderr)))
+	}
+	return result.Stdout, nil
 }
 
 func (s *SSH) dial(ctx context.Context) (*ssh.Client, error) {

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 )
 
@@ -37,4 +39,15 @@ func (Shell) Exec(ctx context.Context, command string, stdin []byte) (Result, er
 	}
 	result.Exit = exit.ExitCode()
 	return result, nil
+}
+
+func (Shell) Put(_ context.Context, path string, content []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, content, 0o644)
+}
+
+func (Shell) Get(_ context.Context, path string) ([]byte, error) {
+	return os.ReadFile(path)
 }
