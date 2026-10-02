@@ -10,10 +10,19 @@ import (
 	"github.com/3-lines-studio/goddard/web/app/apptest"
 )
 
-// workspaceOf is the directory of a project: the owner inside the root, and the
-// slug of the project, which is where the tools of a turn run.
-func workspaceOf(service *app.Service, ownerID, slug string) string {
-	return filepath.Join(service.Workspace, ownerID, slug)
+// projectDir is the directory of a project: the workspace of the owner inside
+// the volume, and the slug of the project, which is where the tools of a turn
+// run.
+func projectDir(t *testing.T, service *app.Service, ownerID, slug string) string {
+	t.Helper()
+	dir, err := service.ProjectDir(t.Context(), chat.Project{
+		Slug:  slug,
+		Owner: chat.Owner{Kind: chat.OwnerUser, ID: ownerID},
+	})
+	if err != nil {
+		t.Fatalf("project dir: %v", err)
+	}
+	return dir
 }
 
 func TestAnAttachmentLandsInTheWorkspaceOfItsProject(t *testing.T) {
@@ -32,7 +41,7 @@ func TestAnAttachmentLandsInTheWorkspaceOfItsProject(t *testing.T) {
 	}
 	apptest.Wait(t, service, conversation.ID)
 
-	path := filepath.Join(workspaceOf(service, user.ID, "goddard"), "files", conversation.ID, "nota.txt")
+	path := filepath.Join(projectDir(t, service, user.ID, "goddard"), "files", conversation.ID, "nota.txt")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("el adjunto no quedó en %s: %v", path, err)
@@ -40,8 +49,8 @@ func TestAnAttachmentLandsInTheWorkspaceOfItsProject(t *testing.T) {
 	if string(data) != "hola" {
 		t.Fatalf("el adjunto quedó %q", data)
 	}
-	if _, err := os.Stat(filepath.Join(service.Workspace, "files", conversation.ID, "nota.txt")); !os.IsNotExist(err) {
-		t.Fatalf("el adjunto también fue a la raíz del workspace: %v", err)
+	if _, err := os.Stat(filepath.Join(service.Volumes, "files", conversation.ID, "nota.txt")); !os.IsNotExist(err) {
+		t.Fatalf("el adjunto también fue a la raíz del volumen: %v", err)
 	}
 }
 
@@ -81,8 +90,8 @@ func TestTheFilesOfTwoProjectsDoNotMix(t *testing.T) {
 	}
 
 	for path, want := range map[string]string{
-		filepath.Join(workspaceOf(service, user.ID, "goddard"), "files", one.ID, "nota.txt"): "uno",
-		filepath.Join(workspaceOf(service, user.ID, "otro"), "files", two.ID, "nota.txt"):    "dos",
+		filepath.Join(projectDir(t, service, user.ID, "goddard"), "files", one.ID, "nota.txt"): "uno",
+		filepath.Join(projectDir(t, service, user.ID, "otro"), "files", two.ID, "nota.txt"):    "dos",
 	} {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -106,7 +115,7 @@ func TestTheAgentShowsAFileOfItsOwnWorkspace(t *testing.T) {
 		}))
 	user := apptest.User(t, service)
 	image := append([]byte("\x89PNG\r\n\x1a\n"), []byte("lo que sea el resto")...)
-	dir := workspaceOf(service, user.ID, "goddard")
+	dir := projectDir(t, service, user.ID, "goddard")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("no pude armar %s: %v", dir, err)
 	}

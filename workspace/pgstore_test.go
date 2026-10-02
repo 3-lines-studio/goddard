@@ -49,13 +49,15 @@ func testDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func TestAWorkspaceExistsWithoutARow(t *testing.T) {
-	store := NewPgStore(testDB(t))
-	found, err := store.Get(t.Context(), Owner{Kind: OwnerUser, ID: "01M3"})
+func TestAnOwnerWithoutARowHasNoWorkspace(t *testing.T) {
+	found, ok, err := NewPgStore(testDB(t)).Get(t.Context(), Owner{Kind: OwnerUser, ID: "01M3"})
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Path != Volumes+"/01M3" {
+	if ok {
+		t.Fatalf("devolvió %+v", found)
+	}
+	if found.Path != "" {
 		t.Fatalf("el path quedó %q", found.Path)
 	}
 }
@@ -63,16 +65,15 @@ func TestAWorkspaceExistsWithoutARow(t *testing.T) {
 func TestAWorkspaceKeepsWhatIsWritten(t *testing.T) {
 	store := NewPgStore(testDB(t))
 	owner := Owner{Kind: OwnerOrg, ID: "01M4"}
-	wanted := New(owner)
-	wanted.Path = "/data/volumes/la-casa"
+	wanted := Workspace{Owner: owner, Path: "/data/volumes/la-casa"}
 	if err := store.Set(t.Context(), wanted, "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	found, err := store.Get(t.Context(), owner)
+	found, ok, err := store.Get(t.Context(), owner)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Path != wanted.Path {
+	if !ok || found.Path != wanted.Path {
 		t.Fatalf("volvió %+v", found)
 	}
 	if found.ProjectDir("goddard") != "/data/volumes/la-casa/goddard" {
@@ -82,19 +83,18 @@ func TestAWorkspaceKeepsWhatIsWritten(t *testing.T) {
 	if err := store.Set(t.Context(), wanted, "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	found, err = store.Get(t.Context(), owner)
+	found, ok, err = store.Get(t.Context(), owner)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Path != "/data/volumes/otra-casa" {
+	if !ok || found.Path != "/data/volumes/otra-casa" {
 		t.Fatalf("el path quedó %q", found.Path)
 	}
 }
 
 func TestSetRefusesWhatCannotBeWritten(t *testing.T) {
 	store := NewPgStore(testDB(t))
-	space := New(Owner{Kind: OwnerUser, ID: "uno"})
-	space.Path = "volumes/uno"
+	space := Workspace{Owner: Owner{Kind: OwnerUser, ID: "uno"}, Path: "volumes/uno"}
 	if err := store.Set(t.Context(), space, "berti"); err == nil {
 		t.Fatal("escribió un path relativo")
 	}

@@ -46,13 +46,8 @@ var (
 
 // DefaultPath is where the projects of an owner live when nobody said
 // otherwise: the volume of the owner, under its id.
-func DefaultPath(owner Owner) string {
-	return filepath.Join(Volumes, owner.ID)
-}
-
-// New is the workspace of an owner with everything in its default.
-func New(owner Owner) Workspace {
-	return Workspace{Owner: owner, Path: DefaultPath(owner)}
+func DefaultPath(root string, owner Owner) string {
+	return filepath.Join(root, owner.ID)
 }
 
 // ProjectDir is the directory of a project: the workspace of the owner and the

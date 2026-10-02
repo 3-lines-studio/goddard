@@ -58,17 +58,15 @@ func TestAnOrganizationHasItsOwnSandbox(t *testing.T) {
 
 func TestASandboxSaysWhichOfTheThreeIsMissing(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t))
-	user := apptest.User(t, service)
-	owner := heimdall.User(user.ID)
 	for name, value := range map[string]string{
 		app.SandboxAddr: "127.0.0.1:2222",
 		app.SandboxUser: "root",
 	} {
-		if err := service.Heimdall.Set(t.Context(), owner, app.SandboxProject, app.SandboxEnv, name, value, "berti"); err != nil {
+		if err := service.Heimdall.Set(t.Context(), heimdall.Org("acme"), app.SandboxProject, app.SandboxEnv, name, value, "berti"); err != nil {
 			t.Fatalf("set %s: %v", name, err)
 		}
 	}
-	_, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID})
+	_, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerOrg, ID: "acme"})
 	if !errors.Is(err, app.ErrNoSandbox) {
 		t.Fatalf("sin llave devolvió %v", err)
 	}

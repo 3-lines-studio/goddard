@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/compute"
 	"github.com/3-lines-studio/goddard/heimdall"
 )
 
@@ -33,6 +34,21 @@ type Sandbox struct {
 // ErrNoSandbox is what a turn gets when its owner loaded no sandbox: without
 // one the tools have nowhere to run, and there is no local fallback.
 var ErrNoSandbox = errors.New("ese workspace no tiene sandbox")
+
+// Dialer is how a turn reaches the sandbox of an owner: the machine that runs
+// its tools. There is only one way in — a turn never runs in the container
+// goddard runs in, which carries no tools — and a test that needs a machine
+// without a sandbox plugs a channel of its own here.
+type Dialer interface {
+	Dial(sandbox Sandbox) compute.Channel
+}
+
+// SSH is the way in: the three secrets of the sandbox, over ssh.
+type SSH struct{}
+
+func (SSH) Dial(sandbox Sandbox) compute.Channel {
+	return compute.NewSSH(sandbox.Addr, sandbox.User, sandbox.Key)
+}
 
 // Sandbox reads the three secrets of the sandbox of an owner. It is what a
 // turn asks for before running anything.

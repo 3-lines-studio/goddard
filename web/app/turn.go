@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"log"
 	"math"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,10 +15,12 @@ import (
 	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/compute"
 	"github.com/3-lines-studio/goddard/memo"
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
+	"github.com/3-lines-studio/goddard/workspace"
 )
 
 // TurnLease is how long a turn holds its conversation, in seconds. It is long
@@ -73,13 +74,18 @@ func (s *Service) say(ctx context.Context, conversationID string, actor who, tex
 		return ErrBusy
 	}
 	project, _ := s.projectOf(ctx, conversation)
+	machine, _, err := s.machine(ctx, project)
+	if err != nil {
+		_ = s.Chat.Release(ctx, conversationID)
+		return err
+	}
 	if strings.TrimSpace(text) != "" {
 		if _, err := s.write(ctx, conversationID, map[string]any{"event": "user", "text": text}); err != nil {
 			_ = s.Chat.Release(ctx, conversationID)
 			return err
 		}
 	}
-	files, err := s.attach(ctx, conversation, s.machine(project), uploads)
+	files, err := s.attach(ctx, conversation, machine, uploads)
 	if err != nil {
 		_ = s.Chat.Release(ctx, conversationID)
 		return err
@@ -316,11 +322,15 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, pr
 	}
 	messages := axe.DropIncompleteToolCalls(axe.ContextMessages(entries))
 	messages = append(messages, axe.Message{Role: "user", Content: text})
-	machine := s.machine(project)
+	machine, dir, err := s.machine(ctx, project)
+	if err != nil {
+		s.failed(ctx, conversation.ID, err)
+		return "", err
+	}
 	tools := s.tools(project, conversation.ID, machine, actor)
 	options := &axe.RunOptions{
 		Model:    s.Model,
-		System:   s.system(ctx, tools, conversation, project, actor),
+		System:   s.system(ctx, tools, conversation, project, dir, actor),
 		Tools:    tools,
 		MaxTurns: math.MaxInt,
 	}
@@ -375,7 +385,7 @@ func (s *Service) tools(project chat.Project, conversationID string, machine axe
 
 // system is the prompt: what the harness says about its tools, the fragments
 // of goddard, the memory of the project and where this turn is running.
-func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project chat.Project, actor who) string {
+func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation chat.Conversation, project chat.Project, dir string, actor who) string {
 	out := axe.SystemPrompt(tools)
 	skills, err := s.Skill.Index(ctx, actor.viewer)
 	if err != nil {
@@ -388,7 +398,7 @@ func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation cha
 	})
 	if err != nil {
 		log.Printf("goddard: no pude armar el prompt: %v", err)
-		return out + "\n" + s.context(conversation, project)
+		return out + "\n" + s.context(conversation, dir)
 	}
 	out += "\n\n" + fragments
 	memory, err := s.Memo.Render(ctx, s.scopeOf(project, actor.viewer.User))
@@ -398,12 +408,12 @@ func (s *Service) system(ctx context.Context, tools []axe.Tool, conversation cha
 	if strings.TrimSpace(memory) != "" {
 		out += "\n\n## Memoria en contexto\n\n" + memory
 	}
-	return out + "\n" + s.context(conversation, project)
+	return out + "\n" + s.context(conversation, dir)
 }
 
-func (s *Service) context(conversation chat.Conversation, project chat.Project) string {
+func (s *Service) context(conversation chat.Conversation, dir string) string {
 	return fmt.Sprintf("## Entorno de ejecución\n- Modelo: %s\n- Workspace: %s\n- Conversación: %s\n",
-		s.Model, s.ProjectDir(project), conversation.ID)
+		s.Model, dir, conversation.ID)
 }
 
 // logSink turns what axe does into the events the web reads: what is worth
@@ -483,21 +493,43 @@ func (s *Service) projectOf(ctx context.Context, conversation chat.Conversation)
 	return project, ok
 }
 
-// machine is where the tools of a turn run: the directory of the project inside
-// the root, which is the workspace of whoever owns it — a person, or an
-// organization. Everybody has their own, so one project never reads the files
-// of another. A machine that is not this host, the compute of a user, plugs in
-// here and does not change anything else.
-func (s *Service) machine(project chat.Project) axe.Machine {
-	dir := s.ProjectDir(project)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		log.Printf("goddard: no pude armar el workspace de %q: %v", project.Slug, err)
+// machine is where the tools of a turn run: the machine of the owner of the
+// project, reached with the three secrets of its sandbox, and the directory of
+// the project inside the volume that machine mounts. A turn runs in the
+// sandbox of its owner and never in the container goddard runs in, which
+// carries no tools, so a workspace without a sandbox does not run at all.
+func (s *Service) machine(ctx context.Context, project chat.Project) (axe.Machine, string, error) {
+	dir, err := s.ProjectDir(ctx, project)
+	if err != nil {
+		return nil, "", err
 	}
-	return axe.NewLocal(dir)
+	sandbox, err := s.Sandbox(ctx, project.Owner)
+	if err != nil {
+		return nil, "", err
+	}
+	return compute.NewMachine(s.Dialer.Dial(sandbox), dir), dir, nil
 }
 
-// ProjectDir is the directory of a project: the owner, because two people name
-// their projects the same way, and the slug, which names a directory already.
-func (s *Service) ProjectDir(project chat.Project) string {
-	return filepath.Join(s.Workspace, project.Owner.ID, project.Slug)
+// ProjectDir is the directory of a project: the workspace of whoever owns it —
+// a person, or an organization — and the slug of the project inside it.
+func (s *Service) ProjectDir(ctx context.Context, project chat.Project) (string, error) {
+	space, err := s.workspaceOf(ctx, project.Owner)
+	if err != nil {
+		return "", err
+	}
+	return space.ProjectDir(project.Slug), nil
+}
+
+// workspaceOf is the workspace of an owner: the row, or the volume of that
+// owner when there is none, which is where its projects live by default.
+func (s *Service) workspaceOf(ctx context.Context, owner chat.Owner) (workspace.Workspace, error) {
+	one := workspace.Owner{Kind: owner.Kind, ID: owner.ID}
+	space, ok, err := s.Workspaces.Get(ctx, one)
+	if err != nil {
+		return workspace.Workspace{}, err
+	}
+	if !ok {
+		return workspace.Workspace{Owner: one, Path: workspace.DefaultPath(s.Volumes, one)}, nil
+	}
+	return space, nil
 }
