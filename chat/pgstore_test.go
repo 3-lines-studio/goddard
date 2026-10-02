@@ -191,14 +191,43 @@ func TestDeletingTheProjectsOfAnOwner(t *testing.T) {
 	}
 }
 
-func TestTheSlugStaysTakenAfterDeleting(t *testing.T) {
+func TestCreatingAnArchivedProjectBringsItBack(t *testing.T) {
+	store := testStore(t)
+	created := project(t, store, "ken")
+	thread, err := store.CreateConversation(t.Context(), created.ID, "el esquema", SourceWeb, "berti")
+	if err != nil {
+		t.Fatalf("conversation: %v", err)
+	}
+	if err := store.DeleteProject(t.Context(), created.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	back, err := store.CreateProject(t.Context(), "Ken", Owner{Kind: OwnerUser, ID: "berti"}, "berti")
+	if err != nil {
+		t.Fatalf("no volvió: %v", err)
+	}
+	if back.ID != created.ID || back.Slug != "ken" || back.Name != "ken" {
+		t.Fatalf("volvió otro: %+v", back)
+	}
+	threads, err := store.Conversations(t.Context(), back.ID)
+	if err != nil || len(threads) != 1 || threads[0].ID != thread.ID {
+		t.Fatalf("volvió con %d conversaciones (%v)", len(threads), err)
+	}
+	if found, ok, err := store.Project(t.Context(), created.ID); err != nil || !ok || found != created {
+		t.Fatalf("el proyecto quedó %+v (%v, %v)", found, ok, err)
+	}
+}
+
+func TestAnArchivedProjectIsStillTakenForAnotherOwner(t *testing.T) {
 	store := testStore(t)
 	created := project(t, store, "ken")
 	if err := store.DeleteProject(t.Context(), created.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, err := store.CreateProject(t.Context(), "ken", Owner{Kind: OwnerUser, ID: "berti"}, "berti"); !errors.Is(err, ErrTaken) {
-		t.Fatalf("el slug se liberó: %v", err)
+	if _, err := store.CreateProject(t.Context(), "ken", Owner{Kind: OwnerUser, ID: "ana"}, "ana"); !errors.Is(err, ErrTaken) {
+		t.Fatalf("otro dueño se llevó el slug archivado: %v", err)
+	}
+	if found, ok, err := store.Project(t.Context(), created.ID); err != nil || ok || found != (Project{}) {
+		t.Fatalf("el archivado se despertó solo: %+v (%v, %v)", found, ok, err)
 	}
 }
 
