@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -74,10 +75,23 @@ func (b *Boat) Delete(ctx context.Context, id string) error {
 }
 
 // Authorize leaves the public key on the machine so the turn can get in. The
-// private half never leaves heimdall.
+// private half never leaves heimdall. A machine that is still coming up answers
+// that it is not running yet, which is not a failure but a moment: this asks
+// again for a while instead of leaving the turn without a way in.
 func (b *Boat) Authorize(ctx context.Context, id string, publicKey string) error {
 	body := map[string]any{"key": publicKey}
-	return b.do(ctx, http.MethodPost, "/sandboxes/"+id+"/sshkey", body, nil)
+	deadline := time.Now().Add(startingWindow)
+	for {
+		err := b.do(ctx, http.MethodPost, "/sandboxes/"+id+"/sshkey", body, nil)
+		if err == nil || !starting(err) || time.Now().After(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 // Host puts a port of the machine behind a public HTTPS URL of its own, which
@@ -155,6 +169,18 @@ func (b *Boat) send(ctx context.Context, method, path string, body any, out any,
 		return nil
 	}
 	return json.Unmarshal(content, out)
+}
+
+// startingWindow is how long the key of a machine that is still coming up is
+// asked for before giving up: it is the gap between the machine existing and
+// the machine running.
+const startingWindow = time.Minute
+
+// starting says whether the API answered that the machine is on its way, which
+// is worth asking again, and not that something is wrong.
+func starting(err error) bool {
+	text := err.Error()
+	return strings.Contains(text, "machine_not_running") || strings.Contains(text, "boat_starting")
 }
 
 // boatFailure is the error envelope of the API: the code says what went wrong

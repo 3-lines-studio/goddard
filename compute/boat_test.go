@@ -156,3 +156,43 @@ func TestBoatSaysWhatTheApiSaid(t *testing.T) {
 		t.Fatalf("el error quedó %v", err)
 	}
 }
+
+func TestBoatAsksForTheKeyAgainWhileTheMachineComesUp(t *testing.T) {
+	asked := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		if asked < 3 {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"ok":false,"status":400,"code":"machine_not_running","message":"Sandbox machine is not running yet."}`)
+			return
+		}
+		io.WriteString(w, `{"ok":true,"type":"sandbox.updated"}`)
+	}))
+	t.Cleanup(server.Close)
+	boat := NewBoat("boat_de_prueba")
+	boat.url = server.URL
+	if err := boat.Authorize(t.Context(), "bx_23456789", "ssh-ed25519 AAA"); err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	if asked != 3 {
+		t.Fatalf("preguntó %d veces", asked)
+	}
+}
+
+func TestBoatDoesNotInsistOnAKeyThatWillNotLand(t *testing.T) {
+	asked := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `{"ok":false,"status":401,"code":"unauthorized","message":"Unauthorized"}`)
+	}))
+	t.Cleanup(server.Close)
+	boat := NewBoat("boat_de_prueba")
+	boat.url = server.URL
+	if err := boat.Authorize(t.Context(), "bx_23456789", "ssh-ed25519 AAA"); err == nil {
+		t.Fatal("no se quejó")
+	}
+	if asked != 1 {
+		t.Fatalf("preguntó %d veces por un error que no se arregla", asked)
+	}
+}

@@ -3,6 +3,10 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/3-lines-studio/goddard/chat"
@@ -18,6 +22,10 @@ const (
 	HouseProvider = "boat"
 	HouseSize     = "small"
 	HouseTTL      = 2 * time.Hour
+	// HouseRoot is where the projects of an owner live inside a machine of the
+	// house: it is the working directory of the sandbox user, and the disk of
+	// the machine is what makes it last.
+	HouseRoot = "/home/user/volumes"
 )
 
 // ErrNoHouse is what a turn gets when the owner has no sandbox and there is no
@@ -53,6 +61,15 @@ func (s *Service) makeHouse(ctx context.Context, owner chat.Owner, space workspa
 	if err != nil {
 		return Sandbox{}, err
 	}
+	kept := false
+	defer func() {
+		if kept {
+			return
+		}
+		if err := s.House.Delete(context.WithoutCancel(ctx), asked.ID); err != nil {
+			log.Printf("goddard: dejé un sandbox de la casa sin dueño (%s): %v", asked.ID, err)
+		}
+	}()
 	if err := s.House.Authorize(ctx, asked.ID, public); err != nil {
 		return Sandbox{}, err
 	}
@@ -63,10 +80,29 @@ func (s *Service) makeHouse(ctx context.Context, owner chat.Owner, space workspa
 	sandbox := Sandbox{Addr: one.Addr, User: one.User, Key: private}
 	space.Provider = HouseProvider
 	space.SandboxID = asked.ID
+	space.Path = filepath.Join(HouseRoot, owner.ID)
+	if err := s.openDir(ctx, sandbox, space.Path); err != nil {
+		return Sandbox{}, err
+	}
 	if err := s.writeSandbox(ctx, owner, space, sandbox, owner.ID); err != nil {
 		return Sandbox{}, err
 	}
+	kept = true
 	return sandbox, nil
+}
+
+// openDir makes the directory where the projects of an owner live, inside a
+// machine that has just been made: a turn refuses to run without it, because a
+// machine whose volume was never there writes where nothing lasts. It goes
+// through the same channel a turn uses, which is the only thing that knows how
+// to reach it.
+func (s *Service) openDir(ctx context.Context, sandbox Sandbox, dir string) error {
+	machine := compute.NewMachine(s.Dialer.Dial(sandbox), dir)
+	out := machine.Run("true", 60, nil)
+	if strings.Contains(out, "error:") {
+		return fmt.Errorf("no pude armar %s en la máquina de la casa: %s", dir, strings.TrimSpace(out))
+	}
+	return nil
 }
 
 // wakeHouse is a machine of the house that is already there: a sandbox that is

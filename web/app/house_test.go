@@ -2,6 +2,9 @@ package app_test
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -17,10 +20,12 @@ import (
 type fakeHouse struct {
 	addr    string
 	state   string
+	broken  bool
 	created []compute.Spec
 	keys    []string
 	stopped []string
 	resumed []string
+	deleted []string
 }
 
 func (f *fakeHouse) Create(_ context.Context, spec compute.Spec) (compute.Sandbox, error) {
@@ -47,9 +52,15 @@ func (f *fakeHouse) Resume(_ context.Context, id string) error {
 	return nil
 }
 
-func (f *fakeHouse) Delete(_ context.Context, _ string) error { return nil }
+func (f *fakeHouse) Delete(_ context.Context, id string) error {
+	f.deleted = append(f.deleted, id)
+	return nil
+}
 
 func (f *fakeHouse) Authorize(_ context.Context, _ string, key string) error {
+	if f.broken {
+		return errors.New("la máquina no aceptó la llave")
+	}
 	f.keys = append(f.keys, key)
 	return nil
 }
@@ -70,6 +81,7 @@ func withoutMachine(t *testing.T, service *app.Service) (chat.Owner, string, aut
 	if err := service.RemoveWorkspace(t.Context(), owner, "prueba"); err != nil {
 		t.Fatalf("sacar la máquina: %v", err)
 	}
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(app.HouseRoot, user.ID)) })
 	return owner, conversation.ID, user
 }
 
@@ -180,5 +192,32 @@ func TestAMachineOfTheOwnerIsNotTheBusinessOfTheHouse(t *testing.T) {
 
 	if len(house.created) != 0 || len(house.resumed) != 0 {
 		t.Fatalf("la casa hizo algo con una máquina ajena: %+v %+v", house.created, house.resumed)
+	}
+}
+
+func TestAMachineOfTheHouseThatNeverCameUpIsGivenBack(t *testing.T) {
+	service := apptest.Route(t, apptest.Provider(t,
+		[]string{
+			`{"choices":[{"delta":{"content":"hola"}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		},
+	))
+	house := &fakeHouse{addr: "127.0.0.1:2222", broken: true}
+	service.House = house
+	owner, conversation, user := withoutMachine(t, service)
+
+	if err := service.Say(t.Context(), conversation, user, "hola", nil); err == nil {
+		t.Fatal("el turno no se quejó de una máquina que no supo usar")
+	}
+
+	if len(house.deleted) != 1 || house.deleted[0] != "bx_de_mentira" {
+		t.Fatalf("no devolvió la máquina que no supo usar: %v", house.deleted)
+	}
+	space, err := service.Workspace(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("workspace: %v", err)
+	}
+	if space.Provider != "" || space.SandboxID != "" {
+		t.Fatalf("quedó una fila apuntando a una máquina que no existe: %+v", space)
 	}
 }
