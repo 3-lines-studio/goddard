@@ -106,6 +106,32 @@ func TestTheUserIsFoundByTheIdTheRestOfGoddardKeeps(t *testing.T) {
 	}
 }
 
+func TestTheNameComesFromTheMailUntilSomebodyChangesIt(t *testing.T) {
+	store := testStore(t)
+	user := signIn(t, store)
+	if err := store.SetName(t.Context(), user.ID, "Berti"); err != nil {
+		t.Fatalf("setName: %v", err)
+	}
+	found, ok, err := store.ByID(t.Context(), user.ID)
+	if err != nil || !ok {
+		t.Fatalf("byID: %v (%v)", ok, err)
+	}
+	if found.Name != "Berti" {
+		t.Fatalf("el nombre quedó %q", found.Name)
+	}
+	one, err := store.CreateLogin(t.Context(), "berti@ejemplo.com", LoginTTL)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	same, err := store.ConsumeLogin(t.Context(), one)
+	if err != nil {
+		t.Fatalf("consume: %v", err)
+	}
+	if same.Name != "Berti" {
+		t.Fatalf("el segundo login pisó el nombre: %q", same.Name)
+	}
+}
+
 func TestALoginLinkWorksOnce(t *testing.T) {
 	store := testStore(t)
 	link, err := store.CreateLogin(t.Context(), "berti@ejemplo.com", LoginTTL)
