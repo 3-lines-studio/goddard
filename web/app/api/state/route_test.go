@@ -82,7 +82,11 @@ func TestStateIsTheProjectsAndWhoIsAsking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("projects: %v", err)
 	}
-	if len(projects) != 1 || body.Projects[0].Workspace != service.ProjectDir(projects[0]) {
+	dir, err := service.ProjectDir(t.Context(), projects[0])
+	if err != nil {
+		t.Fatalf("project dir: %v", err)
+	}
+	if len(projects) != 1 || body.Projects[0].Workspace != dir {
 		t.Fatalf("el workspace del proyecto quedó %q", body.Projects[0].Workspace)
 	}
 	if len(body.Projects) != 1 || body.Projects[0].Slug != "goddard" {

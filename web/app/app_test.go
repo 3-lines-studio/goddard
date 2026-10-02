@@ -269,7 +269,12 @@ func TestAnAttachmentGoesToTheLogAndToTheWorkspace(t *testing.T) {
 	if file["id"] != upload.ID {
 		t.Fatalf("el archivo del log no es el que subí: %s", got[1])
 	}
-	written, err := os.ReadFile(filepath.Join(service.Workspace, apptest.User(t, service).ID, "goddard", "files", conversation.ID, "nota.txt"))
+	userID := apptest.User(t, service).ID
+	dir, err := service.ProjectDir(t.Context(), chat.Project{Slug: "goddard", Owner: chat.Owner{Kind: chat.OwnerUser, ID: userID}})
+	if err != nil {
+		t.Fatalf("project dir: %v", err)
+	}
+	written, err := os.ReadFile(filepath.Join(dir, "files", conversation.ID, "nota.txt"))
 	if err != nil {
 		t.Fatalf("no encontré el archivo en el workspace: %v", err)
 	}
@@ -298,7 +303,10 @@ func TestTheAgentShowsAFileInTheThread(t *testing.T) {
 		}))
 	conversation := apptest.Thread(t, service)
 	image := append([]byte("\x89PNG\r\n\x1a\n"), []byte("lo que sea el resto")...)
-	dir := filepath.Join(service.Workspace, apptest.User(t, service).ID, "goddard")
+	dir, err := service.ProjectDir(t.Context(), chat.Project{Slug: "goddard", Owner: chat.Owner{Kind: chat.OwnerUser, ID: apptest.User(t, service).ID}})
+	if err != nil {
+		t.Fatalf("project dir: %v", err)
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("no pude armar el workspace: %v", err)
 	}

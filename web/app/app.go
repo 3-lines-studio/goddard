@@ -17,6 +17,7 @@ import (
 	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
+	"github.com/3-lines-studio/goddard/workspace"
 )
 
 // Service is what the routes need: the stores of every part of goddard and the
@@ -24,26 +25,28 @@ import (
 // with functions per method and no way to hand them anything, so this is the
 // door they come through.
 type Service struct {
-	DB        *sql.DB
-	Chat      *chat.Store
-	Auth      *auth.Store
-	Memo      *memo.PgStore
-	Skill     *skill.PgStore
-	Schedule  *schedule.PgStore
-	Provider  axe.Provider
-	Offset    int64
-	Agenda    *schedule.Service
-	Stops     *stops
-	Hub       *hub
-	Mail      *mailer
-	Allowed   []string
-	Model     string
-	Workspace string
-	Orgs      *org.PgStore
-	Heimdall  *heimdall.Store
-	Assistant string
-	Language  string
-	Spec      string
+	DB         *sql.DB
+	Chat       *chat.Store
+	Auth       *auth.Store
+	Memo       *memo.PgStore
+	Skill      *skill.PgStore
+	Schedule   *schedule.PgStore
+	Provider   axe.Provider
+	Offset     int64
+	Agenda     *schedule.Service
+	Stops      *stops
+	Hub        *hub
+	Mail       *mailer
+	Allowed    []string
+	Model      string
+	Volumes    string
+	Orgs       *org.PgStore
+	Heimdall   *heimdall.Store
+	Workspaces *workspace.PgStore
+	Dialer     Dialer
+	Assistant  string
+	Language   string
+	Spec       string
 }
 
 var (

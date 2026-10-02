@@ -3,8 +3,7 @@ package workspace
 import "testing"
 
 func TestAProjectHangsFromTheWorkspaceOfItsOwner(t *testing.T) {
-	berti := Owner{Kind: OwnerUser, ID: "01M3"}
-	space := New(berti)
+	space := Workspace{Owner: Owner{Kind: OwnerUser, ID: "01M3"}, Path: DefaultPath("/volumes", Owner{Kind: OwnerUser, ID: "01M3"})}
 	if space.Path != Volumes+"/01M3" {
 		t.Fatalf("el path quedó %q", space.Path)
 	}
@@ -13,10 +12,9 @@ func TestAProjectHangsFromTheWorkspaceOfItsOwner(t *testing.T) {
 	}
 }
 
-func TestAWorkspaceOfAnOrganizationIsTheSameThing(t *testing.T) {
-	space := New(Owner{Kind: OwnerOrg, ID: "01M4"})
-	if space.Path != Volumes+"/01M4" {
-		t.Fatalf("el path quedó %q", space.Path)
+func TestTheVolumeRootIsDeploymentConfig(t *testing.T) {
+	if got := DefaultPath("/data/volumes", Owner{Kind: OwnerOrg, ID: "01M4"}); got != "/data/volumes/01M4" {
+		t.Fatalf("el path quedó %q", got)
 	}
 }
 
@@ -32,5 +30,12 @@ func TestAWorkspaceNeedsAnOwnerAndAnAbsolutePath(t *testing.T) {
 		if err := space.Valid(); err == nil {
 			t.Fatalf("%s: lo dio por válido", name)
 		}
+	}
+}
+
+func TestAWorkspaceWithAnAbsolutePathIsValid(t *testing.T) {
+	space := Workspace{Owner: Owner{Kind: OwnerUser, ID: "uno"}, Path: "/volumes/uno"}
+	if err := space.Valid(); err != nil {
+		t.Fatalf("no lo dio por válido: %v", err)
 	}
 }

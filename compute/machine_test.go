@@ -2,49 +2,17 @@ package compute
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
-	"time"
 
 	"github.com/3-lines-studio/goddard/axe"
 )
 
-type shellChannel struct{}
-
-func (shellChannel) Exec(ctx context.Context, command string, stdin []byte) (Result, error) {
-	cmd := exec.CommandContext(ctx, "bash", "-c", command)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.WaitDelay = time.Second
-	cmd.Stdin = bytes.NewReader(stdin)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if ctx.Err() != nil {
-		return Result{}, ctx.Err()
-	}
-	result := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}
-	if err == nil {
-		return result, nil
-	}
-	var exit *exec.ExitError
-	if !errors.As(err, &exit) {
-		return Result{}, err
-	}
-	result.Exit = exit.ExitCode()
-	return result, nil
-}
-
 func newTestMachine(t *testing.T) *Machine {
 	t.Helper()
-	return NewMachine(shellChannel{}, t.TempDir())
+	return NewMachine(Shell{}, t.TempDir())
 }
 
 func TestTheMachineWritesAndReadsAFile(t *testing.T) {
@@ -155,7 +123,7 @@ func TestTheMachineRemovesAFileAndADirectory(t *testing.T) {
 
 func TestTheMachineRunsInItsDirectory(t *testing.T) {
 	root := t.TempDir()
-	machine := NewMachine(shellChannel{}, root)
+	machine := NewMachine(Shell{}, root)
 	out := machine.Run("pwd", 10, nil)
 	if strings.TrimSpace(out) != root {
 		t.Fatalf("pwd dio %q", out)
@@ -195,7 +163,7 @@ func TestTheMachineCutsTheCommandThatTakesTooLong(t *testing.T) {
 func TestTheMachineAndTheLocalOneSeeTheSameFiles(t *testing.T) {
 	root := t.TempDir()
 	local := axe.NewLocal(root)
-	remote := NewMachine(shellChannel{}, root)
+	remote := NewMachine(Shell{}, root)
 
 	if err := local.Write("desde-local.txt", []byte("hola")); err != nil {
 		t.Fatalf("write local: %v", err)

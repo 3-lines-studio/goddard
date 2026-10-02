@@ -24,6 +24,7 @@ import (
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
+	"github.com/3-lines-studio/goddard/workspace"
 )
 
 func Serve(ctx context.Context, handler http.Handler) error {
@@ -89,11 +90,11 @@ func addr() string {
 	return ":8080"
 }
 
-// Workspaces is where the projects live while the sandbox is this host: the
-// workspace is the owner's — a user or an organization, one of each — and the
-// project is a directory inside it. When the sandbox is somebody else's, its
-// machine says where the projects of that owner start and this is not read.
-const Workspaces = "/data/workspaces"
+// Volumes is where the projects live: a directory per owner inside it, and the
+// project by its slug. It is the mount point of the volume in the sandbox —
+// the machine the tools run in — and not a directory of this container, so
+// goddard never reads it: what it does with it is hand it to the machine.
+const Volumes = "/volumes"
 
 // build opens every part of goddard over the same database and the same model
 // of it: the stores, the agent, and who the app is being for.
@@ -102,14 +103,11 @@ func build(db *sql.DB) (*Service, error) {
 	if key == "" {
 		return nil, errors.New("goddard: OPENAI_API_KEY is not set")
 	}
-	if err := os.MkdirAll(Workspaces, 0o755); err != nil {
-		return nil, err
-	}
 	master, err := masterKey()
 	if err != nil {
 		return nil, err
 	}
-	built := New(db, axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key), Workspaces, master)
+	built := New(db, axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key), Volumes, master)
 	built.Offset = offset()
 	built.Mail = newMailer()
 	built.Allowed = emails(os.Getenv("GODDARD_ALLOWED_EMAILS"))
@@ -122,22 +120,25 @@ func build(db *sql.DB) (*Service, error) {
 }
 
 // New is the app over a database and a provider: the stores, the hub, the way
-// to stop a turn and the workspace. `build` is this with everything else read
-// from the environment, which is what a test of the app needs to skip.
-func New(db *sql.DB, provider axe.Provider, workspace string, master heimdall.Key) *Service {
+// to stop a turn, the volumes the projects live in and the way into the
+// sandbox. `build` is this with everything else read from the environment,
+// which is what a test of the app needs to skip.
+func New(db *sql.DB, provider axe.Provider, volumes string, master heimdall.Key) *Service {
 	built := &Service{
-		DB:        db,
-		Chat:      chat.NewStore(db),
-		Auth:      auth.NewStore(db),
-		Memo:      memo.NewPgStore(db),
-		Skill:     skill.NewPgStore(db),
-		Schedule:  schedule.NewPgStore(db),
-		Orgs:      org.NewPgStore(db),
-		Heimdall:  heimdall.NewStore(db, master),
-		Provider:  provider,
-		Hub:       newHub(),
-		Stops:     newStops(),
-		Workspace: workspace,
+		DB:         db,
+		Chat:       chat.NewStore(db),
+		Auth:       auth.NewStore(db),
+		Memo:       memo.NewPgStore(db),
+		Skill:      skill.NewPgStore(db),
+		Schedule:   schedule.NewPgStore(db),
+		Orgs:       org.NewPgStore(db),
+		Heimdall:   heimdall.NewStore(db, master),
+		Workspaces: workspace.NewPgStore(db),
+		Dialer:     SSH{},
+		Provider:   provider,
+		Hub:        newHub(),
+		Stops:      newStops(),
+		Volumes:    volumes,
 	}
 	built.Agenda = schedule.NewService(built.Schedule, built.runTask, 0)
 	return built

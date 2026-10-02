@@ -22,6 +22,7 @@ import (
 	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/compute"
 	"github.com/3-lines-studio/goddard/heimdall"
 	"github.com/3-lines-studio/goddard/migrations"
 	"github.com/3-lines-studio/goddard/org"
@@ -104,15 +105,41 @@ func SSE(lines ...string) string {
 }
 
 // Service is the app over that database and that provider, the way the binary
-// builds it.
+// builds it: the projects of a test live in a directory of the test's own and
+// the machine of a turn runs there, because the sandbox of a test is the
+// machine the test is running in.
 func Service(t *testing.T, server *httptest.Server) *app.Service {
 	t.Helper()
 	built := app.New(Database(t), axe.NewOpenAI(server.URL, "k1"), t.TempDir(), MasterKey(t))
+	built.Dialer = shell{}
 	built.Model = "m1"
 	built.Assistant = "Jimmy"
 	built.Language = prompt.DefaultLanguage
 	built.Spec = prompt.Default
 	return built
+}
+
+// shell is the sandbox of the tests: the commands run where the test runs, so
+// what the tools write is a file the test reads, and the volume of the owner
+// is a directory of the test.
+type shell struct{}
+
+func (shell) Dial(app.Sandbox) compute.Channel { return compute.Shell{} }
+
+// Sandbox gives an owner somewhere to run: the three secrets of a sandbox, so
+// the turn of a test has a machine. The dialer of the tests ignores where it
+// says it is and runs the commands where the test runs.
+func Sandbox(t *testing.T, service *app.Service, owner heimdall.Owner) {
+	t.Helper()
+	for name, value := range map[string]string{
+		app.SandboxAddr: "127.0.0.1:22",
+		app.SandboxUser: "tester",
+		app.SandboxKey:  "una-llave",
+	} {
+		if err := service.Heimdall.Set(t.Context(), owner, app.SandboxProject, app.SandboxEnv, name, value, "test"); err != nil {
+			t.Fatalf("sandbox %s: %v", name, err)
+		}
+	}
 }
 
 // MasterKey is the key the app of a test seals its secrets with: any 32 bytes
@@ -149,6 +176,7 @@ const TestEmail = "berti@ejemplo.com"
 func Somebody(t *testing.T, service *app.Service, email string) auth.User {
 	t.Helper()
 	user, _ := signIn(t, service, email)
+	Sandbox(t, service, heimdall.User(user.ID))
 	return user
 }
 
@@ -160,6 +188,7 @@ func AnOrg(t *testing.T, service *app.Service, name string) org.Org {
 	if err != nil {
 		t.Fatalf("no pude crear la organización: %v", err)
 	}
+	Sandbox(t, service, heimdall.Org(created.ID))
 	return created
 }
 
@@ -168,6 +197,7 @@ func AnOrg(t *testing.T, service *app.Service, name string) org.Org {
 func User(t *testing.T, service *app.Service) auth.User {
 	t.Helper()
 	user, _ := signIn(t, service, TestEmail)
+	Sandbox(t, service, heimdall.User(user.ID))
 	return user
 }
 

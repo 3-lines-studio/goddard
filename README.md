@@ -73,7 +73,7 @@ below.
   the owner's — a person, or the organization the projects are shared with —
   and the path is stable on purpose, because a project that moves leaves every
   file behind. How to reach the machine that runs the tools over them is not
-  here: it is the sandbox of `heimdall`.
+  here: it is the sandbox of `heimdall`, and where the tools of a turn run.
 - `skill` — the skills: named instructions the agent loads into its context
   when the task calls for them, in the `skill` schema of the same Postgres.
   Port of jimmy's `src/skill.rs`, with the tree of directories replaced by
@@ -232,11 +232,14 @@ steps — the model's next token, the next tool — so a command already running
 finishes on its own, the way it does in axe.
 
 Every project has a directory of its own in the workspace, under the owner of
-the project and its slug — `<owner>/<slug>`, inside `/data/workspaces`, with
-the id of the owner in front and not its name — and that is where the tools of
-a turn run. Two people name their projects the same way, so the owner comes
-first; and two projects are two trees, so one never reads the files of the
-other.
+the project and its slug — `<owner>/<slug>`, inside `/volumes`, with the id of
+the owner in front and not its name — and that is where the tools of a turn
+run. Two people name their projects the same way, so the owner comes first; and
+two projects are two trees, so one never reads the files of the other. That
+directory is not in the container goddard runs in: it hangs from the volume the
+sandbox mounts, and the tools run in the sandbox, over ssh, with the three
+secrets the owner loaded in heimdall. Without a sandbox the turn does not run
+at all.
 
 A message may carry files. They are kept in the database — any instance serves
 any conversation — and written into that workspace when the turn runs, under
