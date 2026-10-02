@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/jackc/pgx/v5/pgconn"
-
 	"github.com/3-lines-studio/goddard/naming"
 )
 
@@ -67,7 +65,11 @@ func scanProject(row interface{ Scan(...any) error }, project *Project) error {
 
 // CreateProject opens one. The slug comes from the name and is what the
 // directory of the workspace and the other tables use, so it is taken once and
-// renaming the project later does not move it.
+// renaming the project later does not move it. Two owners can have the same
+// slug: the directory and the memory hang from the owner. A slug that an
+// archived project of the same owner already has is not taken: that one comes
+// back with the name, the conversations and the memory it had, because
+// deleting a project archives it and does not let the name go.
 func (s *Store) CreateProject(ctx context.Context, name string, owner Owner, createdBy string) (Project, error) {
 	slug := naming.From(name)
 	if slug == "" {
@@ -76,11 +78,15 @@ func (s *Store) CreateProject(ctx context.Context, name string, owner Owner, cre
 	if owner.Kind == "" || owner.ID == "" {
 		return Project{}, errors.New("ese proyecto no tiene dueño")
 	}
-	project := Project{Slug: slug, Name: name, Owner: owner, CreatedBy: createdBy}
+	var project Project
 	err := s.db.QueryRowContext(ctx,
-		"INSERT INTO chat.projects (slug, name, owner_kind, owner_id, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-		slug, name, owner.Kind, owner.ID, createdBy).Scan(&project.ID)
-	if taken(err) {
+		"INSERT INTO chat.projects (slug, name, owner_kind, owner_id, created_by) VALUES ($1, $2, $3, $4, $5) "+
+			"ON CONFLICT (owner_kind, owner_id, slug) DO UPDATE SET deleted_at = NULL, updated_at = goddard.now() "+
+			"WHERE chat.projects.deleted_at IS NOT NULL "+
+			"RETURNING "+projectColumns,
+		slug, name, owner.Kind, owner.ID, createdBy).
+		Scan(&project.ID, &project.Slug, &project.Name, &project.Owner.Kind, &project.Owner.ID, &project.CreatedBy)
+	if errors.Is(err, sql.ErrNoRows) {
 		return Project{}, ErrTaken
 	}
 	if err != nil {
@@ -192,9 +198,4 @@ func (s *Store) DeleteConversation(ctx context.Context, id string) error {
 		"UPDATE chat.conversations SET deleted_at = goddard.now(), updated_at = goddard.now() "+
 			"WHERE id = $1 AND deleted_at IS NULL", id)
 	return err
-}
-
-func taken(err error) bool {
-	var pg *pgconn.PgError
-	return errors.As(err, &pg) && pg.Code == "23505"
 }

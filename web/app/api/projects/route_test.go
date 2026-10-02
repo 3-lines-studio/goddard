@@ -68,6 +68,16 @@ func TestCreateRenameAndDelete(t *testing.T) {
 	if projects, err := service.Chat.Projects(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: apptest.User(t, service).ID}, nil); err != nil || len(projects) != 0 {
 		t.Fatalf("quedaron %d proyectos (%v)", len(projects), err)
 	}
+
+	recorder = httptest.NewRecorder()
+	Post(recorder, apptest.Request(t, "POST", "/api/projects", map[string]string{"name": "Picsel"}, cookie))
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("recrearlo contestó %d: %s", recorder.Code, apptest.Text(t, recorder))
+	}
+	back, ok, err := service.Chat.Project(t.Context(), projects[0].ID)
+	if err != nil || !ok || back.Name != "el otro" {
+		t.Fatalf("no volvió el mismo proyecto: %+v (%v, %v)", back, ok, err)
+	}
 }
 
 // El proyecto ajeno es invisible: renombrarlo o borrarlo contesta 404 y no
