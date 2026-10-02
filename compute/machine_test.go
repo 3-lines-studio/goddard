@@ -202,3 +202,29 @@ func TestTheMachineAndTheLocalOneSeeTheSameFiles(t *testing.T) {
 		t.Fatalf("el run remoto dio %q y el local %q", got, want)
 	}
 }
+
+func TestTheMachineSaysWhetherItsDirectoryIsThere(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "volumen")
+	machine := NewMachine(Shell{}, dir)
+	there, err := machine.Mounted(t.Context())
+	if err != nil {
+		t.Fatalf("mounted: %v", err)
+	}
+	if there {
+		t.Fatal("dijo que está un directorio que no está")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("lo creó: %v", err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("no pude armarlo: %v", err)
+	}
+	there, err = machine.Mounted(t.Context())
+	if err != nil {
+		t.Fatalf("mounted: %v", err)
+	}
+	if !there {
+		t.Fatal("dijo que no está un directorio que está")
+	}
+}

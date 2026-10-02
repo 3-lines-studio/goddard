@@ -114,6 +114,18 @@ func (m *Machine) Remove(path string) error {
 	return nil
 }
 
+// Mounted says whether the directory of the machine is there, without making
+// it. A turn makes it, so a directory that looks like a volume is not the same
+// thing: what the tools write in one that was never mounted goes away with the
+// sandbox.
+func (m *Machine) Mounted(ctx context.Context) (bool, error) {
+	result, err := m.exec(ctx, "test -d "+quote(m.dir), nil)
+	if err != nil {
+		return false, err
+	}
+	return result.Exit == 0, nil
+}
+
 func (m *Machine) Run(command string, timeout uint64, _ axe.Progress) string {
 	seconds := timeout
 	if seconds == 0 {
