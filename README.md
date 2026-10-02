@@ -242,8 +242,10 @@ run. Two people name their projects the same way, so the owner comes first; and
 two projects are two trees, so one never reads the files of the other. That
 directory is not in the container goddard runs in: it hangs from the volume the
 sandbox mounts, and the tools run in the sandbox, over ssh, with the three
-secrets the owner loaded in heimdall. Without a sandbox the turn does not run
-at all.
+secrets the owner loaded in heimdall. The sandbox comes with that volume already
+mounted, and a turn asks for it before running anything: without it the turn
+does not run at all, because a directory that only looks like the volume goes
+away with the machine. Without a sandbox there is no turn either.
 
 A message may carry files. They are kept in the database — any instance serves
 any conversation — and written into that workspace when the turn runs, under

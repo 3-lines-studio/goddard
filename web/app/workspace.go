@@ -2,11 +2,9 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/3-lines-studio/goddard/chat"
-	"github.com/3-lines-studio/goddard/compute"
 	"github.com/3-lines-studio/goddard/workspace"
 )
 
@@ -60,32 +58,13 @@ func workspaceOwner(owner chat.Owner) workspace.Owner {
 
 // CheckWorkspace dials the sandbox of an owner the way a turn would and says
 // whether it can run there: the machine answers and the volume of that owner is
-// mounted inside it. It leaves nothing behind, not even the directory of a
-// project, because the point is telling a mounted volume from a directory that
-// looks like one.
+// mounted inside it. It is the same that a turn asks before running, and it
+// leaves nothing behind — not even the directory of a project.
 func (s *Service) CheckWorkspace(ctx context.Context, owner chat.Owner) error {
-	space, err := s.Workspace(ctx, owner)
-	if err != nil {
-		return err
-	}
-	sandbox, err := s.Sandbox(ctx, owner)
-	if err != nil {
-		return err
-	}
-	if err := sandbox.Ready(); err != nil {
-		return err
-	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
-	machine := compute.NewMachine(s.Dialer.Dial(sandbox), space.Path)
-	mounted, err := machine.Mounted(ctx)
-	if err != nil {
-		return fmt.Errorf("no pude entrar a la máquina: %w", err)
-	}
-	if !mounted {
-		return fmt.Errorf("la máquina contesta, pero no ve %s adentro", space.Path)
-	}
-	return nil
+	_, _, err := s.machineOf(ctx, owner)
+	return err
 }
 
 // RemoveWorkspace takes the workspace of an owner back to nothing: its projects
