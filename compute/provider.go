@@ -31,6 +31,9 @@ type Sandbox struct {
 // the turn to compute.SSH; the address and the user are all it has to hand over.
 type Provider interface {
 	Create(ctx context.Context, spec Spec) (Sandbox, error)
+	// Wait is the other half of Create: a provider answers with a machine that
+	// is provisioning, and it is ready a moment later.
+	Wait(ctx context.Context, id string) (Sandbox, error)
 	Get(ctx context.Context, id string) (Sandbox, error)
 	Stop(ctx context.Context, id string) error
 	Resume(ctx context.Context, id string) error
