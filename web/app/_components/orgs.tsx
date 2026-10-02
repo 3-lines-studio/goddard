@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { cn } from "@/lib/utils";
 
 import type { Member, Org } from "./types";
 
@@ -18,8 +20,6 @@ const ROLES = [
 function roleName(role: string) {
   return ROLES.find((one) => one.value === role)?.label ?? role;
 }
-
-const roleSelect = "h-7 rounded-md border bg-transparent px-1 text-xs";
 
 export function Orgs({
   orgs,
@@ -80,14 +80,15 @@ export function Orgs({
                 {org.role === "owner" ? (
                   <>
                     {" · "}
-                    <button
+                    <Button
                       type="button"
+                      variant="link"
                       onClick={() => onAsk("/api/orgs", org.id)}
                       data-org-delete={org.id}
-                      className={removing === org.id ? "text-destructive" : "underline"}
+                      className={cn("h-auto p-0", removing === org.id && "text-destructive")}
                     >
                       {removing === org.id ? "otra vez para borrar todo" : "borrar la organización"}
-                    </button>
+                    </Button>
                   </>
                 ) : null}
               </CardDescription>
@@ -102,19 +103,19 @@ export function Orgs({
                     </ItemContent>
                     <ItemActions>
                       {org.role === "owner" ? (
-                        <select
+                        <NativeSelect
                           value={member.role}
                           data-member-role={member.user_id}
                           aria-label={`Rol de ${member.email}`}
+                          size="sm"
                           onChange={(event) => onRole(org.id, member.user_id, event.target.value)}
-                          className={roleSelect}
                         >
                           {ROLES.map((one) => (
-                            <option key={one.value} value={one.value}>
+                            <NativeSelectOption key={one.value} value={one.value}>
                               {one.label}
-                            </option>
+                            </NativeSelectOption>
                           ))}
-                        </select>
+                        </NativeSelect>
                       ) : (
                         <Badge variant="outline">{roleName(member.role)}</Badge>
                       )}
@@ -134,13 +135,13 @@ export function Orgs({
               {canInvite ? (
                 <form onSubmit={(event) => onInvite(org.id, event)} className="flex gap-1.5">
                   <Input name="email" data-invite={`${org.id}`} placeholder="mail de quien invitás" className="h-8" />
-                  <select name="role" defaultValue="member" aria-label="Rol" className={`${roleSelect} h-8`}>
+                  <NativeSelect name="role" defaultValue="member" aria-label="Rol">
                     {ROLES.filter((one) => org.role === "owner" || one.value !== "owner").map((one) => (
-                      <option key={one.value} value={one.value}>
+                      <NativeSelectOption key={one.value} value={one.value}>
                         {one.label}
-                      </option>
+                      </NativeSelectOption>
                     ))}
-                  </select>
+                  </NativeSelect>
                   <Button type="submit" size="sm" variant="outline">
                     Invitar
                   </Button>

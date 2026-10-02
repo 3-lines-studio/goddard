@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { SandboxCheck, Setup } from "./types";
@@ -133,7 +135,7 @@ export function Onboarding() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {setup === null ? (
-            <p className="text-sm text-muted-foreground">Leyendo…</p>
+            <Skeleton className="h-24 w-full" />
           ) : step === 0 ? (
             <form onSubmit={saveName} data-onboarding-form="vos">
               <FieldGroup>
@@ -151,6 +153,7 @@ export function Onboarding() {
                 </Field>
                 <Field orientation="horizontal">
                   <Button type="submit" data-onboarding-next="vos" disabled={busy !== ""}>
+                    {busy ? <Spinner data-icon="inline-start" /> : null}
                     {busy ? "guardando…" : "Seguir"}
                   </Button>
                   <Button type="button" variant="ghost" data-onboarding-skip="" onClick={() => go(1)}>
@@ -173,7 +176,7 @@ export function Onboarding() {
                   </CardHeader>
                   <CardContent>
                     <Button type="button" variant="outline" data-onboarding-use-house="" onClick={useHouse} disabled={busy !== ""}>
-                      <SparklesIcon data-icon="inline-start" />
+                      {busy ? <Spinner data-icon="inline-start" /> : <SparklesIcon data-icon="inline-start" />}
                       Usar el de la casa
                     </Button>
                   </CardContent>
@@ -225,6 +228,7 @@ export function Onboarding() {
                         </Field>
                         <Field>
                           <Button type="submit" variant="outline" data-onboarding-save-model="" disabled={busy !== ""}>
+                            {busy ? <Spinner data-icon="inline-start" /> : null}
                             {busy ? "guardando…" : "Usar el mío"}
                           </Button>
                         </Field>
@@ -312,7 +316,7 @@ export function Onboarding() {
                 </Field>
                 <Field>
                   <Button type="submit" data-onboarding-check="" disabled={busy !== ""}>
-                    <LaptopIcon data-icon="inline-start" />
+                    {busy ? <Spinner data-icon="inline-start" /> : <LaptopIcon data-icon="inline-start" />}
                     {busy ? "probando…" : "Probar y guardar"}
                   </Button>
                 </Field>

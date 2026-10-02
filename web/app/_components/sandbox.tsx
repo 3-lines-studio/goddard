@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { Org, Sandbox, SandboxCheck, SandboxInput } from "./types";
@@ -74,7 +76,7 @@ function Space({
           <span data-space-name={id}>{name}</span>
           {id ? <Badge variant="outline">{ROLES[role] ?? role}</Badge> : null}
         </CardTitle>
-        <CardDescription>{space ? space.path : "leyendo…"}</CardDescription>
+        <CardDescription>{space ? space.path : <Skeleton className="h-4 w-40" />}</CardDescription>
       </CardHeader>
       <CardContent>
         {!space ? null : writable ? (
@@ -152,10 +154,19 @@ function Space({
                 <FieldDescription>Sólo si la llave se guardó con una palabra.</FieldDescription>
               </Field>
               <Field orientation="horizontal">
-                <Button type="submit" size="sm" variant="outline" data-space-save={id}>
+                <Button type="submit" size="sm" variant="outline" data-space-save={id} disabled={saving}>
+                  {saving ? <Spinner data-icon="inline-start" /> : null}
                   {saving ? "guardando…" : "Guardar"}
                 </Button>
-                <Button type="button" size="sm" variant="ghost" data-space-check={id} onClick={() => onCheck(id)}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  data-space-check={id}
+                  disabled={checking}
+                  onClick={() => onCheck(id)}
+                >
+                  {checking ? <Spinner data-icon="inline-start" /> : null}
                   {checking ? "probando…" : "probar"}
                 </Button>
                 {space.addr || space.has_key ? (

@@ -7,6 +7,7 @@ import {
   LaptopIcon,
   LogOutIcon,
   MessageSquarePlusIcon,
+  MonitorIcon,
   MoonIcon,
   PencilIcon,
   PlusIcon,
@@ -27,7 +28,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Sidebar,
   SidebarContent,
@@ -45,7 +48,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { Avatar } from "./avatar";
-import type { Org, Project, Tab } from "./types";
+import type { Org, Project, Tab, Theme } from "./types";
 import { VISIBLE } from "./types";
 
 export function Rail({
@@ -74,7 +77,7 @@ export function Rail({
   onOpenOrgs,
   onOpenSandbox,
   onOpenModel,
-  onToggleTheme,
+  onTheme,
   onLogout,
 }: {
   projects: Project[];
@@ -82,7 +85,7 @@ export function Rail({
   tab: Tab | null;
   unread: number;
   user: string;
-  theme: string;
+  theme: Theme;
   collapsed: Set<string>;
   more: Set<string>;
   editing: string;
@@ -102,7 +105,7 @@ export function Rail({
   onOpenOrgs: () => void;
   onOpenSandbox: () => void;
   onOpenModel: () => void;
-  onToggleTheme: () => void;
+  onTheme: (theme: Theme) => void;
   onLogout: () => void;
 }) {
   const groups = [
@@ -119,21 +122,21 @@ export function Rail({
       <SidebarHeader>
         <form onSubmit={onNewProject} className="flex gap-1.5">
           <Input name="name" data-new-project="" placeholder="Nuevo proyecto" className="h-8" />
-          <select
+          <NativeSelect
             name="org"
             data-new-project-org=""
             aria-label="De quién es el proyecto"
-            className="h-8 max-w-24 rounded-md border bg-transparent px-1 text-xs"
+            className="max-w-24"
           >
-            <option value="">Personal</option>
+            <NativeSelectOption value="">Personal</NativeSelectOption>
             {orgs
               .filter((org) => org.role === "owner")
               .map((org) => (
-                <option key={org.id} value={org.id}>
+                <NativeSelectOption key={org.id} value={org.id}>
                   {org.name}
-                </option>
+                </NativeSelectOption>
               ))}
-          </select>
+          </NativeSelect>
           <Button type="submit" variant="outline" size="icon" aria-label="Agregar proyecto">
             <PlusIcon />
           </Button>
@@ -300,7 +303,12 @@ export function Rail({
           </Fragment>
         ))}
         {projects.length === 0 ? (
-          <p className="px-3 py-2 text-sm text-muted-foreground">Todavía no hay proyectos.</p>
+          <Empty className="border-0 p-3">
+            <EmptyHeader>
+              <EmptyTitle>Todavía no hay proyectos</EmptyTitle>
+              <EmptyDescription>Creá el primero con el casillero de arriba.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : null}
       </SidebarContent>
 
@@ -341,16 +349,37 @@ export function Rail({
         <div className="flex items-center justify-between gap-2 px-2 text-xs">
           <span className="truncate text-muted-foreground">{user}</span>
           <span className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              onClick={onToggleTheme}
-              data-theme-toggle=""
-              aria-label={theme === "dark" ? "Tema claro" : "Tema oscuro"}
-            >
-              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    data-theme-toggle=""
+                    aria-label="Tema"
+                  />
+                }
+              >
+                {theme === "system" ? <MonitorIcon /> : theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem data-theme="light" onClick={() => onTheme("light")}>
+                    <SunIcon />
+                    claro
+                  </DropdownMenuItem>
+                  <DropdownMenuItem data-theme="dark" onClick={() => onTheme("dark")}>
+                    <MoonIcon />
+                    oscuro
+                  </DropdownMenuItem>
+                  <DropdownMenuItem data-theme="system" onClick={() => onTheme("system")}>
+                    <MonitorIcon />
+                    el del sistema
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button type="button" variant="ghost" size="icon-xs" onClick={onLogout} data-logout="" aria-label="Salir">
               <LogOutIcon />
             </Button>
