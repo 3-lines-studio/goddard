@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/3-lines-studio/goddard/chat"
@@ -10,55 +11,91 @@ import (
 	"github.com/3-lines-studio/goddard/web/app/apptest"
 )
 
-func TestTheSandboxKeyIsTheOneOfThatSandboxOnly(t *testing.T) {
+// putSandbox loads a sandbox the way the app reads it: three secrets of the
+// owner, under the project and the environment of the sandbox.
+func putSandbox(t *testing.T, service *app.Service, owner heimdall.Owner, addr, user, key string) {
+	t.Helper()
+	for name, value := range map[string]string{
+		app.SandboxAddr: addr,
+		app.SandboxUser: user,
+		app.SandboxKey:  key,
+	} {
+		if err := service.Heimdall.Set(t.Context(), owner, app.SandboxProject, app.SandboxEnv, name, value, "berti"); err != nil {
+			t.Fatalf("set %s: %v", name, err)
+		}
+	}
+}
+
+func TestTheSandboxOfAnOwnerComesFromTheVault(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	user := apptest.User(t, service)
+	putSandbox(t, service, heimdall.User(user.ID), "127.0.0.1:2222", "root", "una-llave")
+	found, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID})
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if found.Addr != "127.0.0.1:2222" || found.User != "root" || string(found.Key) != "una-llave" {
+		t.Fatalf("salió %+v", found)
+	}
+}
+
+func TestAnOrganizationHasItsOwnSandbox(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	user := apptest.User(t, service)
+	putSandbox(t, service, heimdall.User(user.ID), "mio.local:22", "berti", "la-mía")
+	putSandbox(t, service, heimdall.Org("acme"), "acme.local:22", "goddard", "la-de-acme")
+	found, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerOrg, ID: "acme"})
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if found.Addr != "acme.local:22" || found.User != "goddard" || string(found.Key) != "la-de-acme" {
+		t.Fatalf("salió %+v", found)
+	}
+	if _, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: "otro"}); !errors.Is(err, app.ErrNoSandbox) {
+		t.Fatalf("un dueño sin sandbox devolvió %v", err)
+	}
+}
+
+func TestASandboxSaysWhichOfTheThreeIsMissing(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t))
 	user := apptest.User(t, service)
 	owner := heimdall.User(user.ID)
-	for _, caso := range []struct{ project, env, value string }{
-		{"goddard", app.SandboxEnv, "la-de-un-proyecto"},
-		{app.SandboxProject, "prod", "la-de-producción"},
+	for name, value := range map[string]string{
+		app.SandboxAddr: "127.0.0.1:2222",
+		app.SandboxUser: "root",
 	} {
-		if err := service.Heimdall.Set(t.Context(), owner, caso.project, caso.env, app.SandboxKeyName, caso.value, user.ID); err != nil {
-			t.Fatalf("set: %v", err)
+		if err := service.Heimdall.Set(t.Context(), owner, app.SandboxProject, app.SandboxEnv, name, value, "berti"); err != nil {
+			t.Fatalf("set %s: %v", name, err)
 		}
 	}
-	if err := service.Heimdall.Set(t.Context(), owner, app.SandboxProject, app.SandboxEnv, app.SandboxKeyName, "una-llave", user.ID); err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	key, err := service.SandboxKey(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID})
-	if err != nil {
-		t.Fatalf("sandboxKey: %v", err)
-	}
-	if string(key) != "una-llave" {
-		t.Fatalf("salió %q", key)
-	}
-}
-
-func TestAnOrganizationHasItsOwnSandboxKey(t *testing.T) {
-	service := apptest.Service(t, apptest.Provider(t))
-	user := apptest.User(t, service)
-	if err := service.Heimdall.Set(t.Context(), heimdall.User(user.ID), app.SandboxProject, app.SandboxEnv, app.SandboxKeyName, "la-mía", user.ID); err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	if err := service.Heimdall.Set(t.Context(), heimdall.Org("acme"), app.SandboxProject, app.SandboxEnv, app.SandboxKeyName, "la-de-acme", user.ID); err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	key, err := service.SandboxKey(t.Context(), chat.Owner{Kind: chat.OwnerOrg, ID: "acme"})
-	if err != nil {
-		t.Fatalf("sandboxKey: %v", err)
-	}
-	if string(key) != "la-de-acme" {
-		t.Fatalf("salió %q", key)
-	}
-	if _, err := service.SandboxKey(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: "otro"}); !errors.Is(err, app.ErrNoSandboxKey) {
-		t.Fatalf("un dueño sin llave devolvió %v", err)
-	}
-}
-
-func TestAWorkspaceWithoutAKeyIsRefused(t *testing.T) {
-	service := apptest.Service(t, apptest.Provider(t))
-	user := apptest.User(t, service)
-	if _, err := service.SandboxKey(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID}); !errors.Is(err, app.ErrNoSandboxKey) {
+	_, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID})
+	if !errors.Is(err, app.ErrNoSandbox) {
 		t.Fatalf("sin llave devolvió %v", err)
+	}
+	if got := err.Error(); !strings.Contains(got, app.SandboxKey) {
+		t.Fatalf("no dijo cuál falta: %q", got)
+	}
+}
+
+func TestTheSandboxIsNotASecretOfAProject(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	user := apptest.User(t, service)
+	owner := heimdall.User(user.ID)
+	putSandbox(t, service, owner, "127.0.0.1:2222", "root", "una-llave")
+	for name, value := range map[string]string{
+		app.SandboxAddr: "otro.local:22",
+		app.SandboxUser: "otro",
+		app.SandboxKey:  "otra-llave",
+	} {
+		if err := service.Heimdall.Set(t.Context(), owner, "goddard", app.SandboxEnv, name, value, "berti"); err != nil {
+			t.Fatalf("set %s: %v", name, err)
+		}
+	}
+	found, err := service.Sandbox(t.Context(), chat.Owner{Kind: chat.OwnerUser, ID: user.ID})
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	if found.Addr != "127.0.0.1:2222" || string(found.Key) != "una-llave" {
+		t.Fatalf("leyó lo del proyecto: %+v", found)
 	}
 }
