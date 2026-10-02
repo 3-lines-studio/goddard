@@ -64,9 +64,16 @@ below.
   compatible with. The command line keeps the `doppler` dialect,
   `heimdall run --preserve-env -- npm test`. Outside: the HTTP server, the web
   page and the magic link, which bifrost and `auth` bring. It is where goddard
-  keeps what it has to seal: the key of the sandbox of an owner, under the
-  `sandbox` project and the `default` environment, sealed with
-  `HEIMDALL_MASTER_KEY`.
+  keeps what it has to seal: the sandbox of an owner — where it is, who to be
+  there and the key to get in — under the `sandbox` project and the `default`
+  environment, sealed with `HEIMDALL_MASTER_KEY`.
+- `workspace` — where the projects of an owner live, in the `workspace` schema
+  of the same Postgres: the path of the volume that holds them, `/volumes/<owner
+  id>` when nobody says otherwise, and the project inside it by its slug. It is
+  the owner's — a person, or the organization the projects are shared with —
+  and the path is stable on purpose, because a project that moves leaves every
+  file behind. How to reach the machine that runs the tools over them is not
+  here: it is the sandbox of `heimdall`, and where the tools of a turn run.
 - `skill` — the skills: named instructions the agent loads into its context
   when the task calls for them, in the `skill` schema of the same Postgres.
   Port of jimmy's `src/skill.rs`, with the tree of directories replaced by
@@ -225,11 +232,14 @@ steps — the model's next token, the next tool — so a command already running
 finishes on its own, the way it does in axe.
 
 Every project has a directory of its own in the workspace, under the owner of
-the project and its slug — `<owner>/<slug>`, inside `/data/workspaces`, with
-the id of the owner in front and not its name — and that is where the tools of
-a turn run. Two people name their projects the same way, so the owner comes
-first; and two projects are two trees, so one never reads the files of the
-other.
+the project and its slug — `<owner>/<slug>`, inside `/volumes`, with the id of
+the owner in front and not its name — and that is where the tools of a turn
+run. Two people name their projects the same way, so the owner comes first; and
+two projects are two trees, so one never reads the files of the other. That
+directory is not in the container goddard runs in: it hangs from the volume the
+sandbox mounts, and the tools run in the sandbox, over ssh, with the three
+secrets the owner loaded in heimdall. Without a sandbox the turn does not run
+at all.
 
 A message may carry files. They are kept in the database — any instance serves
 any conversation — and written into that workspace when the turn runs, under

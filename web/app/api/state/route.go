@@ -71,7 +71,12 @@ func Get(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		view := projectView{ID: project.ID, Slug: project.Slug, Name: project.Name, Owner: project.Owner, Workspace: service.ProjectDir(project), Conversations: []conversationView{}}
+		dir, err := service.ProjectDir(r.Context(), project)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		view := projectView{ID: project.ID, Slug: project.Slug, Name: project.Name, Owner: project.Owner, Workspace: dir, Conversations: []conversationView{}}
 		for _, conversation := range conversations {
 			if conversation.Source == chat.SourceSchedule {
 				continue

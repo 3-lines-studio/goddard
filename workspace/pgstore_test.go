@@ -49,59 +49,52 @@ func testDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func TestAWorkspaceExistsWithoutARow(t *testing.T) {
-	store := NewPgStore(testDB(t))
-	found, err := store.Get(t.Context(), Owner{Kind: OwnerUser, ID: "01M3"})
+func TestAnOwnerWithoutARowHasNoWorkspace(t *testing.T) {
+	found, ok, err := NewPgStore(testDB(t)).Get(t.Context(), Owner{Kind: OwnerUser, ID: "01M3"})
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Path != Volumes+"/01M3" {
+	if ok {
+		t.Fatalf("devolvió %+v", found)
+	}
+	if found.Path != "" {
 		t.Fatalf("el path quedó %q", found.Path)
-	}
-	if found.Sandbox.Kind != SandboxSSH {
-		t.Fatalf("el sandbox quedó %+v", found.Sandbox)
-	}
-	if found.Reachable() {
-		t.Fatal("dijo que el sandbox se alcanza")
 	}
 }
 
 func TestAWorkspaceKeepsWhatIsWritten(t *testing.T) {
 	store := NewPgStore(testDB(t))
 	owner := Owner{Kind: OwnerOrg, ID: "01M4"}
-	wanted := New(owner)
-	wanted.Path = "/data/volumes/la-casa"
-	wanted.Sandbox = Sandbox{Kind: SandboxSSH, Addr: "sandbox.local:22", User: "goddard"}
+	wanted := Workspace{Owner: owner, Path: "/data/volumes/la-casa"}
 	if err := store.Set(t.Context(), wanted, "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	found, err := store.Get(t.Context(), owner)
+	found, ok, err := store.Get(t.Context(), owner)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Path != wanted.Path || found.Sandbox != wanted.Sandbox {
+	if !ok || found.Path != wanted.Path {
 		t.Fatalf("volvió %+v", found)
 	}
 	if found.ProjectDir("goddard") != "/data/volumes/la-casa/goddard" {
 		t.Fatalf("el directorio del proyecto quedó %q", found.ProjectDir("goddard"))
 	}
-	wanted.Sandbox.Addr = "otro.local:22"
+	wanted.Path = "/data/volumes/otra-casa"
 	if err := store.Set(t.Context(), wanted, "berti"); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	found, err = store.Get(t.Context(), owner)
+	found, ok, err = store.Get(t.Context(), owner)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Sandbox.Addr != "otro.local:22" {
-		t.Fatalf("el sandbox quedó %+v", found.Sandbox)
+	if !ok || found.Path != "/data/volumes/otra-casa" {
+		t.Fatalf("el path quedó %q", found.Path)
 	}
 }
 
 func TestSetRefusesWhatCannotBeWritten(t *testing.T) {
 	store := NewPgStore(testDB(t))
-	space := New(Owner{Kind: OwnerUser, ID: "uno"})
-	space.Path = "volumes/uno"
+	space := Workspace{Owner: Owner{Kind: OwnerUser, ID: "uno"}, Path: "volumes/uno"}
 	if err := store.Set(t.Context(), space, "berti"); err == nil {
 		t.Fatal("escribió un path relativo")
 	}
