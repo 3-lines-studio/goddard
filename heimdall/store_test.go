@@ -734,3 +734,31 @@ func TestTwoOwnersDoNotSeeTheSameProject(t *testing.T) {
 		t.Fatalf("el drop del otro se llevó lo mío: %v", kept)
 	}
 }
+
+func TestTheIdOfAnOwnerIsOpaque(t *testing.T) {
+	store := testStore(t)
+	owner := User("01M3X1PCEJ44Q5VH94VP8MCS3S")
+	if err := store.Set(t.Context(), owner, "bifrost", "dev", "STRIPE_KEY", "sk_test_123", "berti"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	secrets, err := store.Secrets(t.Context(), owner, "bifrost", "dev")
+	if err != nil {
+		t.Fatalf("secrets: %v", err)
+	}
+	if secrets["STRIPE_KEY"] != "sk_test_123" {
+		t.Fatalf("quedó %v", secrets)
+	}
+	names, err := store.Names(t.Context(), owner)
+	if err != nil {
+		t.Fatalf("names: %v", err)
+	}
+	if !reflect.DeepEqual(names, []string{"bifrost/dev"}) {
+		t.Fatalf("los nombres quedaron %v", names)
+	}
+}
+
+func TestAnOwnerWithoutAnIdIsRefused(t *testing.T) {
+	if err := testStore(t).Set(t.Context(), User("  "), "bifrost", "dev", "A", "1", "berti"); err == nil {
+		t.Fatal("guardó un secreto de un dueño sin id")
+	}
+}
