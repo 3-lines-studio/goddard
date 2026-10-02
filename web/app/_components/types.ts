@@ -67,7 +67,7 @@ export type Skill = {
 
 export type Tab = {
   key: string;
-  kind: "thread" | "agenda" | "memoria" | "orgs" | "sandbox" | "model";
+  kind: "thread" | "agenda" | "memoria" | "orgs" | "sandbox" | "model" | "telemetry";
   title: string;
   slug: string;
 };
@@ -147,6 +147,30 @@ export type Upload = {
   id: string;
   name: string;
   mime: string;
+};
+
+export type Totals = {
+  turns: number;
+  input: number;
+  output: number;
+  cached_input: number;
+  ms: number;
+  failed: number;
+  cancelled: number;
+};
+
+export type Day = Totals & {
+  date: string;
+  model: string;
+};
+
+// Telemetry is what the house reads: the numbers of every owner's turns, added
+// up day by day. It carries no content and no names.
+export type Summary = {
+  from: number;
+  until: number;
+  days: Day[];
+  total: Totals;
 };
 
 export const VISIBLE = 10;
