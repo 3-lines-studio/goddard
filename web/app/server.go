@@ -111,6 +111,7 @@ func build(db *sql.DB) (*Service, error) {
 	built.Offset = offset()
 	built.Mail = newMailer()
 	built.Allowed = emails(os.Getenv("GODDARD_ALLOWED_EMAILS"))
+	built.Admins = emails(os.Getenv("GODDARD_ADMINS"))
 	built.Model = env("GODDARD_MODEL", "deepseek-flash")
 	built.Assistant = env("GODDARD_ASSISTANT", "Jimmy")
 	built.Language = env("GODDARD_LANGUAGE", prompt.DefaultLanguage)

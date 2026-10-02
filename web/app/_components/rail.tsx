@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import {
   BrainIcon,
   CalendarClockIcon,
+  ChartColumnIcon,
   ChevronDownIcon,
   EllipsisIcon,
   LaptopIcon,
@@ -77,6 +78,8 @@ export function Rail({
   onOpenOrgs,
   onOpenSandbox,
   onOpenModel,
+  admin,
+  onOpenTelemetry,
   onTheme,
   onLogout,
 }: {
@@ -85,6 +88,7 @@ export function Rail({
   tab: Tab | null;
   unread: number;
   user: string;
+  admin: boolean;
   theme: Theme;
   collapsed: Set<string>;
   more: Set<string>;
@@ -105,6 +109,7 @@ export function Rail({
   onOpenOrgs: () => void;
   onOpenSandbox: () => void;
   onOpenModel: () => void;
+  onOpenTelemetry: () => void;
   onTheme: (theme: Theme) => void;
   onLogout: () => void;
 }) {
@@ -344,6 +349,19 @@ export function Rail({
               <span>Modelo</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {admin ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={tab?.kind === "telemetry"}
+                onClick={onOpenTelemetry}
+                data-telemetry=""
+                tooltip="Telemetría"
+              >
+                <ChartColumnIcon />
+                <span>Telemetría</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
 
         <div className="flex items-center justify-between gap-2 px-2 text-xs">
