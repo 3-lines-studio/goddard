@@ -107,10 +107,11 @@ func TestBoatLive(t *testing.T) {
 		t.Fatalf("host: %v", err)
 	}
 	t.Logf("el puerto quedó en %s", url)
-	if out := machine.Run("host url 8080", 60, nil); strings.HasPrefix(out, "http") {
-		url = strings.TrimSpace(out)
+	served := machine.Run("host 8080 --public", 60, nil)
+	if !strings.Contains(served, "http") {
+		t.Logf("el sandbox dijo %q", served)
 	}
-	curl := exec.CommandContext(ctx, "curl", "-sS", "-m", "30", url)
+	curl := exec.CommandContext(ctx, "curl", "-sSL", "-m", "30", url)
 	body, err := curl.Output()
 	if err != nil {
 		t.Fatalf("curl a %s: %v", url, err)
