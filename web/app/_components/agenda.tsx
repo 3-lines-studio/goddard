@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 import { markdown } from "../_lib/markdown";
@@ -144,6 +145,7 @@ function TaskCard({
         </CollapsibleTrigger>
         <CardAction className="flex items-center gap-1">
           <Button type="button" variant="outline" size="xs" onClick={onRun} disabled={running} data-run-task={key}>
+            {running ? <Spinner data-icon="inline-start" /> : null}
             {running ? "corriendo…" : "correr"}
           </Button>
           <Button type="button" variant="outline" size="xs" onClick={onPause} data-pause-task={key}>

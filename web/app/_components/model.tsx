@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { Model, ModelInput, Org } from "./types";
@@ -57,7 +59,7 @@ function Choice({
           {id ? <Badge variant="outline">{ROLES[role] ?? role}</Badge> : null}
         </CardTitle>
         <CardDescription>
-          {!model ? "leyendo…" : model.own ? model.name : `el de la casa: ${model.house}`}
+          {model ? (model.own ? model.name : `el de la casa: ${model.house}`) : <Skeleton className="h-4 w-40" />}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -113,7 +115,8 @@ function Choice({
                 </FieldDescription>
               </Field>
               <Field orientation="horizontal">
-                <Button type="submit" size="sm" variant="outline" data-model-save={id}>
+                <Button type="submit" size="sm" variant="outline" data-model-save={id} disabled={saving}>
+                  {saving ? <Spinner data-icon="inline-start" /> : null}
                   {saving ? "guardando…" : "Guardar"}
                 </Button>
                 {model.own ? (

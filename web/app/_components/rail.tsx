@@ -27,7 +27,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Sidebar,
   SidebarContent,
@@ -119,21 +121,21 @@ export function Rail({
       <SidebarHeader>
         <form onSubmit={onNewProject} className="flex gap-1.5">
           <Input name="name" data-new-project="" placeholder="Nuevo proyecto" className="h-8" />
-          <select
+          <NativeSelect
             name="org"
             data-new-project-org=""
             aria-label="De quién es el proyecto"
-            className="h-8 max-w-24 rounded-md border bg-transparent px-1 text-xs"
+            className="max-w-24"
           >
-            <option value="">Personal</option>
+            <NativeSelectOption value="">Personal</NativeSelectOption>
             {orgs
               .filter((org) => org.role === "owner")
               .map((org) => (
-                <option key={org.id} value={org.id}>
+                <NativeSelectOption key={org.id} value={org.id}>
                   {org.name}
-                </option>
+                </NativeSelectOption>
               ))}
-          </select>
+          </NativeSelect>
           <Button type="submit" variant="outline" size="icon" aria-label="Agregar proyecto">
             <PlusIcon />
           </Button>
@@ -300,7 +302,12 @@ export function Rail({
           </Fragment>
         ))}
         {projects.length === 0 ? (
-          <p className="px-3 py-2 text-sm text-muted-foreground">Todavía no hay proyectos.</p>
+          <Empty className="border-0 p-3">
+            <EmptyHeader>
+              <EmptyTitle>Todavía no hay proyectos</EmptyTitle>
+              <EmptyDescription>Creá el primero con el casillero de arriba.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : null}
       </SidebarContent>
 
