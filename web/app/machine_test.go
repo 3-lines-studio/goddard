@@ -14,8 +14,10 @@ import (
 // TestATurnRunsInTheSandboxOverSSH is the whole way of production: the app
 // reads the workspace of the owner and the three secrets of its sandbox, dials
 // the machine over ssh and the tools run there. What the agent writes lands
-// where that machine has the volume, and nothing of it touches the container
-// goddard runs in.
+// where that machine has the volume, inside the directory of the project and
+// not at the root of the volume, and nothing of the turn lands in the volume
+// the app has at hand — which, in a test, is a directory of this same machine,
+// so it stays empty.
 func TestATurnRunsInTheSandboxOverSSH(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t,
 		[]string{
@@ -63,8 +65,15 @@ func TestATurnRunsInTheSandboxOverSSH(t *testing.T) {
 			t.Fatalf("%s quedó %q", path, data)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(service.Volumes, user.ID)); !os.IsNotExist(err) {
-		t.Fatalf("también escribió en el container de goddard: %v", err)
+	if atRoot, err := os.ReadDir(volume); err != nil {
+		t.Fatalf("no pude mirar el volumen del sandbox: %v", err)
+	} else if len(atRoot) != 1 || atRoot[0].Name() != "goddard" {
+		t.Fatalf("el volumen del sandbox quedó con %v: el turno escribe en el proyecto, no en la raíz", atRoot)
+	}
+	if stray, err := os.ReadDir(filepath.Join(service.Volumes, user.ID)); err != nil {
+		t.Fatalf("no pude mirar el volumen que goddard tiene a mano: %v", err)
+	} else if len(stray) > 0 {
+		t.Fatalf("el turno también escribió en el volumen que goddard tiene a mano: %v", stray)
 	}
 }
 
