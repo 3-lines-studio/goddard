@@ -14,7 +14,7 @@ import { Orgs } from "./orgs";
 import { Rail } from "./rail";
 import { Sandboxes } from "./sandbox";
 import { Composer, Thread } from "./thread";
-import type { Event, Fact, Member, Org, Project, Sandbox, SandboxInput, Skill, Tab, Task, Upload } from "./types";
+import type { Event, Fact, Member, Org, Project, Sandbox, SandboxCheck, SandboxInput, Skill, Tab, Task, Upload } from "./types";
 
 const TABS_KEY = "goddard-tabs";
 const OPEN_KEY = "goddard-open-projects";
@@ -67,6 +67,8 @@ export function Chat() {
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [members, setMembers] = useState<Record<string, Member[]>>({});
   const [spaces, setSpaces] = useState<Record<string, Sandbox>>({});
+  const [checks, setChecks] = useState<Record<string, SandboxCheck>>({});
+  const [checking, setChecking] = useState("");
   const [saving, setSaving] = useState("");
   const [removingSpace, setRemovingSpace] = useState("");
   const [keys, setKeys] = useState<string[]>([]);
@@ -317,7 +319,8 @@ export function Chat() {
     load();
   }
 
-  async function saveSpace(org: string, input: SandboxInput) {    setSaving(org || "personal");
+  async function saveSpace(org: string, input: SandboxInput) {
+    setSaving(org || "personal");
     setError("");
     const response = await fetch("/api/workspace", {
       method: "POST",
@@ -330,6 +333,7 @@ export function Chat() {
       return;
     }
     await loadSpace(org);
+    forgetCheck(org);
     load();
   }
 
@@ -351,7 +355,33 @@ export function Chat() {
       return;
     }
     await loadSpace(org);
+    forgetCheck(org);
     load();
+  }
+
+  function forgetCheck(org: string) {
+    setChecks((current) => {
+      const next = { ...current };
+      delete next[org];
+      return next;
+    });
+  }
+
+  async function checkSpace(org: string) {
+    setChecking(org || "personal");
+    setError("");
+    const response = await fetch("/api/workspace/check", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ org }),
+    });
+    setChecking("");
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    const found: SandboxCheck = await response.json();
+    setChecks((current) => ({ ...current, [org]: found }));
   }
 
   async function newOrg(event: React.FormEvent<HTMLFormElement>) {
@@ -720,8 +750,11 @@ export function Chat() {
                     orgs={orgs}
                     saving={saving}
                     removing={removingSpace}
+                    checking={checking}
+                    checks={checks}
                     onSave={(org, input) => void saveSpace(org, input)}
                     onRemove={(org) => askSpace(org)}
+                    onCheck={(org) => void checkSpace(org)}
                   />
                 </div>
               ) : tab.kind === "agenda" ? (

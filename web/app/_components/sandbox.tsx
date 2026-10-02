@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
-import type { Org, Sandbox, SandboxInput } from "./types";
+import type { Org, Sandbox, SandboxCheck, SandboxInput } from "./types";
 
 const ROLES: Record<string, string> = {
   owner: "dueño",
@@ -24,8 +25,11 @@ function Space({
   space,
   saving,
   removing,
+  checking,
+  answer,
   onSave,
   onRemove,
+  onCheck,
 }: {
   id: string;
   name: string;
@@ -33,8 +37,11 @@ function Space({
   space: Sandbox | undefined;
   saving: boolean;
   removing: boolean;
+  checking: boolean;
+  answer: SandboxCheck | undefined;
   onSave: (id: string, input: SandboxInput) => void;
   onRemove: (id: string) => void;
+  onCheck: (id: string) => void;
 }) {
   const [path, setPath] = useState(space?.path ?? "");
   const [addr, setAddr] = useState(space?.addr ?? "");
@@ -105,13 +112,14 @@ function Space({
               </Field>
               <Field>
                 <FieldLabel htmlFor={`space-key-${id}`}>llave privada</FieldLabel>
-                <Input
+                <Textarea
                   id={`space-key-${id}`}
                   name="key"
-                  type="password"
+                  rows={4}
                   value={key}
                   data-space-key={id}
                   placeholder={space.has_key ? "la que ya está" : "sin llave"}
+                  className="font-mono text-xs"
                   onChange={(event) => setKey(event.target.value)}
                 />
                 <FieldDescription>
@@ -123,6 +131,9 @@ function Space({
               <Field orientation="horizontal">
                 <Button type="submit" size="sm" variant="outline" data-space-save={id}>
                   {saving ? "guardando…" : "Guardar"}
+                </Button>
+                <Button type="button" size="sm" variant="ghost" data-space-check={id} onClick={() => onCheck(id)}>
+                  {checking ? "probando…" : "probar"}
                 </Button>
                 {space.addr || space.has_key ? (
                   <Button
@@ -137,6 +148,14 @@ function Space({
                   </Button>
                 ) : null}
               </Field>
+              {answer ? (
+                <p
+                  data-space-answer={id}
+                  className={answer.ok ? "text-sm text-muted-foreground" : "text-sm text-destructive"}
+                >
+                  {answer.ok ? `anda: la máquina contesta y ve ${space.path}` : answer.message}
+                </p>
+              ) : null}
             </FieldGroup>
           </form>
         ) : (
@@ -155,15 +174,21 @@ export function Sandboxes({
   orgs,
   saving,
   removing,
+  checking,
+  checks,
   onSave,
   onRemove,
+  onCheck,
 }: {
   spaces: Record<string, Sandbox>;
   orgs: Org[];
   saving: string;
   removing: string;
+  checking: string;
+  checks: Record<string, SandboxCheck>;
   onSave: (id: string, input: SandboxInput) => void;
   onRemove: (id: string) => void;
+  onCheck: (id: string) => void;
 }) {
   const owners = [{ id: "", name: "Personal", role: "owner" }, ...orgs];
   return (
@@ -184,8 +209,11 @@ export function Sandboxes({
           space={spaces[owner.id]}
           saving={saving === (owner.id || "personal")}
           removing={removing === (owner.id || "personal")}
+          checking={checking === (owner.id || "personal")}
+          answer={checks[owner.id]}
           onSave={onSave}
           onRemove={onRemove}
+          onCheck={onCheck}
         />
       ))}
     </div>

@@ -2,7 +2,9 @@ package app_test
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/3-lines-studio/goddard/chat"
@@ -133,5 +135,61 @@ func TestRemovingAWorkspaceTakesThePathAndTheSandboxAway(t *testing.T) {
 	}
 	if err := service.RemoveWorkspace(t.Context(), owner, user.ID); err != nil {
 		t.Fatalf("sacar dos veces: %v", err)
+	}
+}
+
+func TestCheckingAWorkspaceSaysWhetherTheVolumeIsThere(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	user := apptest.User(t, service)
+	owner := chat.Owner{Kind: chat.OwnerUser, ID: user.ID}
+	volume := t.TempDir()
+	sandbox := app.Sandbox{Addr: "127.0.0.1:22", User: "tester", Key: []byte("una-llave")}
+	if err := service.SaveWorkspace(t.Context(), owner, volume, sandbox, user.ID); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := service.CheckWorkspace(t.Context(), owner); err != nil {
+		t.Fatalf("el volumen está y dijo %v", err)
+	}
+	gone := filepath.Join(volume, "no-está")
+	if err := service.SaveWorkspace(t.Context(), owner, gone, sandbox, user.ID); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	err := service.CheckWorkspace(t.Context(), owner)
+	if err == nil {
+		t.Fatal("dijo que anda con un volumen que no está")
+	}
+	if !strings.Contains(err.Error(), gone) {
+		t.Fatalf("no dijo cuál no ve: %v", err)
+	}
+	if _, err := os.Stat(gone); !os.IsNotExist(err) {
+		t.Fatalf("lo creó: %v", err)
+	}
+}
+
+func TestCheckingASandboxThatDoesNotAnswerSaysSo(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	user := apptest.User(t, service)
+	owner := chat.Owner{Kind: chat.OwnerUser, ID: user.ID}
+	volume := t.TempDir()
+	if err := service.SaveWorkspace(t.Context(), owner, volume, app.Sandbox{
+		Addr: "127.0.0.1:1",
+		User: "tester",
+		Key:  []byte("no soy una llave"),
+	}, user.ID); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	service.Dialer = app.SSH{}
+	err := service.CheckWorkspace(t.Context(), owner)
+	if err == nil {
+		t.Fatal("dijo que entró a una máquina que no contesta")
+	}
+	if !strings.Contains(err.Error(), "no pude entrar") {
+		t.Fatalf("el error quedó %v", err)
+	}
+}
+
+func TestCheckingASandboxWithNoKeySaysWhichOneIsMissing(t *testing.T) {
+	if err := apptest.Service(t, apptest.Provider(t)).CheckWorkspace(t.Context(), chat.Owner{Kind: chat.OwnerOrg, ID: "acme"}); !errors.Is(err, app.ErrNoSandbox) {
+		t.Fatalf("sin llave devolvió %v", err)
 	}
 }

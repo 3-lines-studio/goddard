@@ -218,6 +218,7 @@ DELETE /api/orgs/members?org=&user=      takes somebody out
 GET  /api/workspace?org=                where the projects of an owner live and how to reach its sandbox
 POST /api/workspace                     {org, path, addr, user, key}: loads it; what comes empty stays as it is
 DELETE /api/workspace?org=              unloads it: the volume by default, and a turn does not run
+POST /api/workspace/check               {org}: dials that sandbox and says whether a turn could run
 POST /api/login                         {email}: mails a one-shot link, or hands it back
 GET  /auth?token=                       burns the link, sets the cookie and goes home
 POST /api/logout                        signs the session out
@@ -270,7 +271,9 @@ card per owner — the person, and each organization they are in — and the key
 asked for and never shown: what comes back is whether there is one. The key of
 an organization is loaded by its owners and its admins. `sacar la computadora`
 unloads it: the three secrets go and the projects go back to the volume by
-default, which is how somebody says that machine is not theirs anymore.
+default, which is how somebody says that machine is not theirs anymore. `probar`
+dials what is loaded — the machine answers, and the volume is there inside it —
+and says which of the two is missing when it is not.
 
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a
