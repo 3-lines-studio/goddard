@@ -31,7 +31,12 @@ func (s *Service) Workspace(ctx context.Context, owner chat.Owner) (workspace.Wo
 // read back, so the form that loads a sandbox cannot send it again and an empty
 // box means "the one that is already there".
 func (s *Service) SaveWorkspace(ctx context.Context, owner chat.Owner, path string, sandbox Sandbox, actor string) error {
-	if err := s.Workspaces.Set(ctx, workspace.Workspace{Owner: workspaceOwner(owner), Path: path}, actor); err != nil {
+	current, err := s.Workspace(ctx, owner)
+	if err != nil {
+		return err
+	}
+	row := workspace.Workspace{Owner: workspaceOwner(owner), Path: path, Provider: current.Provider, SandboxID: current.SandboxID}
+	if err := s.Workspaces.Set(ctx, row, actor); err != nil {
 		return err
 	}
 	for _, one := range []struct{ name, value string }{
