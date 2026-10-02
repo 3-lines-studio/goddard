@@ -276,6 +276,12 @@ default, which is how somebody says that machine is not theirs anymore. `probar`
 dials what is loaded — the machine answers, and the volume is there inside it —
 and says which of the two is missing when it is not.
 
+`/` is the app and `/login` is the way in, a page of its own: a request
+without the session cookie never renders the app, it is sent to the login, and
+whoever already came in and asks for it goes home. A session that runs out
+while somebody is inside sends the browser there too, and the login asks for
+the link in its own name instead of the shell doing it.
+
 Everything under `/api/` except the health check wants the session cookie, and
 answers 401 without it. Who may ask for a link is `GODDARD_ALLOWED_EMAILS`, a
 comma separated list; empty means anybody, which is a goddard of one.
