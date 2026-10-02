@@ -193,3 +193,24 @@ func TestCheckingASandboxWithNoKeySaysWhichOneIsMissing(t *testing.T) {
 		t.Fatalf("sin llave devolvió %v", err)
 	}
 }
+
+func TestATurnDoesNotRunWithoutTheVolumeMounted(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	user := apptest.User(t, service)
+	owner := chat.Owner{Kind: chat.OwnerUser, ID: user.ID}
+	gone := filepath.Join(service.Volumes, "no-está")
+	if err := service.SaveWorkspace(t.Context(), owner, gone, app.Sandbox{Addr: "127.0.0.1:22", User: "tester", Key: []byte("una-llave")}, user.ID); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	conversation := apptest.Thread(t, service)
+	err := service.Say(t.Context(), conversation.ID, user, "hola", nil)
+	if err == nil {
+		t.Fatal("corrió un turno sin el volumen")
+	}
+	if !strings.Contains(err.Error(), "no tiene el volumen") {
+		t.Fatalf("el error quedó %v", err)
+	}
+	if _, err := os.Stat(gone); !os.IsNotExist(err) {
+		t.Fatalf("lo creó: %v", err)
+	}
+}

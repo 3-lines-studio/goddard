@@ -20,6 +20,7 @@ import (
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
+	"github.com/3-lines-studio/goddard/workspace"
 )
 
 // TurnLease is how long a turn holds its conversation, in seconds. It is long
@@ -493,23 +494,44 @@ func (s *Service) projectOf(ctx context.Context, conversation chat.Conversation)
 }
 
 // machine is where the tools of a turn run: the machine of the owner of the
-// project, reached with the three secrets of its sandbox, and the directory of
-// the project inside the volume that machine mounts. A turn runs in the
-// sandbox of its owner and never in the container goddard runs in, which
-// carries no tools, so a workspace without a sandbox does not run at all.
+// project and the directory of the project inside the volume that machine
+// mounts. A turn runs in the sandbox of its owner and never in the container
+// goddard runs in, which carries no tools.
 func (s *Service) machine(ctx context.Context, project chat.Project) (axe.Machine, string, error) {
-	dir, err := s.ProjectDir(ctx, project)
+	space, channel, err := s.machineOf(ctx, project.Owner)
 	if err != nil {
 		return nil, "", err
 	}
-	sandbox, err := s.Sandbox(ctx, project.Owner)
+	dir := space.ProjectDir(project.Slug)
+	return compute.NewMachine(channel, dir), dir, nil
+}
+
+// machineOf is the machine of an owner: the channel into its sandbox and the
+// workspace where its projects live. The volume is checked here and not when a
+// sandbox is loaded: a sandbox comes with it mounted, and a turn that runs
+// without one would write where nothing lasts — a directory that looks like the
+// volume and goes away with the machine.
+func (s *Service) machineOf(ctx context.Context, owner chat.Owner) (workspace.Workspace, compute.Channel, error) {
+	space, err := s.Workspace(ctx, owner)
 	if err != nil {
-		return nil, "", err
+		return workspace.Workspace{}, nil, err
+	}
+	sandbox, err := s.Sandbox(ctx, owner)
+	if err != nil {
+		return workspace.Workspace{}, nil, err
 	}
 	if err := sandbox.Ready(); err != nil {
-		return nil, "", err
+		return workspace.Workspace{}, nil, err
 	}
-	return compute.NewMachine(s.Dialer.Dial(sandbox), dir), dir, nil
+	channel := s.Dialer.Dial(sandbox)
+	mounted, err := compute.NewMachine(channel, space.Path).Mounted(ctx)
+	if err != nil {
+		return workspace.Workspace{}, nil, fmt.Errorf("no pude entrar a la máquina: %w", err)
+	}
+	if !mounted {
+		return workspace.Workspace{}, nil, fmt.Errorf("la máquina no tiene el volumen de %s montado en %s", owner.ID, space.Path)
+	}
+	return space, channel, nil
 }
 
 // ProjectDir is the directory of a project: the workspace of whoever owns it —
