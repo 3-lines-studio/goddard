@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { MailIcon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -6,17 +7,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-export function Login({
-  sent,
-  link,
-  error,
-  onSend,
-}: {
-  sent: string;
-  link: string;
-  error: string;
-  onSend: (event: React.FormEvent<HTMLFormElement>) => void;
-}) {
+export function Login() {
+  const [sent, setSent] = useState("");
+  const [link, setLink] = useState("");
+  const [error, setError] = useState("");
+
+  async function send(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const email = new FormData(event.currentTarget).get("email");
+    if (typeof email !== "string") return;
+    setError("");
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    const data = await response.json();
+    setSent(email);
+    setLink(data.link ?? "");
+  }
+
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
       <Card className="w-full max-w-sm">
@@ -35,7 +49,7 @@ export function Login({
               ) : null}
             </div>
           ) : (
-            <form onSubmit={onSend} data-login-form="">
+            <form onSubmit={send} data-login-form="">
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="email">Mail</FieldLabel>

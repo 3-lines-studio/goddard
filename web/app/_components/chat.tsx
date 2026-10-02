@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MonitorIcon, XIcon } from "lucide-react";
+import { navigate } from "virtual:bifrost/navigation";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { Agenda, keyOf } from "./agenda";
-import { Login } from "./login";
 import { Memory } from "./memory";
 import { Models } from "./model";
 import { Orgs } from "./orgs";
@@ -96,9 +96,6 @@ export function Chat() {
   const [pending, setPending] = useState<{ key: string; ts: number } | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [theme, setTheme] = useState("dark");
-  const [needLogin, setNeedLogin] = useState(false);
-  const [sent, setSent] = useState("");
-  const [link, setLink] = useState("");
   const restored = useRef(false);
 
   const tabs = keys.map((key) => tabFromKey(key, projects)).filter((one): one is Tab => one !== null);
@@ -122,7 +119,7 @@ export function Chat() {
   const load = useCallback(async () => {
     const response = await fetch("/api/state");
     if (response.status === 401) {
-      setNeedLogin(true);
+      await navigate("/login");
       return;
     }
     if (!response.ok) {
@@ -130,7 +127,6 @@ export function Chat() {
       return;
     }
     const data = await response.json();
-    setNeedLogin(false);
     setUser(data.user ?? "");
     const projects: Project[] = data.projects ?? [];
     setProjects(projects);
@@ -290,35 +286,9 @@ export function Chat() {
     }
   }
 
-  async function login(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const email = new FormData(event.currentTarget).get("email");
-    if (typeof email !== "string") return;
-    setError("");
-    const response = await fetch("/api/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    if (!response.ok) {
-      setError(await response.text());
-      return;
-    }
-    const data = await response.json();
-    setSent(email);
-    setLink(data.link ?? "");
-  }
-
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
-    setProjects([]);
-    setKeys([]);
-    setActive("");
-    setLines([]);
-    setUser("");
-    setSent("");
-    setLink("");
-    setNeedLogin(true);
+    await navigate("/login");
   }
 
   async function newProject(event: React.FormEvent<HTMLFormElement>) {
@@ -712,10 +682,6 @@ export function Chat() {
 
   const working =
     open !== "" && lines.length > 0 && !["done", "error", "stopped"].includes(lines[lines.length - 1].event);
-
-  if (needLogin) {
-    return <Login sent={sent} link={link} error={error} onSend={login} />;
-  }
 
   return (
     <SidebarProvider className="h-dvh">
