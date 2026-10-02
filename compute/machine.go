@@ -29,27 +29,11 @@ func NewMachine(channel Channel, dir string) *Machine {
 }
 
 func (m *Machine) Read(path string) ([]byte, error) {
-	result, err := m.exec(context.Background(), "cat -- "+quote(axe.Resolve(m.dir, path)), nil)
-	if err != nil {
-		return nil, err
-	}
-	if result.Exit != 0 {
-		return nil, failure(result)
-	}
-	return result.Stdout, nil
+	return m.channel.Get(context.Background(), axe.Resolve(m.dir, path))
 }
 
 func (m *Machine) Write(path string, bytes []byte) error {
-	target := axe.Resolve(m.dir, path)
-	command := "mkdir -p -- " + quote(filepath.Dir(target)) + " && cat > " + quote(target)
-	result, err := m.exec(context.Background(), command, bytes)
-	if err != nil {
-		return err
-	}
-	if result.Exit != 0 {
-		return failure(result)
-	}
-	return nil
+	return m.channel.Put(context.Background(), axe.Resolve(m.dir, path), bytes)
 }
 
 func (m *Machine) Stat(path string) (axe.MachineEntry, error) {
@@ -138,7 +122,7 @@ func (m *Machine) Run(command string, timeout uint64, _ axe.Progress) string {
 		script += "mkdir -p -- " + quote(m.dir) + " && cd -- " + quote(m.dir) + " || exit 1\n"
 	}
 	script += "{ " + command + "\n} 2>&1"
-	result, err := m.channel.Exec(ctx, "bash -s", []byte(script))
+	result, err := m.channel.Exec(ctx, "bash -c "+quote(script), nil)
 	if err != nil {
 		if ctx.Err() != nil {
 			return fmt.Sprintf("error: command timed out after %d seconds", seconds)
