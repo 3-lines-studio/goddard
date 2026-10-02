@@ -150,13 +150,12 @@ stopped (`OutcomeDone`, `OutcomeMaxTurns`, `OutcomeCancelled`,
 `OutcomeCompact`, `OutcomeFailed`).
 
 The transcript is saved through a `Store`. The one that ships is
-`axe.NewPgStore(db, scope)` — the pool the app already has for heimdall,
-with the migrations applied first and the driver registered by whoever opens
-it (`_ "github.com/jackc/pgx/v5/stdlib"`):
+`axe.NewPgStore(db, scope)` — the pool the app already has for heimdall, with
+the schema applied first (see [Migrate](#migrate)) and the driver registered by
+whoever opens it (`_ "github.com/jackc/pgx/v5/stdlib"`):
 
 ```go
 db, _ := sql.Open("pgx", os.Getenv("DATABASE_URL"))
-migrations.Apply(ctx, db)
 store := axe.NewPgStore(db, "chat-1")
 
 entries := make([]axe.Entry, 0, len(end.Messages))
@@ -173,8 +172,8 @@ gone, because a cloud axe has no volume to mount.
 
 ## Web
 
-`web/` is the app: a bifrost tree whose `app/server.go` opens the database,
-applies the migrations and then serves. The page and the API routes live in
+`web/` is the app: a bifrost tree whose `app/server.go` opens the database and
+serves. Applying the schema is not its job. The page and the API routes live in
 `web/app/`, and the frontend is built by Vite through bifrost.
 
 ```
@@ -297,7 +296,10 @@ is how it is used in development.
 
 The schema is not applied by the binary the agent travels in: it is
 `cmd/migrate`, for whoever operates the app. The external one does not
-carry it, so asking for a skill cannot change the database.
+carry it, so asking for a skill cannot change the database. Neither the
+server applies it: `serve` opens the database and starts answering, and
+nothing more — a schema that is behind is something the operator applies by
+hand, against the database they choose.
 
 ```
 migrate            aplica lo que falte
