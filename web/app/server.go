@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/3-lines-studio/goddard/auth"
 	"github.com/3-lines-studio/goddard/axe"
 	"github.com/3-lines-studio/goddard/chat"
+	"github.com/3-lines-studio/goddard/heimdall"
 	"github.com/3-lines-studio/goddard/memo"
 	"github.com/3-lines-studio/goddard/migrations"
 	"github.com/3-lines-studio/goddard/org"
@@ -103,7 +105,11 @@ func build(db *sql.DB) (*Service, error) {
 	if err := os.MkdirAll(Workspaces, 0o755); err != nil {
 		return nil, err
 	}
-	built := New(db, axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key), Workspaces)
+	master, err := masterKey()
+	if err != nil {
+		return nil, err
+	}
+	built := New(db, axe.NewOpenAI(env("GODDARD_BASE", "https://api.deepseek.com"), key), Workspaces, master)
 	built.Offset = offset()
 	built.Mail = newMailer()
 	built.Allowed = emails(os.Getenv("GODDARD_ALLOWED_EMAILS"))
@@ -118,7 +124,7 @@ func build(db *sql.DB) (*Service, error) {
 // New is the app over a database and a provider: the stores, the hub, the way
 // to stop a turn and the workspace. `build` is this with everything else read
 // from the environment, which is what a test of the app needs to skip.
-func New(db *sql.DB, provider axe.Provider, workspace string) *Service {
+func New(db *sql.DB, provider axe.Provider, workspace string, master heimdall.Key) *Service {
 	built := &Service{
 		DB:        db,
 		Chat:      chat.NewStore(db),
@@ -127,6 +133,7 @@ func New(db *sql.DB, provider axe.Provider, workspace string) *Service {
 		Skill:     skill.NewPgStore(db),
 		Schedule:  schedule.NewPgStore(db),
 		Orgs:      org.NewPgStore(db),
+		Heimdall:  heimdall.NewStore(db, master),
 		Provider:  provider,
 		Hub:       newHub(),
 		Stops:     newStops(),
@@ -134,6 +141,22 @@ func New(db *sql.DB, provider axe.Provider, workspace string) *Service {
 	}
 	built.Agenda = schedule.NewService(built.Schedule, built.runTask, 0)
 	return built
+}
+
+// masterKey is what seals the secrets in heimdall: an owner's, under its own
+// projects and environments. It is 32 bytes in hex, the same in every instance
+// of the same goddard, and there is no way back: change it and nothing opens
+// again.
+func masterKey() (heimdall.Key, error) {
+	text := os.Getenv("HEIMDALL_MASTER_KEY")
+	if text == "" {
+		return heimdall.Key{}, errors.New("goddard: HEIMDALL_MASTER_KEY is not set")
+	}
+	key, err := heimdall.KeyFromHex(text)
+	if err != nil {
+		return heimdall.Key{}, fmt.Errorf("goddard: HEIMDALL_MASTER_KEY: %w", err)
+	}
+	return key, nil
 }
 
 // emails is the comma separated list of who may ask for a link. Empty means

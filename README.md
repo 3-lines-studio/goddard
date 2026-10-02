@@ -63,7 +63,10 @@ below.
   the sealed box, so there is no migration to write and nothing to be
   compatible with. The command line keeps the `doppler` dialect,
   `heimdall run --preserve-env -- npm test`. Outside: the HTTP server, the web
-  page and the magic link, which bifrost and `auth` bring.
+  page and the magic link, which bifrost and `auth` bring. It is where goddard
+  keeps what it has to seal: the key of the sandbox of an owner, under the
+  `sandbox` project and the `default` environment, sealed with
+  `HEIMDALL_MASTER_KEY`.
 - `skill` — the skills: named instructions the agent loads into its context
   when the task calls for them, in the `skill` schema of the same Postgres.
   Port of jimmy's `src/skill.rs`, with the tree of directories replaced by
@@ -255,8 +258,10 @@ Who a turn is for comes from the session and not from the environment: the id
 the database minted is what the skills, the agenda and the memory keep, and the
 email is only how somebody comes in and can change.
 
-To run it: `DATABASE_URL` and `OPENAI_API_KEY`, plus `GODDARD_BASE`,
-`GODDARD_MODEL` and `GODDARD_ALLOWED_EMAILS` when the defaults do not fit. The
+To run it: `DATABASE_URL`, `OPENAI_API_KEY` and `HEIMDALL_MASTER_KEY`, plus
+`GODDARD_BASE`, `GODDARD_MODEL` and `GODDARD_ALLOWED_EMAILS` when the defaults
+do not fit. The master key is 32 bytes in hex, the same in every instance of
+the same goddard, and nothing opens again if it changes. The
 link goes out through Resend with `RESEND_API_KEY` and `GODDARD_WEB_FROM`;
 without a key the link comes back in the response instead of in an email, which
 is how it is used in development.
