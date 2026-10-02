@@ -17,6 +17,7 @@ import (
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/compute"
 	"github.com/3-lines-studio/goddard/memo"
+	"github.com/3-lines-studio/goddard/metric"
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
@@ -303,6 +304,7 @@ func first(files []attached) string {
 // agent said, which is what a task of the agenda is after. The request that
 // asked for a turn is long gone by then, so the context is the caller's.
 func (s *Service) answer(ctx context.Context, conversation chat.Conversation, project chat.Project, actor who, text string) (string, error) {
+	started := time.Now()
 	defer func() {
 		if err := s.Chat.Release(context.WithoutCancel(ctx), conversation.ID); err != nil {
 			log.Printf("goddard: no pude soltar %s: %v", conversation.ID, err)
@@ -358,7 +360,39 @@ func (s *Service) answer(ctx context.Context, conversation chat.Conversation, pr
 		sink.write(map[string]any{"event": "stopped"})
 	}
 	sink.write(map[string]any{"event": "done"})
+	s.record(context.WithoutCancel(ctx), conversation, project, actor, model, started, end)
 	return sink.reply, failure
+}
+
+// record leaves the turn in the metric table: what it cost, not what it said.
+// A turn that never reached the model is not recorded — there is nothing to add
+// up — and a turn that cannot be noted is a line in the log, not a turn that
+// did not happen.
+func (s *Service) record(ctx context.Context, conversation chat.Conversation, project chat.Project, actor who, model string, started time.Time, end axe.RunEnd) {
+	outcome := metric.OutcomeOK
+	switch end.Outcome.Kind {
+	case axe.OutcomeFailed:
+		outcome = metric.OutcomeFailed
+	case axe.OutcomeCancelled:
+		outcome = metric.OutcomeCancelled
+	}
+	turn := metric.Turn{
+		OwnerKind:      project.Owner.Kind,
+		OwnerID:        project.Owner.ID,
+		ProjectID:      project.ID,
+		ConversationID: conversation.ID,
+		UserID:         actor.viewer.User,
+		Source:         conversation.Source,
+		Model:          model,
+		Input:          end.Usage.Input,
+		Output:         end.Usage.Output,
+		CachedInput:    end.Usage.CachedInput,
+		Ms:             time.Since(started).Milliseconds(),
+		Outcome:        outcome,
+	}
+	if err := s.Metric.Record(ctx, turn); err != nil {
+		log.Printf("goddard: no pude anotar el turno de %s: %v", conversation.ID, err)
+	}
 }
 
 // failed writes the error into the log. It writes it even when the turn was

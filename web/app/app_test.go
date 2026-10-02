@@ -551,3 +551,53 @@ func TestATaskOfAnOrgRunsAsTheOrg(t *testing.T) {
 		t.Fatal("el turno no llegó al modelo")
 	}
 }
+
+func TestATurnLeavesWhatItCost(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t, []string{
+		`{"choices":[{"delta":{"content":"hola"}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		`{"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3}}`,
+	}))
+	conversation := apptest.Thread(t, service)
+	user := apptest.User(t, service)
+	if err := service.Say(t.Context(), conversation.ID, user, "hola", nil); err != nil {
+		t.Fatalf("say: %v", err)
+	}
+	apptest.Wait(t, service, conversation.ID)
+
+	var (
+		ownerKind, ownerID, projectID, userID, source, model, outcome string
+		input, output, cachedInput                                    int
+		ms                                                            int64
+	)
+	err := service.DB.QueryRowContext(t.Context(),
+		`SELECT owner_kind, owner_id, project_id, user_id, source, model,
+		        input, output, cached_input, ms, outcome
+		   FROM metric.turns`).
+		Scan(&ownerKind, &ownerID, &projectID, &userID, &source, &model,
+			&input, &output, &cachedInput, &ms, &outcome)
+	if err != nil {
+		t.Fatalf("el turno no quedó anotado: %v", err)
+	}
+	if ownerKind != chat.OwnerUser || ownerID != user.ID {
+		t.Fatalf("el dueño quedó %s/%s", ownerKind, ownerID)
+	}
+	if projectID != conversation.ProjectID {
+		t.Fatalf("el proyecto quedó %q", projectID)
+	}
+	if userID != user.ID {
+		t.Fatalf("el usuario quedó %q", userID)
+	}
+	if source != chat.SourceWeb {
+		t.Fatalf("el origen quedó %q", source)
+	}
+	if model != "m1" || input != 12 || output != 3 {
+		t.Fatalf("quedó el modelo %q con %d/%d tokens", model, input, output)
+	}
+	if outcome != "ok" {
+		t.Fatalf("el resultado quedó %q", outcome)
+	}
+	if ms < 0 {
+		t.Fatalf("los ms quedaron %d", ms)
+	}
+}

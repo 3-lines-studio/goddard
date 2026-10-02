@@ -14,6 +14,7 @@ import (
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/heimdall"
 	"github.com/3-lines-studio/goddard/memo"
+	"github.com/3-lines-studio/goddard/metric"
 	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
@@ -43,6 +44,7 @@ type Service struct {
 	Orgs       *org.PgStore
 	Heimdall   *heimdall.Store
 	Workspaces *workspace.PgStore
+	Metric     *metric.PgStore
 	Dialer     Dialer
 	Assistant  string
 	Language   string

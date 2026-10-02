@@ -19,6 +19,7 @@ import (
 	"github.com/3-lines-studio/goddard/chat"
 	"github.com/3-lines-studio/goddard/heimdall"
 	"github.com/3-lines-studio/goddard/memo"
+	"github.com/3-lines-studio/goddard/metric"
 	"github.com/3-lines-studio/goddard/org"
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/schedule"
@@ -133,6 +134,7 @@ func New(db *sql.DB, provider axe.Provider, volumes string, master heimdall.Key)
 		Orgs:       org.NewPgStore(db),
 		Heimdall:   heimdall.NewStore(db, master),
 		Workspaces: workspace.NewPgStore(db),
+		Metric:     metric.NewPgStore(db),
 		Dialer:     SSH{},
 		Provider:   provider,
 		Hub:        newHub(),
