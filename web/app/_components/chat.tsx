@@ -10,11 +10,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Agenda, keyOf } from "./agenda";
 import { Login } from "./login";
 import { Memory } from "./memory";
+import { Models } from "./model";
 import { Orgs } from "./orgs";
 import { Rail } from "./rail";
 import { Sandboxes } from "./sandbox";
 import { Composer, Thread } from "./thread";
-import type { Event, Fact, Member, Org, Project, Sandbox, SandboxCheck, SandboxInput, Skill, Tab, Task, Upload } from "./types";
+import type { Event, Fact, Member, Model, ModelInput, Org, Project, Sandbox, SandboxCheck, SandboxInput, Skill, Tab, Task, Upload } from "./types";
 
 const TABS_KEY = "goddard-tabs";
 const OPEN_KEY = "goddard-open-projects";
@@ -49,6 +50,7 @@ function tabFromKey(key: string, projects: Project[]): Tab | null {
   if (key === "agenda") return { key, kind: "agenda", title: "Agenda", slug: "" };
   if (key === "orgs") return { key, kind: "orgs", title: "Organizaciones", slug: "" };
   if (key === "sandbox") return { key, kind: "sandbox", title: "Computadoras", slug: "" };
+  if (key === "model") return { key, kind: "model", title: "Modelo", slug: "" };
   const memory = key.match(/^memoria:(.+)$/);
   if (memory) {
     const project = projects.find((one) => one.slug === memory[1]);
@@ -67,6 +69,9 @@ export function Chat() {
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [members, setMembers] = useState<Record<string, Member[]>>({});
   const [spaces, setSpaces] = useState<Record<string, Sandbox>>({});
+  const [models, setModels] = useState<Record<string, Model>>({});
+  const [savingModel, setSavingModel] = useState("");
+  const [removingModel, setRemovingModel] = useState("");
   const [checks, setChecks] = useState<Record<string, SandboxCheck>>({});
   const [checking, setChecking] = useState("");
   const [saving, setSaving] = useState("");
@@ -160,6 +165,17 @@ export function Chat() {
     setSpaces((current) => ({ ...current, [org]: data }));
   }, []);
 
+  const loadModel = useCallback(async (org: string) => {
+    const target = org ? `/api/model?org=${encodeURIComponent(org)}` : "/api/model";
+    const response = await fetch(target);
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    const data: Model = await response.json();
+    setModels((current) => ({ ...current, [org]: data }));
+  }, []);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -169,6 +185,12 @@ export function Chat() {
     if (!("" in spaces)) void loadSpace("");
     for (const org of orgs) if (!(org.id in spaces)) void loadSpace(org.id);
   }, [tab?.kind, orgs, spaces, loadSpace]);
+
+  useEffect(() => {
+    if (tab?.kind !== "model") return;
+    if (!("" in models)) void loadModel("");
+    for (const org of orgs) if (!(org.id in models)) void loadModel(org.id);
+  }, [tab?.kind, orgs, models, loadModel]);
 
   useEffect(() => {
     if (tab?.kind !== "orgs") return;
@@ -357,6 +379,42 @@ export function Chat() {
     await loadSpace(org);
     forgetCheck(org);
     load();
+  }
+
+  async function saveModel(org: string, input: ModelInput) {
+    setSavingModel(org || "personal");
+    setError("");
+    const response = await fetch("/api/model", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ org, ...input }),
+    });
+    setSavingModel("");
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadModel(org);
+  }
+
+  function askModel(org: string) {
+    if (removingModel !== (org || "personal")) {
+      setRemovingModel(org || "personal");
+      return;
+    }
+    void removeModel(org);
+  }
+
+  async function removeModel(org: string) {
+    setRemovingModel("");
+    setError("");
+    const target = org ? `/api/model?org=${encodeURIComponent(org)}` : "/api/model";
+    const response = await fetch(target, { method: "DELETE" });
+    if (!response.ok) {
+      setError(await response.text());
+      return;
+    }
+    await loadModel(org);
   }
 
   function forgetCheck(org: string) {
@@ -686,6 +744,7 @@ export function Chat() {
         onOpenAgenda={() => openTab("agenda")}
         onOpenOrgs={() => openTab("orgs")}
         onOpenSandbox={() => openTab("sandbox")}
+        onOpenModel={() => openTab("model")}
         onToggleTheme={toggleTheme}
         onLogout={logout}
       />
@@ -755,6 +814,17 @@ export function Chat() {
                     onSave={(org, input) => void saveSpace(org, input)}
                     onRemove={(org) => askSpace(org)}
                     onCheck={(org) => void checkSpace(org)}
+                  />
+                </div>
+              ) : tab.kind === "model" ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <Models
+                    models={models}
+                    orgs={orgs}
+                    saving={savingModel}
+                    removing={removingModel}
+                    onSave={(org, input) => void saveModel(org, input)}
+                    onRemove={(org) => askModel(org)}
                   />
                 </div>
               ) : tab.kind === "agenda" ? (
