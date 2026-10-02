@@ -215,6 +215,8 @@ GET    /api/orgs/members?org=           who is in one, with the role of each
 POST   /api/orgs/members                {org, email, role}: brings somebody in by their mail
 PATCH  /api/orgs/members                {org, user, role}: changes what they can do
 DELETE /api/orgs/members?org=&user=      takes somebody out
+GET  /api/workspace?org=                where the projects of an owner live and how to reach its sandbox
+POST /api/workspace                     {org, path, addr, user, key}: loads it; what comes empty stays as it is
 POST /api/login                         {email}: mails a one-shot link, or hands it back
 GET  /auth?token=                       burns the link, sets the cookie and goes home
 POST /api/logout                        signs the session out

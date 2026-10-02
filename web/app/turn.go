@@ -20,7 +20,6 @@ import (
 	"github.com/3-lines-studio/goddard/prompt"
 	"github.com/3-lines-studio/goddard/schedule"
 	"github.com/3-lines-studio/goddard/skill"
-	"github.com/3-lines-studio/goddard/workspace"
 )
 
 // TurnLease is how long a turn holds its conversation, in seconds. It is long
@@ -507,29 +506,18 @@ func (s *Service) machine(ctx context.Context, project chat.Project) (axe.Machin
 	if err != nil {
 		return nil, "", err
 	}
+	if err := sandbox.Ready(); err != nil {
+		return nil, "", err
+	}
 	return compute.NewMachine(s.Dialer.Dial(sandbox), dir), dir, nil
 }
 
 // ProjectDir is the directory of a project: the workspace of whoever owns it —
 // a person, or an organization — and the slug of the project inside it.
 func (s *Service) ProjectDir(ctx context.Context, project chat.Project) (string, error) {
-	space, err := s.workspaceOf(ctx, project.Owner)
+	space, err := s.Workspace(ctx, project.Owner)
 	if err != nil {
 		return "", err
 	}
 	return space.ProjectDir(project.Slug), nil
-}
-
-// workspaceOf is the workspace of an owner: the row, or the volume of that
-// owner when there is none, which is where its projects live by default.
-func (s *Service) workspaceOf(ctx context.Context, owner chat.Owner) (workspace.Workspace, error) {
-	one := workspace.Owner{Kind: owner.Kind, ID: owner.ID}
-	space, ok, err := s.Workspaces.Get(ctx, one)
-	if err != nil {
-		return workspace.Workspace{}, err
-	}
-	if !ok {
-		return workspace.Workspace{Owner: one, Path: workspace.DefaultPath(s.Volumes, one)}, nil
-	}
-	return space, nil
 }

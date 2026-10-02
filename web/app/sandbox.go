@@ -24,7 +24,9 @@ const (
 	SandboxKey  = "SSH_KEY"
 )
 
-// Sandbox is how a turn gets into the machine of an owner.
+// Sandbox is how a turn gets into the machine of an owner, as it is loaded:
+// what is there, complete or not, which is what the panel that loads it shows.
+// `Ready` is what says whether a turn can use it.
 type Sandbox struct {
 	Addr string
 	User string
@@ -50,32 +52,32 @@ func (SSH) Dial(sandbox Sandbox) compute.Channel {
 	return compute.NewSSH(sandbox.Addr, sandbox.User, sandbox.Key)
 }
 
-// Sandbox reads the three secrets of the sandbox of an owner. It is what a
-// turn asks for before running anything.
+// Sandbox reads the three secrets of the sandbox of an owner.
 func (s *Service) Sandbox(ctx context.Context, owner chat.Owner) (Sandbox, error) {
 	secrets, err := s.Heimdall.Secrets(ctx, heimdallOwner(owner), SandboxProject, SandboxEnv)
 	if err != nil {
 		return Sandbox{}, err
 	}
-	found := Sandbox{Addr: secrets[SandboxAddr], User: secrets[SandboxUser], Key: []byte(secrets[SandboxKey])}
-	if missing := found.missing(); missing != "" {
-		return Sandbox{}, fmt.Errorf("%w: le falta %s", ErrNoSandbox, missing)
-	}
-	return found, nil
+	return Sandbox{Addr: secrets[SandboxAddr], User: secrets[SandboxUser], Key: []byte(secrets[SandboxKey])}, nil
 }
 
-// missing is the first of the three that is not there, so whoever is loading a
-// sandbox is told which one and not only that something is missing.
-func (s Sandbox) missing() string {
+// Ready says whether a sandbox has the three pieces a turn needs, and which
+// one is missing when it does not: whoever loads a sandbox is told which one,
+// and not only that something is missing.
+func (sandbox Sandbox) Ready() error {
+	missing := ""
 	switch {
-	case s.Addr == "":
-		return SandboxAddr
-	case s.User == "":
-		return SandboxUser
-	case len(s.Key) == 0:
-		return SandboxKey
+	case sandbox.Addr == "":
+		missing = SandboxAddr
+	case sandbox.User == "":
+		missing = SandboxUser
+	case len(sandbox.Key) == 0:
+		missing = SandboxKey
 	}
-	return ""
+	if missing != "" {
+		return fmt.Errorf("%w: le falta %s", ErrNoSandbox, missing)
+	}
+	return nil
 }
 
 // heimdallOwner is the same owner in the terms of the vault: the sandbox of a
