@@ -37,15 +37,15 @@ func Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	link := app.Base(r) + "/auth?token=" + token
-	sent, err := service.SendLink(r.Context(), body.Email, link)
+	err = service.SendLink(r.Context(), body.Email, link)
+	if errors.Is(err, app.ErrNoMailer) {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if !sent {
-		_ = json.NewEncoder(w).Encode(map[string]any{"sent": false, "link": link})
-		return
-	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"sent": true})
 }

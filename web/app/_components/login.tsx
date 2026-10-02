@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 
 export function Login() {
   const [sent, setSent] = useState("");
-  const [link, setLink] = useState("");
   const [error, setError] = useState("");
 
   async function send(event: React.FormEvent<HTMLFormElement>) {
@@ -26,9 +25,7 @@ export function Login() {
       setError(await response.text());
       return;
     }
-    const data = await response.json();
     setSent(email);
-    setLink(data.link ?? "");
   }
 
   return (
@@ -40,14 +37,7 @@ export function Login() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {sent ? (
-            <div className="flex flex-col gap-2 text-sm">
-              <p>Si el mail está en la lista, te llegó un link a {sent}.</p>
-              {link ? (
-                <a href={link} data-login-link="" className="break-all underline">
-                  {link}
-                </a>
-              ) : null}
-            </div>
+            <p className="text-sm">Si el mail está en la lista, te llegó un link a {sent}.</p>
           ) : (
             <form onSubmit={send} data-login-form="">
               <FieldGroup>

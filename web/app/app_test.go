@@ -155,6 +155,17 @@ func TestALinkWorksOnceAndOpensASession(t *testing.T) {
 	}
 }
 
+func TestWithoutAMailerTheLinkStaysThere(t *testing.T) {
+	service := apptest.Service(t, apptest.Provider(t))
+	link, err := service.Login(t.Context(), "berti@ejemplo.com")
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if err := service.SendLink(t.Context(), "berti@ejemplo.com", link); err != app.ErrNoMailer {
+		t.Fatalf("sin mailer dio %v", err)
+	}
+}
+
 func TestOnlyTheEmailsOnTheListMayAskForALink(t *testing.T) {
 	service := apptest.Service(t, apptest.Provider(t))
 	service.Allowed = []string{"berti@ejemplo.com"}
