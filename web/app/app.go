@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +40,7 @@ type Service struct {
 	Hub        *hub
 	Mail       *mailer
 	Allowed    []string
+	Admins     []string
 	Model      string
 	Volumes    string
 	Orgs       *org.PgStore
@@ -70,6 +72,18 @@ func Start(built *Service) {
 	serviceMu.Lock()
 	service = built
 	serviceMu.Unlock()
+}
+
+// Admin is whether this user reads what only the house reads: the numbers of
+// every owner. An empty list is nobody, so a goddard without admins has no
+// admin view.
+func (s *Service) Admin(user auth.User) bool {
+	for _, one := range s.Admins {
+		if strings.EqualFold(strings.TrimSpace(one), user.Email) {
+			return true
+		}
+	}
+	return false
 }
 
 func env(key, fallback string) string {

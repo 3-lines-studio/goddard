@@ -28,6 +28,34 @@ const (
 	OutcomeCancelled = "cancelled"
 )
 
+// Totals is what a set of turns adds up to.
+type Totals struct {
+	Turns       int   `json:"turns"`
+	Input       int   `json:"input"`
+	Output      int   `json:"output"`
+	CachedInput int   `json:"cached_input"`
+	Ms          int64 `json:"ms"`
+	Failed      int   `json:"failed"`
+	Cancelled   int   `json:"cancelled"`
+}
+
+// Day is one day of one model: what every turn it answered added up to. There
+// is no owner and no project in it, because this is what somebody who is not
+// the owner reads.
+type Day struct {
+	Date  string `json:"date"`
+	Model string `json:"model"`
+	Totals
+}
+
+// Summary is a window of turns: day by day, and what all of them add up to.
+type Summary struct {
+	From  int64  `json:"from"`
+	Until int64  `json:"until"`
+	Days  []Day  `json:"days"`
+	Total Totals `json:"total"`
+}
+
 var (
 	ErrOwnerKind      = errors.New("el dueño del turno tiene que ser de una persona o de una organización")
 	ErrOwner          = errors.New("el turno no dice de quién es")
